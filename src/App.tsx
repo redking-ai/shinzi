@@ -1,35 +1,36 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
-
-function App() {
-  const [count, setCount] = useState(0)
-
+export default function App() {
   return (
-    <>
-      <div>
-        <a href="https://vitejs.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <div style={{ display: 'flex', height: '100vh', backgroundColor: '#1e1e24', color: 'white', fontFamily: 'sans-serif' }}>
+      
+      {/* Sidebar - Servers and Channels */}
+      <div style={{ width: '250px', backgroundColor: '#121216', padding: '20px' }}>
+        <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#00ffcc' }}>Shinzi Hub</h1>
+        
+        <div style={{ marginTop: '30px' }}>
+          <h3 style={{ fontSize: '12px', color: '#888', textTransform: 'uppercase' }}>Text Channels</h3>
+          <ul style={{ marginTop: '10px', listStyle: 'none', padding: 0 }}>
+            <li style={{ padding: '8px 0', color: '#ccc', cursor: 'pointer' }}># general</li>
+            <li style={{ padding: '8px 0', color: '#ccc', cursor: 'pointer' }}># server-dev</li>
+          </ul>
+        </div>
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
-}
 
-export default App
+      {/* Main Chat Area */}
+      <div style={{ flex: 1, padding: '20px', display: 'flex', flexDirection: 'column' }}>
+        
+        {/* Chat History */}
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          <p style={{ color: '#888' }}>Welcome to the beginning of Shinzi Hub.</p>
+        </div>
+        
+        {/* Message Input Box */}
+        <input
+          type="text"
+          placeholder="Message #general..."
+          style={{ padding: '15px', borderRadius: '8px', border: 'none', backgroundColor: '#2a2a35', color: 'white', outline: 'none' }}
+        />
+        
+      </div>
+    </div>
+  );
+}
