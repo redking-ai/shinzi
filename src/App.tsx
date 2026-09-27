@@ -294,8 +294,8 @@ const styles: Record<string, CSSProperties> = {
 
   container: {
     width: '100%',
-    height: '100vh',
-    minHeight: '600px',
+    height: '100dvh',
+    minHeight: 0,
     backgroundColor: '#000000',
     overflow: 'hidden',
   },
@@ -320,7 +320,7 @@ const styles: Record<string, CSSProperties> = {
 
   safeArea: {
     width: '100%',
-    height: '100%',
+    height: '100dvh',
     boxSizing: 'border-box',
 
     display: 'flex',
@@ -478,13 +478,15 @@ const styles: Record<string, CSSProperties> = {
 
   loadingContainer: {
     width: '100%',
-    height: '100vh',
+    height: '100dvh',
 
     backgroundColor: '#000000',
 
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
+
+    overflow: 'hidden',
   },
 
 
@@ -507,7 +509,7 @@ const styles: Record<string, CSSProperties> = {
 
   pagePlaceholder: {
     width: '100%',
-    minHeight: '100vh',
+    height: '100dvh',
 
     boxSizing: 'border-box',
 
@@ -522,12 +524,14 @@ const styles: Record<string, CSSProperties> = {
     alignItems: 'center',
 
     padding: 24,
+
+    overflow: 'hidden',
   },
 
 
   mainAppPlaceholder: {
     width: '100%',
-    minHeight: '100vh',
+    height: '100dvh',
 
     boxSizing: 'border-box',
 
@@ -540,6 +544,8 @@ const styles: Record<string, CSSProperties> = {
 
     justifyContent: 'center',
     alignItems: 'center',
+
+    overflow: 'hidden',
   },
 
 
