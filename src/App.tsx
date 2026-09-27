@@ -245,7 +245,7 @@ export default function App() {
                 setCurrentScreen('signup')
               }
             >
-              Sign up
+              Register 
             </button>
 
 
@@ -255,7 +255,7 @@ export default function App() {
                 setCurrentScreen('login')
               }
             >
-              Log in
+              Log In
             </button>
 
           </div>
