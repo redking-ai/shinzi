@@ -1,5 +1,13 @@
-import { useEffect, useState, type CSSProperties } from 'react';
-import { onAuthStateChanged, type User } from 'firebase/auth';
+import {
+  useEffect,
+  useState,
+  type CSSProperties,
+} from 'react';
+
+import {
+  onAuthStateChanged,
+  type User,
+} from 'firebase/auth';
 
 import { auth } from './firebaseConfig';
 
@@ -32,12 +40,20 @@ export default function App() {
 
   // ----------------------------------------------------------
   // LOCAL SCREEN STATE
-  //
-  // Used only while the user is logged out.
   // ----------------------------------------------------------
 
   const [currentScreen, setCurrentScreen] =
     useState<Screen>('welcome');
+
+
+  // ----------------------------------------------------------
+  // DESKTOP DETECTION
+  //
+  // The same Shinzi UI is used everywhere.
+  // We only change sizing/positioning on larger screens.
+  // ----------------------------------------------------------
+
+  const [isDesktop, setIsDesktop] = useState(false);
 
 
   // ==========================================================
@@ -54,26 +70,46 @@ export default function App() {
 
         setAuthLoading(false);
 
-        /*
-         * If Firebase says the user is authenticated,
-         * show the main Shinzi app.
-         */
         if (firebaseUser) {
           setCurrentScreen('welcome');
-        }
-
-        /*
-         * If the user logs out, return to Welcome.
-         */
-        else {
+        } else {
           setCurrentScreen('welcome');
         }
       }
     );
 
-
-    // Cleanup Firebase listener
     return unsubscribe;
+
+  }, []);
+
+
+  // ==========================================================
+  // DESKTOP / MOBILE RESPONSIVE CHECK
+  // ==========================================================
+
+  useEffect(() => {
+
+    const mediaQuery = window.matchMedia(
+      '(min-width: 768px)'
+    );
+
+    const updateScreenSize = () => {
+      setIsDesktop(mediaQuery.matches);
+    };
+
+    updateScreenSize();
+
+    mediaQuery.addEventListener(
+      'change',
+      updateScreenSize
+    );
+
+    return () => {
+      mediaQuery.removeEventListener(
+        'change',
+        updateScreenSize
+      );
+    };
 
   }, []);
 
@@ -81,14 +117,6 @@ export default function App() {
   // ==========================================================
   // AUTH LOADING
   // ==========================================================
-
-  /*
-   * Firebase needs a moment to determine whether an
-   * existing authentication session is still valid.
-   *
-   * We don't want to briefly show Welcome before
-   * determining the user's authentication state.
-   */
 
   if (authLoading) {
 
@@ -105,14 +133,6 @@ export default function App() {
   // ==========================================================
   // AUTHENTICATED USER
   // ==========================================================
-
-  /*
-   * If Firebase has an authenticated user,
-   * the main Shinzi application becomes the root.
-   *
-   * We will replace this placeholder with the real
-   * Shinzi Chat/Main App later.
-   */
 
   if (user) {
 
@@ -151,7 +171,9 @@ export default function App() {
 
         <button
           style={styles.backButton}
-          onClick={() => setCurrentScreen('welcome')}
+          onClick={() =>
+            setCurrentScreen('welcome')
+          }
         >
           Back
         </button>
@@ -180,7 +202,9 @@ export default function App() {
 
         <button
           style={styles.backButton}
-          onClick={() => setCurrentScreen('welcome')}
+          onClick={() =>
+            setCurrentScreen('welcome')
+          }
         >
           Back
         </button>
@@ -188,6 +212,67 @@ export default function App() {
       </div>
     );
   }
+
+
+  // ==========================================================
+  // RESPONSIVE STYLE VARIANTS
+  // ==========================================================
+
+  const safeAreaStyle = isDesktop
+    ? {
+        ...styles.safeArea,
+        ...styles.desktopSafeArea,
+      }
+    : styles.safeArea;
+
+  const heroStyle = isDesktop
+    ? {
+        ...styles.heroSection,
+        ...styles.desktopHeroSection,
+      }
+    : styles.heroSection;
+
+  const logoStyle = isDesktop
+    ? {
+        ...styles.logo,
+        ...styles.desktopLogo,
+      }
+    : styles.logo;
+
+  const titleStyle = isDesktop
+    ? {
+        ...styles.title,
+        ...styles.desktopTitle,
+      }
+    : styles.title;
+
+  const descriptionStyle = isDesktop
+    ? {
+        ...styles.description,
+        ...styles.desktopDescription,
+      }
+    : styles.description;
+
+  const actionStyle = isDesktop
+    ? {
+        ...styles.actionSection,
+        ...styles.desktopActionSection,
+      }
+    : styles.actionSection;
+
+  const signUpStyle = isDesktop
+    ? {
+        ...styles.signUpButton,
+        ...styles.desktopButton,
+      }
+    : styles.signUpButton;
+
+  const logInStyle = isDesktop
+    ? {
+        ...styles.logInButton,
+        ...styles.desktopButton,
+      }
+    : styles.logInButton;
 
 
   // ==========================================================
@@ -204,27 +289,27 @@ export default function App() {
         }}
       >
 
-        <div style={styles.safeArea}>
+        <div style={safeAreaStyle}>
 
           {/* ==================================================
               HEADER & HERO
           ================================================== */}
 
-          <div style={styles.heroSection}>
+          <div style={heroStyle}>
 
             <img
               src={logo}
               alt="Shinzi Hub"
-              style={styles.logo}
+              style={logoStyle}
             />
 
-            <h1 style={styles.title}>
+            <h1 style={titleStyle}>
               Welcome to
               <br />
               Shinzi Hub
             </h1>
 
-            <p style={styles.description}>
+            <p style={descriptionStyle}>
               Join servers, search, or chat.
               <br />
               Tap below to get started.
@@ -237,20 +322,19 @@ export default function App() {
               ACTION BUTTONS
           ================================================== */}
 
-          <div style={styles.actionSection}>
+          <div style={actionStyle}>
 
             <button
-              style={styles.signUpButton}
+              style={signUpStyle}
               onClick={() =>
                 setCurrentScreen('signup')
               }
             >
-              Register 
+              Register
             </button>
 
-
             <button
-              style={styles.logInButton}
+              style={logInStyle}
               onClick={() =>
                 setCurrentScreen('login')
               }
@@ -283,7 +367,9 @@ const styles: Record<string, CSSProperties> = {
     width: '100%',
     height: '100dvh',
     minHeight: 0,
+
     backgroundColor: '#000000',
+
     overflow: 'hidden',
   },
 
@@ -295,6 +381,7 @@ const styles: Record<string, CSSProperties> = {
   background: {
     width: '100%',
     height: '100%',
+
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     backgroundRepeat: 'no-repeat',
@@ -308,6 +395,7 @@ const styles: Record<string, CSSProperties> = {
   safeArea: {
     width: '100%',
     height: '100dvh',
+
     boxSizing: 'border-box',
 
     display: 'flex',
@@ -320,6 +408,7 @@ const styles: Record<string, CSSProperties> = {
     paddingBottom: 20,
 
     maxWidth: 700,
+
     margin: '0 auto',
   },
 
@@ -385,6 +474,7 @@ const styles: Record<string, CSSProperties> = {
 
   actionSection: {
     width: '100%',
+
     marginBottom: 20,
 
     display: 'flex',
@@ -395,7 +485,7 @@ const styles: Record<string, CSSProperties> = {
 
 
   // ----------------------------------------------------------
-  // SIGN UP BUTTON
+  // SIGN UP / REGISTER BUTTON
   // ----------------------------------------------------------
 
   signUpButton: {
@@ -403,7 +493,8 @@ const styles: Record<string, CSSProperties> = {
 
     boxSizing: 'border-box',
 
-    backgroundColor: 'rgba(10, 10, 14, 0.75)',
+    backgroundColor:
+      'rgba(10, 10, 14, 0.75)',
 
     border: '1px solid #2E2E42',
     borderRadius: 28,
@@ -418,7 +509,8 @@ const styles: Record<string, CSSProperties> = {
 
     cursor: 'pointer',
 
-    transition: 'transform 0.15s ease, background-color 0.15s ease',
+    transition:
+      'transform 0.15s ease, background-color 0.15s ease',
   },
 
 
@@ -446,7 +538,82 @@ const styles: Record<string, CSSProperties> = {
 
     cursor: 'pointer',
 
-    transition: 'transform 0.15s ease, opacity 0.15s ease',
+    transition:
+      'transform 0.15s ease, opacity 0.15s ease',
+  },
+
+
+  // ----------------------------------------------------------
+  // DESKTOP RESPONSIVE LAYOUT
+  //
+  // These styles are used ONLY when the viewport is
+  // 768px wide or larger.
+  //
+  // Mobile styles above remain unchanged.
+  // ----------------------------------------------------------
+
+  desktopSafeArea: {
+    maxWidth: 760,
+
+    paddingLeft: 40,
+    paddingRight: 40,
+    paddingTop: 40,
+    paddingBottom: 40,
+  },
+
+
+  desktopHeroSection: {
+    marginTop: 60,
+  },
+
+
+  desktopLogo: {
+    width: 150,
+    height: 150,
+
+    marginBottom: 30,
+  },
+
+
+  desktopTitle: {
+    fontSize: 46,
+
+    lineHeight: 1.15,
+
+    letterSpacing: 0.3,
+  },
+
+
+  desktopDescription: {
+    marginTop: 18,
+
+    fontSize: 19,
+
+    lineHeight: 1.5,
+  },
+
+
+  desktopActionSection: {
+    width: '100%',
+
+    maxWidth: 560,
+
+    marginLeft: 'auto',
+    marginRight: 'auto',
+
+    marginBottom: 30,
+
+    gap: 16,
+  },
+
+
+  desktopButton: {
+    paddingTop: 18,
+    paddingBottom: 18,
+
+    borderRadius: 32,
+
+    fontSize: 18,
   },
 
 
@@ -461,6 +628,7 @@ const styles: Record<string, CSSProperties> = {
     backgroundColor: '#000000',
 
     display: 'flex',
+
     justifyContent: 'center',
     alignItems: 'center',
 
@@ -477,7 +645,8 @@ const styles: Record<string, CSSProperties> = {
 
     borderRadius: '50%',
 
-    animation: 'shinzi-spin 0.8s linear infinite',
+    animation:
+      'shinzi-spin 0.8s linear infinite',
   },
 
 
