@@ -219,15 +219,15 @@ export default function App() {
             />
 
             <h1 style={styles.title}>
-              WELCOME TO
+              Welcome to
               <br />
-              SHINZI HUB
+              Shinzi Hub
             </h1>
 
             <p style={styles.description}>
-              Join servers, search or chat.
+              Join servers, search, or chat.
               <br />
-              Tap below To Get started!
+              Tap below to get started.
             </p>
 
           </div>
@@ -239,10 +239,6 @@ export default function App() {
 
           <div style={styles.actionSection}>
 
-            <p style={styles.helperText}>
-              if you are new
-            </p>
-
             <button
               style={styles.signUpButton}
               onClick={() =>
@@ -252,15 +248,6 @@ export default function App() {
               Sign up
             </button>
 
-
-            <p
-              style={{
-                ...styles.helperText,
-                marginTop: 14,
-              }}
-            >
-              if you already have account
-            </p>
 
             <button
               style={styles.logInButton}
@@ -372,6 +359,8 @@ const styles: Record<string, CSSProperties> = {
 
     letterSpacing: 0.5,
     lineHeight: 1.2,
+
+    textTransform: 'none',
   },
 
 
@@ -400,19 +389,8 @@ const styles: Record<string, CSSProperties> = {
 
     display: 'flex',
     flexDirection: 'column',
-  },
 
-
-  helperText: {
-    margin: 0,
-    marginBottom: 6,
-
-    color: '#8E8EA0',
-
-    fontSize: 13,
-    fontWeight: 500,
-
-    textAlign: 'center',
+    gap: 12,
   },
 
 
