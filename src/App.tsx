@@ -11,6 +11,9 @@ import {
 
 import { auth } from './firebaseConfig';
 
+import SignUp from './SignUp';
+
+
 // Assets
 import background from './assets/background.png';
 import logo from './assets/logo.png';
@@ -20,7 +23,10 @@ import logo from './assets/logo.png';
 // TYPES
 // ============================================================
 
-type Screen = 'welcome' | 'signup' | 'login';
+type Screen =
+  | 'welcome'
+  | 'signup'
+  | 'login';
 
 
 // ============================================================
@@ -33,27 +39,29 @@ export default function App() {
   // AUTHENTICATION STATE
   // ----------------------------------------------------------
 
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] =
+    useState<User | null>(null);
 
-  const [authLoading, setAuthLoading] = useState(true);
+  const [authLoading, setAuthLoading] =
+    useState(true);
 
 
   // ----------------------------------------------------------
   // LOCAL SCREEN STATE
   // ----------------------------------------------------------
 
-  const [currentScreen, setCurrentScreen] =
-    useState<Screen>('welcome');
+  const [
+    currentScreen,
+    setCurrentScreen,
+  ] = useState<Screen>('welcome');
 
 
   // ----------------------------------------------------------
   // DESKTOP DETECTION
-  //
-  // The same Shinzi UI is used everywhere.
-  // We only change sizing/positioning on larger screens.
   // ----------------------------------------------------------
 
-  const [isDesktop, setIsDesktop] = useState(false);
+  const [isDesktop, setIsDesktop] =
+    useState(false);
 
 
   // ==========================================================
@@ -62,21 +70,28 @@ export default function App() {
 
   useEffect(() => {
 
-    const unsubscribe = onAuthStateChanged(
-      auth,
-      (firebaseUser) => {
+    const unsubscribe =
+      onAuthStateChanged(
+        auth,
+        (firebaseUser) => {
 
-        setUser(firebaseUser);
+          setUser(firebaseUser);
 
-        setAuthLoading(false);
+          setAuthLoading(false);
 
-        if (firebaseUser) {
-          setCurrentScreen('welcome');
-        } else {
-          setCurrentScreen('welcome');
+
+          /*
+           * If a user is authenticated,
+           * the authenticated Shinzi app will
+           * eventually be rendered here.
+           *
+           * We do not force the welcome screen
+           * when authentication changes.
+           */
+
         }
-      }
-    );
+      );
+
 
     return unsubscribe;
 
@@ -89,26 +104,38 @@ export default function App() {
 
   useEffect(() => {
 
-    const mediaQuery = window.matchMedia(
-      '(min-width: 768px)'
-    );
+    const mediaQuery =
+      window.matchMedia(
+        '(min-width: 768px)'
+      );
 
-    const updateScreenSize = () => {
-      setIsDesktop(mediaQuery.matches);
-    };
+
+    const updateScreenSize =
+      () => {
+
+        setIsDesktop(
+          mediaQuery.matches
+        );
+
+      };
+
 
     updateScreenSize();
+
 
     mediaQuery.addEventListener(
       'change',
       updateScreenSize
     );
 
+
     return () => {
+
       mediaQuery.removeEventListener(
         'change',
         updateScreenSize
       );
+
     };
 
   }, []);
@@ -121,9 +148,17 @@ export default function App() {
   if (authLoading) {
 
     return (
-      <div style={styles.loadingContainer}>
+      <div
+        style={
+          styles.loadingContainer
+        }
+      >
 
-        <div style={styles.spinner} />
+        <div
+          style={
+            styles.spinner
+          }
+        />
 
       </div>
     );
@@ -137,13 +172,26 @@ export default function App() {
   if (user) {
 
     return (
-      <div style={styles.mainAppPlaceholder}>
+      <div
+        style={
+          styles.mainAppPlaceholder
+        }
+      >
 
-        <h1 style={styles.placeholderTitle}>
+        <h1
+          style={
+            styles.placeholderTitle
+          }
+        >
           Shinzi
         </h1>
 
-        <p style={styles.placeholderText}>
+
+        <p
+          style={
+            styles.placeholderText
+          }
+        >
           Main Shinzi app coming soon.
         </p>
 
@@ -156,29 +204,18 @@ export default function App() {
   // SIGN UP
   // ==========================================================
 
-  if (currentScreen === 'signup') {
+  if (
+    currentScreen === 'signup'
+  ) {
 
     return (
-      <div style={styles.pagePlaceholder}>
-
-        <h1 style={styles.placeholderTitle}>
-          Sign Up
-        </h1>
-
-        <p style={styles.placeholderText}>
-          Signup page will be connected here.
-        </p>
-
-        <button
-          style={styles.backButton}
-          onClick={() =>
-            setCurrentScreen('welcome')
-          }
-        >
-          Back
-        </button>
-
-      </div>
+      <SignUp
+        onBack={() =>
+          setCurrentScreen(
+            'welcome'
+          )
+        }
+      />
     );
   }
 
@@ -187,23 +224,43 @@ export default function App() {
   // LOGIN
   // ==========================================================
 
-  if (currentScreen === 'login') {
+  if (
+    currentScreen === 'login'
+  ) {
 
     return (
-      <div style={styles.pagePlaceholder}>
+      <div
+        style={
+          styles.pagePlaceholder
+        }
+      >
 
-        <h1 style={styles.placeholderTitle}>
+        <h1
+          style={
+            styles.placeholderTitle
+          }
+        >
           Log In
         </h1>
 
-        <p style={styles.placeholderText}>
+
+        <p
+          style={
+            styles.placeholderText
+          }
+        >
           Login page will be connected here.
         </p>
 
+
         <button
-          style={styles.backButton}
+          style={
+            styles.backButton
+          }
           onClick={() =>
-            setCurrentScreen('welcome')
+            setCurrentScreen(
+              'welcome'
+            )
           }
         >
           Back
@@ -218,61 +275,76 @@ export default function App() {
   // RESPONSIVE STYLE VARIANTS
   // ==========================================================
 
-  const safeAreaStyle = isDesktop
-    ? {
-        ...styles.safeArea,
-        ...styles.desktopSafeArea,
-      }
-    : styles.safeArea;
+  const safeAreaStyle =
+    isDesktop
+      ? {
+          ...styles.safeArea,
+          ...styles.desktopSafeArea,
+        }
+      : styles.safeArea;
 
-  const heroStyle = isDesktop
-    ? {
-        ...styles.heroSection,
-        ...styles.desktopHeroSection,
-      }
-    : styles.heroSection;
 
-  const logoStyle = isDesktop
-    ? {
-        ...styles.logo,
-        ...styles.desktopLogo,
-      }
-    : styles.logo;
+  const heroStyle =
+    isDesktop
+      ? {
+          ...styles.heroSection,
+          ...styles.desktopHeroSection,
+        }
+      : styles.heroSection;
 
-  const titleStyle = isDesktop
-    ? {
-        ...styles.title,
-        ...styles.desktopTitle,
-      }
-    : styles.title;
 
-  const descriptionStyle = isDesktop
-    ? {
-        ...styles.description,
-        ...styles.desktopDescription,
-      }
-    : styles.description;
+  const logoStyle =
+    isDesktop
+      ? {
+          ...styles.logo,
+          ...styles.desktopLogo,
+        }
+      : styles.logo;
 
-  const actionStyle = isDesktop
-    ? {
-        ...styles.actionSection,
-        ...styles.desktopActionSection,
-      }
-    : styles.actionSection;
 
-  const signUpStyle = isDesktop
-    ? {
-        ...styles.signUpButton,
-        ...styles.desktopButton,
-      }
-    : styles.signUpButton;
+  const titleStyle =
+    isDesktop
+      ? {
+          ...styles.title,
+          ...styles.desktopTitle,
+        }
+      : styles.title;
 
-  const logInStyle = isDesktop
-    ? {
-        ...styles.logInButton,
-        ...styles.desktopButton,
-      }
-    : styles.logInButton;
+
+  const descriptionStyle =
+    isDesktop
+      ? {
+          ...styles.description,
+          ...styles.desktopDescription,
+        }
+      : styles.description;
+
+
+  const actionStyle =
+    isDesktop
+      ? {
+          ...styles.actionSection,
+          ...styles.desktopActionSection,
+        }
+      : styles.actionSection;
+
+
+  const signUpStyle =
+    isDesktop
+      ? {
+          ...styles.signUpButton,
+          ...styles.desktopButton,
+        }
+      : styles.signUpButton;
+
+
+  const logInStyle =
+    isDesktop
+      ? {
+          ...styles.logInButton,
+          ...styles.desktopButton,
+        }
+      : styles.logInButton;
 
 
   // ==========================================================
@@ -280,39 +352,69 @@ export default function App() {
   // ==========================================================
 
   return (
-    <div style={styles.container}>
+    <div
+      style={
+        styles.container
+      }
+    >
 
       <div
         style={{
           ...styles.background,
-          backgroundImage: `url(${background})`,
+
+          backgroundImage:
+            `url(${background})`,
         }}
       >
 
-        <div style={safeAreaStyle}>
+        <div
+          style={
+            safeAreaStyle
+          }
+        >
 
           {/* ==================================================
               HEADER & HERO
           ================================================== */}
 
-          <div style={heroStyle}>
+          <div
+            style={
+              heroStyle
+            }
+          >
 
             <img
               src={logo}
               alt="Shinzi Hub"
-              style={logoStyle}
+              style={
+                logoStyle
+              }
             />
 
-            <h1 style={titleStyle}>
+
+            <h1
+              style={
+                titleStyle
+              }
+            >
+
               Welcome to
               <br />
               Shinzi Hub
+
             </h1>
 
-            <p style={descriptionStyle}>
+
+            <p
+              style={
+                descriptionStyle
+              }
+            >
+
               Join servers, search, or chat.
               <br />
               Tap below to get started.
+
             </p>
 
           </div>
@@ -322,21 +424,44 @@ export default function App() {
               ACTION BUTTONS
           ================================================== */}
 
-          <div style={actionStyle}>
+          <div
+            style={
+              actionStyle
+            }
+          >
+
+            {/* ==================================================
+                REGISTER
+            ================================================== */}
 
             <button
-              style={signUpStyle}
+              type="button"
+              style={
+                signUpStyle
+              }
               onClick={() =>
-                setCurrentScreen('signup')
+                setCurrentScreen(
+                  'signup'
+                )
               }
             >
               Register
             </button>
 
+
+            {/* ==================================================
+                LOGIN
+            ================================================== */}
+
             <button
-              style={logInStyle}
+              type="button"
+              style={
+                logInStyle
+              }
               onClick={() =>
-                setCurrentScreen('login')
+                setCurrentScreen(
+                  'login'
+                )
               }
             >
               Log In
@@ -357,7 +482,10 @@ export default function App() {
 // STYLES
 // ============================================================
 
-const styles: Record<string, CSSProperties> = {
+const styles: Record<
+  string,
+  CSSProperties
+> = {
 
   // ----------------------------------------------------------
   // MAIN CONTAINER
@@ -368,7 +496,8 @@ const styles: Record<string, CSSProperties> = {
     height: '100dvh',
     minHeight: 0,
 
-    backgroundColor: '#000000',
+    backgroundColor:
+      '#000000',
 
     overflow: 'hidden',
   },
@@ -382,9 +511,14 @@ const styles: Record<string, CSSProperties> = {
     width: '100%',
     height: '100%',
 
-    backgroundSize: 'cover',
-    backgroundPosition: 'center',
-    backgroundRepeat: 'no-repeat',
+    backgroundSize:
+      'cover',
+
+    backgroundPosition:
+      'center',
+
+    backgroundRepeat:
+      'no-repeat',
   },
 
 
@@ -400,7 +534,9 @@ const styles: Record<string, CSSProperties> = {
 
     display: 'flex',
     flexDirection: 'column',
-    justifyContent: 'space-between',
+
+    justifyContent:
+      'space-between',
 
     paddingLeft: 24,
     paddingRight: 24,
@@ -420,7 +556,9 @@ const styles: Record<string, CSSProperties> = {
   heroSection: {
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'center',
+
+    alignItems:
+      'center',
 
     marginTop: 40,
   },
@@ -447,6 +585,7 @@ const styles: Record<string, CSSProperties> = {
     textAlign: 'center',
 
     letterSpacing: 0.5,
+
     lineHeight: 1.2,
 
     textTransform: 'none',
@@ -455,6 +594,7 @@ const styles: Record<string, CSSProperties> = {
 
   description: {
     margin: 0,
+
     marginTop: 12,
 
     color: '#A5A5BA',
@@ -478,25 +618,30 @@ const styles: Record<string, CSSProperties> = {
     marginBottom: 20,
 
     display: 'flex',
-    flexDirection: 'column',
+
+    flexDirection:
+      'column',
 
     gap: 12,
   },
 
 
   // ----------------------------------------------------------
-  // SIGN UP / REGISTER BUTTON
+  // REGISTER BUTTON
   // ----------------------------------------------------------
 
   signUpButton: {
     width: '100%',
 
-    boxSizing: 'border-box',
+    boxSizing:
+      'border-box',
 
     backgroundColor:
       'rgba(10, 10, 14, 0.75)',
 
-    border: '1px solid #2E2E42',
+    border:
+      '1px solid #2E2E42',
+
     borderRadius: 28,
 
     paddingTop: 16,
@@ -521,11 +666,14 @@ const styles: Record<string, CSSProperties> = {
   logInButton: {
     width: '100%',
 
-    boxSizing: 'border-box',
+    boxSizing:
+      'border-box',
 
-    backgroundColor: '#FFFFFF',
+    backgroundColor:
+      '#FFFFFF',
 
     border: 'none',
+
     borderRadius: 28,
 
     paddingTop: 16,
@@ -544,12 +692,7 @@ const styles: Record<string, CSSProperties> = {
 
 
   // ----------------------------------------------------------
-  // DESKTOP RESPONSIVE LAYOUT
-  //
-  // These styles are used ONLY when the viewport is
-  // 768px wide or larger.
-  //
-  // Mobile styles above remain unchanged.
+  // DESKTOP
   // ----------------------------------------------------------
 
   desktopSafeArea: {
@@ -557,6 +700,7 @@ const styles: Record<string, CSSProperties> = {
 
     paddingLeft: 40,
     paddingRight: 40,
+
     paddingTop: 40,
     paddingBottom: 40,
   },
@@ -618,19 +762,23 @@ const styles: Record<string, CSSProperties> = {
 
 
   // ----------------------------------------------------------
-  // LOADING SCREEN
+  // LOADING
   // ----------------------------------------------------------
 
   loadingContainer: {
     width: '100%',
     height: '100dvh',
 
-    backgroundColor: '#000000',
+    backgroundColor:
+      '#000000',
 
     display: 'flex',
 
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent:
+      'center',
+
+    alignItems:
+      'center',
 
     overflow: 'hidden',
   },
@@ -640,8 +788,11 @@ const styles: Record<string, CSSProperties> = {
     width: 38,
     height: 38,
 
-    border: '4px solid #22222E',
-    borderTop: '4px solid #00D2FF',
+    border:
+      '4px solid #22222E',
+
+    borderTop:
+      '4px solid #00D2FF',
 
     borderRadius: '50%',
 
@@ -658,17 +809,24 @@ const styles: Record<string, CSSProperties> = {
     width: '100%',
     height: '100dvh',
 
-    boxSizing: 'border-box',
+    boxSizing:
+      'border-box',
 
-    backgroundColor: '#000000',
+    backgroundColor:
+      '#000000',
 
     color: '#FFFFFF',
 
     display: 'flex',
-    flexDirection: 'column',
 
-    justifyContent: 'center',
-    alignItems: 'center',
+    flexDirection:
+      'column',
+
+    justifyContent:
+      'center',
+
+    alignItems:
+      'center',
 
     padding: 24,
 
@@ -680,17 +838,24 @@ const styles: Record<string, CSSProperties> = {
     width: '100%',
     height: '100dvh',
 
-    boxSizing: 'border-box',
+    boxSizing:
+      'border-box',
 
-    backgroundColor: '#000000',
+    backgroundColor:
+      '#000000',
 
     color: '#FFFFFF',
 
     display: 'flex',
-    flexDirection: 'column',
 
-    justifyContent: 'center',
-    alignItems: 'center',
+    flexDirection:
+      'column',
+
+    justifyContent:
+      'center',
+
+    alignItems:
+      'center',
 
     overflow: 'hidden',
   },
@@ -718,16 +883,20 @@ const styles: Record<string, CSSProperties> = {
   backButton: {
     marginTop: 20,
 
-    padding: '12px 24px',
+    padding:
+      '12px 24px',
 
     border: 'none',
+
     borderRadius: 24,
 
-    backgroundColor: '#FFFFFF',
+    backgroundColor:
+      '#FFFFFF',
 
     color: '#000000',
 
     fontSize: 15,
+
     fontWeight: 700,
 
     cursor: 'pointer',
