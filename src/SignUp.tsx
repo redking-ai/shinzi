@@ -1,6 +1,6 @@
 import React, {
   ChangeEvent,
-  useMemo,
+  useEffect,
   useRef,
   useState,
 } from 'react';
@@ -21,11 +21,6 @@ import {
   ASSET_VISIBILITY,
 } from './assetService';
 
-
-// ============================================================
-// TYPES
-// ============================================================
-
 interface SignUpProps {
   onBack: () => void;
 }
@@ -38,31 +33,11 @@ interface ProfileImage {
   size: number;
 }
 
-interface DriveUploadResult {
-  fileId: string;
-  folderId: string;
-  fileName?: string;
-  mimeType?: string;
-  sizeBytes?: number;
-}
-
-
-// ============================================================
-// SIGN UP
-// ============================================================
-
 export default function SignUp({
   onBack,
 }: SignUpProps) {
-
   const [step, setStep] = useState(1);
-
-  const [isSubmitting, setIsSubmitting] =
-    useState(false);
-
-  // ----------------------------------------------------------
-  // GOOGLE DRIVE
-  // ----------------------------------------------------------
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
     isReady: isDriveReady,
@@ -71,100 +46,55 @@ export default function SignUp({
     deleteFile,
   } = useDriveStore();
 
-
-  // ----------------------------------------------------------
   // STEP 1
-  // ----------------------------------------------------------
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
-  const [email, setEmail] =
-    useState('');
-
-  const [password, setPassword] =
-    useState('');
-
-
-  // ----------------------------------------------------------
   // STEP 2
-  // ----------------------------------------------------------
+  const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
+  const [gender, setGender] = useState('');
+  const [showGenderModal, setShowGenderModal] = useState(false);
 
-  const [name, setName] =
-    useState('');
+  const [day, setDay] = useState('');
+  const [month, setMonth] = useState('');
+  const [year, setYear] = useState('');
 
-  const [username, setUsername] =
-    useState('');
-
-  const [gender, setGender] =
-    useState('');
-
-  const [
-    showGenderModal,
-    setShowGenderModal,
-  ] = useState(false);
-
-  const [day, setDay] =
-    useState('');
-
-  const [month, setMonth] =
-    useState('');
-
-  const [year, setYear] =
-    useState('');
-
-  const [
-    profileImage,
-    setProfileImage,
-  ] = useState<ProfileImage | null>(null);
+  const [profileImage, setProfileImage] =
+    useState<ProfileImage | null>(null);
 
   const fileInputRef =
     useRef<HTMLInputElement | null>(null);
 
-
-  // ==========================================================
+  // ----------------------------------------------------------
   // VALIDATION
-  // ==========================================================
+  // ----------------------------------------------------------
 
   const normalizedUsername =
     username.trim().toLowerCase();
-
 
   const isEmail =
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
       email.trim()
     );
 
-
-  const hasNumber =
-    /\d/.test(password);
-
+  const hasNumber = /\d/.test(password);
 
   const isUsernameValid =
     /^[a-z0-9_]{3,15}$/.test(
       normalizedUsername
     );
 
-
-  // ----------------------------------------------------------
-  // DATE VALIDATION
-  // ----------------------------------------------------------
-
   const isValidDate = (
     d: string,
     m: string,
     y: string
   ): boolean => {
+    const numD = parseInt(d, 10);
+    const numM = parseInt(m, 10);
+    const numY = parseInt(y, 10);
 
-    const numD =
-      parseInt(d, 10);
-
-    const numM =
-      parseInt(m, 10);
-
-    const numY =
-      parseInt(y, 10);
-
-    const today =
-      new Date();
-
+    const today = new Date();
 
     if (
       !numD ||
@@ -178,24 +108,19 @@ export default function SignUp({
       return false;
     }
 
-
-    const parsedDate =
-      new Date(
-        numY,
-        numM - 1,
-        numD
-      );
-
+    const parsedDate = new Date(
+      numY,
+      numM - 1,
+      numD
+    );
 
     const isRealDate =
       parsedDate.getFullYear() === numY &&
       parsedDate.getMonth() === numM - 1 &&
       parsedDate.getDate() === numD;
 
-
     let age =
       today.getFullYear() - numY;
-
 
     if (
       today.getMonth() < numM - 1 ||
@@ -207,19 +132,13 @@ export default function SignUp({
       age--;
     }
 
-
-    return (
-      isRealDate &&
-      age >= 13
-    );
+    return isRealDate && age >= 13;
   };
-
 
   const isStep1Valid =
     isEmail &&
     password.length >= 6 &&
     hasNumber;
-
 
   const isStep2Valid =
     profileImage !== null &&
@@ -232,162 +151,118 @@ export default function SignUp({
     ) &&
     gender !== '';
 
-
   const hasEnteredDate =
     day.length > 0 ||
     month.length > 0 ||
     year.length > 0;
 
-
-  // ==========================================================
+  // ----------------------------------------------------------
   // AVATAR PICKER
-  // ==========================================================
+  // ----------------------------------------------------------
 
-  const handleAvatarPress =
-    () => {
-
-      if (isSubmitting) {
-        return;
-      }
-
-      fileInputRef.current?.click();
-    };
-
-
-  const handleImageChange = (
-    event: ChangeEvent<HTMLInputElement>
-  ) => {
-
+  const handleAvatarPress = () => {
     if (isSubmitting) {
       return;
     }
 
+    fileInputRef.current?.click();
+  };
+
+  const handleImageChange = (
+    event: ChangeEvent<HTMLInputElement>
+  ) => {
+    if (isSubmitting) {
+      return;
+    }
 
     const file =
       event.target.files?.[0];
-
 
     if (!file) {
       return;
     }
 
-
-    if (
-      !file.type.startsWith('image/')
-    ) {
-
+    if (!file.type.startsWith('image/')) {
       window.alert(
         'Please select an image file.'
       );
 
       event.target.value = '';
-
       return;
     }
-
 
     const maxSize =
       15 * 1024 * 1024;
 
-
     if (file.size > maxSize) {
-
       window.alert(
         'Profile photo must be smaller than 15 MB.'
       );
 
       event.target.value = '';
-
       return;
     }
-
 
     const uri =
       URL.createObjectURL(file);
 
-
-    setProfileImage(
-      (previous) => {
-
-        if (previous?.uri) {
-          URL.revokeObjectURL(
-            previous.uri
-          );
-        }
-
-        return {
-          file,
-          uri,
-          mimeType:
-            file.type ||
-            'image/jpeg',
-          name:
-            file.name,
-          size:
-            file.size,
-        };
+    setProfileImage((previous) => {
+      if (previous?.uri) {
+        URL.revokeObjectURL(
+          previous.uri
+        );
       }
-    );
 
+      return {
+        file,
+        uri,
+        mimeType:
+          file.type ||
+          'image/jpeg',
+        name: file.name,
+        size: file.size,
+      };
+    });
 
-    // Allow selecting the same file again later.
     event.target.value = '';
   };
 
-
-  // ==========================================================
-  // GET IMAGE INFORMATION
-  // ==========================================================
+  // ----------------------------------------------------------
+  // IMAGE INFORMATION
+  // ----------------------------------------------------------
 
   const getImageUploadInfo = (
     imageAsset: ProfileImage,
     assetId: string
   ) => {
-
     const mimeType =
-      imageAsset?.mimeType ||
+      imageAsset.mimeType ||
       'image/jpeg';
 
+    let extension = 'jpg';
 
-    let extension =
-      'jpg';
-
-
-    if (
-      mimeType === 'image/png'
-    ) {
-
+    if (mimeType === 'image/png') {
       extension = 'png';
-
     } else if (
       mimeType === 'image/webp'
     ) {
-
       extension = 'webp';
-
     } else if (
       mimeType === 'image/heic'
     ) {
-
       extension = 'heic';
-
     } else if (
       mimeType === 'image/heif'
     ) {
-
       extension = 'heif';
-
     } else {
-
       const uri =
-        imageAsset?.name ||
-        imageAsset?.uri ||
+        imageAsset.name ||
+        imageAsset.uri ||
         '';
-
 
       const cleanUri =
         uri.split('?')[0];
-
 
       const uriExtension =
         cleanUri
@@ -395,47 +270,35 @@ export default function SignUp({
           .pop()
           ?.toLowerCase();
 
-
       if (
         uriExtension &&
         /^[a-z0-9]{2,5}$/.test(
           uriExtension
         )
       ) {
-
         extension =
           uriExtension;
       }
     }
 
-
     return {
       fileName:
         `${assetId}.${extension}`,
-
       mimeType,
     };
   };
 
-
-  // ==========================================================
+  // ----------------------------------------------------------
   // CREATE ACCOUNT
-  // ==========================================================
+  // ----------------------------------------------------------
 
   const executeSignUp =
     async (): Promise<void> => {
-
       if (isSubmitting) {
         return;
       }
 
-
-      // --------------------------------------------------------
-      // PROFILE PHOTO REQUIRED
-      // --------------------------------------------------------
-
       if (!profileImage) {
-
         window.alert(
           'Profile Photo Required\n\nPlease select a profile photo before creating your account.'
         );
@@ -443,13 +306,7 @@ export default function SignUp({
         return;
       }
 
-
-      // --------------------------------------------------------
-      // DRIVE MUST BE READY
-      // --------------------------------------------------------
-
       if (!isDriveReady) {
-
         window.alert(
           'Google Drive Not Ready\n\nPlease wait a moment and try again.'
         );
@@ -457,13 +314,7 @@ export default function SignUp({
         return;
       }
 
-
       setIsSubmitting(true);
-
-
-      // --------------------------------------------------------
-      // ROLLBACK TRACKING
-      // --------------------------------------------------------
 
       let createdAuthUser:
         Awaited<
@@ -478,19 +329,15 @@ export default function SignUp({
       let uploadedDriveFileId:
         string | null = null;
 
-
       try {
-
-        // ======================================================
+        // ------------------------------------------------------
         // 1. GOOGLE DRIVE PERMISSION
-        // ======================================================
+        // ------------------------------------------------------
 
         const driveToken =
           await connectDrive();
 
-
         if (!driveToken) {
-
           window.alert(
             'Google Drive Permission Required\n\nShinzi requires Google Drive permission to continue creating your account.'
           );
@@ -498,10 +345,9 @@ export default function SignUp({
           return;
         }
 
-
-        // ======================================================
-        // 2. CREATE FIREBASE AUTH USER
-        // ======================================================
+        // ------------------------------------------------------
+        // 2. FIREBASE AUTH USER
+        // ------------------------------------------------------
 
         const authResult =
           await createEmailAuthUser(
@@ -510,12 +356,10 @@ export default function SignUp({
             normalizedUsername
           );
 
-
         if (
           authResult.error ||
           !authResult.user
         ) {
-
           window.alert(
             `Sign Up Failed\n\n${
               authResult.error ||
@@ -526,28 +370,24 @@ export default function SignUp({
           return;
         }
 
-
         createdAuthUser =
           authResult.user;
 
-
-        // ======================================================
-        // 3. GENERATE SHINZI PROFILE ASSET ID
-        // ======================================================
+        // ------------------------------------------------------
+        // 3. GENERATE PROFILE ASSET ID
+        // ------------------------------------------------------
 
         const profileAssetId =
           await generateAssetId(
             ASSET_TYPES.PROFILE_PHOTO
           );
 
-
         createdAssetId =
           profileAssetId;
 
-
-        // ======================================================
+        // ------------------------------------------------------
         // 4. PREPARE DRIVE FILE
-        // ======================================================
+        // ------------------------------------------------------
 
         const {
           fileName,
@@ -558,18 +398,9 @@ export default function SignUp({
             profileAssetId
           );
 
-
-        // ======================================================
-        // 5. UPLOAD PROFILE PHOTO TO GOOGLE DRIVE
-        // ======================================================
-
-        /*
-         * The Web version of driveStore accepts a browser
-         * readable URI.
-         *
-         * profileImage.uri is a blob URL created from the
-         * user's selected File.
-         */
+        // ------------------------------------------------------
+        // 5. UPLOAD PROFILE PHOTO
+        // ------------------------------------------------------
 
         const uploadResult =
           await uploadFile({
@@ -584,30 +415,25 @@ export default function SignUp({
               'profiles',
           });
 
-
         if (
           !uploadResult ||
           !uploadResult.fileId ||
           !uploadResult.folderId
         ) {
-
           throw new Error(
             'Google Drive upload did not return a valid file.'
           );
         }
 
-
         uploadedDriveFileId =
           uploadResult.fileId;
 
-
-        // ======================================================
-        // 6. CREATE FIREBASE ASSET RECORD
-        // ======================================================
+        // ------------------------------------------------------
+        // 6. CREATE ASSET RECORD
+        // ------------------------------------------------------
 
         const asset =
           await createAssetRecord({
-
             assetId:
               profileAssetId,
 
@@ -640,35 +466,29 @@ export default function SignUp({
                 ? uploadResult.sizeBytes
                 : 0,
 
-            version:
-              1,
+            version: 1,
 
-            status:
-              'active',
+            status: 'active',
           });
-
 
         if (
           !asset ||
           asset.assetId !==
             profileAssetId
         ) {
-
           throw new Error(
             'Profile asset record could not be created.'
           );
         }
 
-
-        // ======================================================
-        // 7. CREATE FIRESTORE USER PROFILE
-        // ======================================================
+        // ------------------------------------------------------
+        // 7. CREATE USER PROFILE
+        // ------------------------------------------------------
 
         const profileResult =
           await createUserProfile(
             createdAuthUser,
             {
-
               displayName:
                 name.trim(),
 
@@ -685,67 +505,43 @@ export default function SignUp({
             }
           );
 
-
         if (
           !profileResult.success
         ) {
-
           throw new Error(
             profileResult.error ||
             'Unable to create your Shinzi profile.'
           );
         }
 
-
-        // ======================================================
+        // ------------------------------------------------------
         // 8. SUCCESS
-        // ======================================================
-
-        /*
-         * Firebase Auth has successfully created and signed
-         * in the user.
-         *
-         * App.tsx is listening with onAuthStateChanged().
-         *
-         * Once Firebase reports the authenticated user,
-         * App.tsx automatically replaces this SignUp screen
-         * with the authenticated application.
-         *
-         * We intentionally do NOT manually navigate here.
-         */
+        // ------------------------------------------------------
 
         window.alert(
           `Account Created!\n\nWelcome to Shinzi Hub, ${name.trim()}!`
         );
 
-
         return;
 
       } catch (err) {
-
         console.error(
           'Signup error:',
           err
         );
 
-
-        // ======================================================
-        // ROLLBACK 1:
-        // DELETE FIRESTORE ASSET RECORD
-        // ======================================================
+        // ------------------------------------------------------
+        // ROLLBACK FIRESTORE ASSET
+        // ------------------------------------------------------
 
         if (createdAssetId) {
-
           try {
-
             await deleteAsset(
               createdAssetId
             );
-
           } catch (
             assetRollbackError
           ) {
-
             console.error(
               'Asset metadata rollback failed:',
               assetRollbackError
@@ -753,26 +549,20 @@ export default function SignUp({
           }
         }
 
-
-        // ======================================================
-        // ROLLBACK 2:
-        // DELETE GOOGLE DRIVE FILE
-        // ======================================================
+        // ------------------------------------------------------
+        // ROLLBACK GOOGLE DRIVE
+        // ------------------------------------------------------
 
         if (
           uploadedDriveFileId
         ) {
-
           try {
-
             await deleteFile(
               uploadedDriveFileId
             );
-
           } catch (
             driveRollbackError
           ) {
-
             console.error(
               'Google Drive rollback failed:',
               driveRollbackError
@@ -780,26 +570,18 @@ export default function SignUp({
           }
         }
 
+        // ------------------------------------------------------
+        // ROLLBACK FIREBASE AUTH
+        // ------------------------------------------------------
 
-        // ======================================================
-        // ROLLBACK 3:
-        // DELETE FIREBASE AUTH USER
-        // ======================================================
-
-        if (
-          createdAuthUser
-        ) {
-
+        if (createdAuthUser) {
           try {
-
             await deleteCurrentAuthUser(
               createdAuthUser
             );
-
           } catch (
             authRollbackError
           ) {
-
             console.error(
               'Firebase Auth rollback failed:',
               authRollbackError
@@ -807,74 +589,46 @@ export default function SignUp({
           }
         }
 
-
-        // ======================================================
-        // SHOW ERROR
-        // ======================================================
-
         const errorMessage =
           err instanceof Error
             ? err.message
             : 'An unexpected error occurred during signup.';
 
-
         window.alert(
           `Sign Up Failed\n\n${errorMessage}`
         );
-
       } finally {
-
         setIsSubmitting(false);
       }
     };
 
+  // ----------------------------------------------------------
+  // CLEAN OBJECT URL
+  // ----------------------------------------------------------
 
-  // ==========================================================
-  // CLEAN IMAGE URL WHEN COMPONENT UNMOUNTS
-  // ==========================================================
-
-  /*
-   * We intentionally keep the object URL while the component
-   * is alive because Drive upload needs it.
-   *
-   * It is revoked when the component is removed.
-   */
-
-  React.useEffect(() => {
-
+  useEffect(() => {
     return () => {
-
       if (profileImage?.uri) {
         URL.revokeObjectURL(
           profileImage.uri
         );
       }
-
     };
-
   }, [profileImage]);
 
-
-  // ==========================================================
+  // ----------------------------------------------------------
   // UI
-  // ==========================================================
+  // ----------------------------------------------------------
 
   return (
     <div className="signup-page">
-
       <div className="signup-shell">
 
-        {/* ==================================================
-            HEADER
-        ================================================== */}
-
         <div className="signup-header">
-
           <button
             type="button"
             className="signup-back-button"
             onClick={() => {
-
               if (isSubmitting) {
                 return;
               }
@@ -884,36 +638,25 @@ export default function SignUp({
               } else {
                 setStep(1);
               }
-
             }}
             disabled={isSubmitting}
           >
             &lt; Back
           </button>
 
-
           <div className="signup-step">
             STEP {step}/2
           </div>
 
-
-          <div
-            className="signup-header-spacer"
-          />
-
+          <div className="signup-header-spacer" />
         </div>
 
-
-        {/* ==================================================
-            STEP 1
-        ================================================== */}
+        {/* STEP 1 */}
 
         {step === 1 && (
-
           <div className="signup-content">
 
             <div className="signup-input-box">
-
               <input
                 className="signup-input"
                 type="email"
@@ -929,12 +672,9 @@ export default function SignUp({
                 autoComplete="email"
                 disabled={isSubmitting}
               />
-
             </div>
 
-
             <div className="signup-input-box">
-
               <input
                 className="signup-input"
                 type="password"
@@ -950,20 +690,15 @@ export default function SignUp({
                 autoComplete="new-password"
                 disabled={isSubmitting}
               />
-
             </div>
-
 
             {password.length > 0 &&
               !hasNumber && (
-
                 <div className="signup-error-text">
                   * Password must contain at
                   least 1 number
                 </div>
-
               )}
-
 
             <button
               type="button"
@@ -980,24 +715,16 @@ export default function SignUp({
                 setStep(2)
               }
             >
-
               Continue
-
             </button>
 
           </div>
         )}
 
-
-        {/* ==================================================
-            STEP 2
-        ================================================== */}
+        {/* STEP 2 */}
 
         {step === 2 && (
-
           <div className="signup-content">
-
-            {/* Hidden browser file input */}
 
             <input
               ref={fileInputRef}
@@ -1009,8 +736,7 @@ export default function SignUp({
               }}
             />
 
-
-            {/* Avatar */}
+            {/* AVATAR */}
 
             <div className="signup-avatar-container">
 
@@ -1025,9 +751,7 @@ export default function SignUp({
                 }
                 aria-label="Choose profile photo"
               >
-
                 {profileImage ? (
-
                   <img
                     src={
                       profileImage.uri
@@ -1035,38 +759,28 @@ export default function SignUp({
                     alt="Profile preview"
                     className="signup-avatar-image"
                   />
-
                 ) : (
-
                   <span className="signup-person-icon">
                     ●
                   </span>
-
                 )}
-
 
                 <span className="signup-pencil-badge">
                   ✎
                 </span>
-
               </button>
 
-
               {!profileImage && (
-
                 <div className="signup-photo-required">
                   Profile photo required
                 </div>
-
               )}
 
             </div>
 
-
-            {/* Display Name */}
+            {/* DISPLAY NAME */}
 
             <div className="signup-input-box">
-
               <input
                 className="signup-input"
                 type="text"
@@ -1081,11 +795,9 @@ export default function SignUp({
                 autoCorrect="off"
                 disabled={isSubmitting}
               />
-
             </div>
 
-
-            {/* Username */}
+            {/* USERNAME */}
 
             <div
               className={
@@ -1095,7 +807,6 @@ export default function SignUp({
                   : 'signup-input-box'
               }
             >
-
               <input
                 className="signup-input"
                 type="text"
@@ -1111,28 +822,22 @@ export default function SignUp({
                 maxLength={15}
                 disabled={isSubmitting}
               />
-
             </div>
-
 
             {username.length > 0 &&
               !isUsernameValid && (
-
                 <div className="signup-error-text">
                   * 3-15 characters, lowercase
                   letters, numbers, and underscores
                   only
                 </div>
-
               )}
 
-
-            {/* Date of Birth */}
+            {/* DATE OF BIRTH */}
 
             <div className="signup-date-row">
 
               <div className="signup-input-box signup-flex-1">
-
                 <input
                   className="signup-input"
                   type="text"
@@ -1141,23 +846,17 @@ export default function SignUp({
                   value={day}
                   onChange={(event) =>
                     setDay(
-                      event.target.value.replace(
-                        /\D/g,
-                        ''
-                      ).slice(0, 2)
+                      event.target.value
+                        .replace(/\D/g, '')
+                        .slice(0, 2)
                     )
                   }
                   maxLength={2}
-                  disabled={
-                    isSubmitting
-                  }
+                  disabled={isSubmitting}
                 />
-
               </div>
 
-
               <div className="signup-input-box signup-flex-1">
-
                 <input
                   className="signup-input"
                   type="text"
@@ -1166,23 +865,17 @@ export default function SignUp({
                   value={month}
                   onChange={(event) =>
                     setMonth(
-                      event.target.value.replace(
-                        /\D/g,
-                        ''
-                      ).slice(0, 2)
+                      event.target.value
+                        .replace(/\D/g, '')
+                        .slice(0, 2)
                     )
                   }
                   maxLength={2}
-                  disabled={
-                    isSubmitting
-                  }
+                  disabled={isSubmitting}
                 />
-
               </div>
 
-
               <div className="signup-input-box signup-flex-2">
-
                 <input
                   className="signup-input"
                   type="text"
@@ -1191,22 +884,17 @@ export default function SignUp({
                   value={year}
                   onChange={(event) =>
                     setYear(
-                      event.target.value.replace(
-                        /\D/g,
-                        ''
-                      ).slice(0, 4)
+                      event.target.value
+                        .replace(/\D/g, '')
+                        .slice(0, 4)
                     )
                   }
                   maxLength={4}
-                  disabled={
-                    isSubmitting
-                  }
+                  disabled={isSubmitting}
                 />
-
               </div>
 
             </div>
-
 
             {hasEnteredDate &&
               !isValidDate(
@@ -1214,16 +902,13 @@ export default function SignUp({
                 month,
                 year
               ) && (
-
                 <div className="signup-error-text">
                   * Enter a valid calendar date
                   (Min. age 13)
                 </div>
-
               )}
 
-
-            {/* Gender */}
+            {/* GENDER */}
 
             <button
               type="button"
@@ -1233,7 +918,6 @@ export default function SignUp({
               }
               disabled={isSubmitting}
             >
-
               <span
                 className={
                   gender
@@ -1245,15 +929,12 @@ export default function SignUp({
                   'Select Gender'}
               </span>
 
-
               <span className="signup-chevron">
                 ▼
               </span>
-
             </button>
 
-
-            {/* Create Account */}
+            {/* CREATE ACCOUNT */}
 
             <button
               type="button"
@@ -1271,29 +952,22 @@ export default function SignUp({
                 executeSignUp
               }
             >
-
               {isSubmitting
                 ? 'Creating...'
                 : 'Create Account'}
-
             </button>
 
           </div>
         )}
 
-
-        {/* ==================================================
-            GENDER MODAL
-        ================================================== */}
+        {/* GENDER MODAL */}
 
         {showGenderModal && (
-
           <div
             className="signup-modal-overlay"
             role="dialog"
             aria-modal="true"
             onMouseDown={(event) => {
-
               if (
                 event.target ===
                 event.currentTarget
@@ -1302,10 +976,8 @@ export default function SignUp({
                   false
                 );
               }
-
             }}
           >
-
             <div className="signup-modal-content">
 
               {[
@@ -1313,42 +985,28 @@ export default function SignUp({
                 'Female',
                 'Others',
               ].map((g) => (
-
                 <button
                   type="button"
                   key={g}
                   className="signup-modal-option"
                   onClick={() => {
-
                     setGender(g);
-
                     setShowGenderModal(
                       false
                     );
-
                   }}
                 >
-
                   {g}
-
                 </button>
-
               ))}
 
             </div>
-
           </div>
         )}
 
       </div>
 
-
-      {/* ====================================================
-          PAGE STYLES
-      ==================================================== */}
-
       <style>{`
-
         * {
           box-sizing: border-box;
         }
@@ -1382,10 +1040,7 @@ export default function SignUp({
           flex-direction: row;
           justify-content: space-between;
           align-items: center;
-          padding:
-            18px
-            20px
-            20px;
+          padding: 18px 20px 20px;
         }
 
         .signup-back-button {
@@ -1417,10 +1072,7 @@ export default function SignUp({
         .signup-content {
           flex: 1;
           width: 100%;
-          padding:
-            0
-            24px
-            20px;
+          padding: 0 24px 20px;
           display: flex;
           flex-direction: column;
         }
@@ -1460,9 +1112,7 @@ export default function SignUp({
           outline: none;
           background: transparent;
           color: #FFFFFF;
-          padding:
-            17px
-            16px;
+          padding: 17px 16px;
           font-size: 16px;
           font-family:
             Arial,
@@ -1571,9 +1221,7 @@ export default function SignUp({
         .signup-gender-button {
           border: 1px solid #22222E;
           cursor: pointer;
-          padding:
-            0
-            16px;
+          padding: 0 16px;
           text-align: left;
         }
 
@@ -1621,15 +1269,11 @@ export default function SignUp({
             opacity 0.15s ease;
         }
 
-        .signup-continue-button:not(
-          :disabled
-        ):hover {
+        .signup-continue-button:not(:disabled):hover {
           transform: translateY(-1px);
         }
 
-        .signup-continue-button:not(
-          :disabled
-        ):active {
+        .signup-continue-button:not(:disabled):active {
           transform: translateY(0);
         }
 
@@ -1644,13 +1288,7 @@ export default function SignUp({
           position: fixed;
           inset: 0;
           z-index: 1000;
-          background:
-            rgba(
-              0,
-              0,
-              0,
-              0.7
-            );
+          background: rgba(0, 0, 0, 0.7);
           display: flex;
           align-items: flex-end;
           justify-content: center;
@@ -1665,12 +1303,7 @@ export default function SignUp({
           padding: 24px;
           box-shadow:
             0 -10px 40px
-            rgba(
-              0,
-              0,
-              0,
-              0.45
-            );
+            rgba(0, 0, 0, 0.45);
         }
 
         .signup-modal-option {
@@ -1679,9 +1312,7 @@ export default function SignUp({
           border-bottom: 1px solid #22222E;
           background: transparent;
           color: #FFFFFF;
-          padding:
-            18px
-            10px;
+          padding: 18px 10px;
           font-size: 18px;
           text-align: center;
           cursor: pointer;
@@ -1696,7 +1327,6 @@ export default function SignUp({
         }
 
         @media (min-width: 768px) {
-
           .signup-page {
             display: flex;
             align-items: center;
@@ -1708,23 +1338,15 @@ export default function SignUp({
             min-height: 0;
             width: 100%;
             max-width: 620px;
-            border:
-              1px solid #171720;
+            border: 1px solid #171720;
             border-radius: 20px;
             box-shadow:
               0 20px 80px
-              rgba(
-                0,
-                0,
-                0,
-                0.45
-              );
+              rgba(0, 0, 0, 0.45);
           }
-
         }
 
         @media (max-width: 420px) {
-
           .signup-content {
             padding-left: 18px;
             padding-right: 18px;
@@ -1734,11 +1356,8 @@ export default function SignUp({
             padding-left: 16px;
             padding-right: 16px;
           }
-
         }
-
       `}</style>
-
     </div>
   );
 }
