@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-
+import { getFirestore } from 'firebase/firestore';
 
 // ============================================================
 // FIREBASE CONFIGURATION
@@ -15,18 +15,26 @@ const firebaseConfig = {
   appId: '1:1063333455169:web:32e06fc13324cc9c98edc0',
 };
 
-
 // ============================================================
 // INITIALIZE FIREBASE
 // ============================================================
 
 const app = initializeApp(firebaseConfig);
 
-
 // ============================================================
 // FIREBASE AUTH
 // ============================================================
 
 export const auth = getAuth(app);
+
+// ============================================================
+// FIRESTORE
+// ============================================================
+
+export const db = getFirestore(app);
+
+// ============================================================
+// DEFAULT APP
+// ============================================================
 
 export default app;
