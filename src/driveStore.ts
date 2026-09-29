@@ -63,7 +63,13 @@ interface DriveFile {
 }
 
 interface UploadFileOptions {
-  localUri: string;
+  // Preferred: pass the File/Blob directly. It does not
+  // depend on an object URL staying alive.
+  file?: Blob;
+
+  // Fallback: an object URL / URL that fetch() can read.
+  localUri?: string;
+
   fileName: string;
   mimeType: string;
   folderType?: DriveFolderType;
@@ -137,6 +143,10 @@ interface DriveStore {
 
 const AUTH_STORAGE_KEY = 'drive_auth';
 
+// Treat a token as expired a little early so it does not
+// die halfway through an upload.
+const TOKEN_EXPIRY_MARGIN_MS = 60_000;
+
 const DRIVE_API =
   'https://www.googleapis.com/drive/v3';
 
@@ -173,12 +183,21 @@ const googleClientId =
 // HELPERS
 // ============================================================
 
+class DriveError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'DriveError';
+    this.status = status;
+  }
+}
+
 const getAuthHeader = (
   token: string
 ): HeadersInit => ({
   Authorization: `Bearer ${token}`,
 });
-
 
 const throwDriveError = async (
   response: Response,
@@ -191,22 +210,144 @@ const throwDriveError = async (
   let message = fallbackMessage;
 
   try {
-    const data =
-      await response.json();
+    const data = await response.json();
 
-    if (
-      data?.error?.message
-    ) {
-      message =
-        data.error.message;
+    if (data?.error?.message) {
+      message = data.error.message;
     }
   } catch {
     // Ignore JSON parsing failure.
   }
 
-  throw new Error(
+  throw new DriveError(
+    response.status,
     `Google Drive error (${response.status}): ${message}`
   );
+};
+
+const blobToDataUri = (
+  blob: Blob
+): Promise<string> =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+      } else {
+        reject(
+          new Error(
+            'Unable to convert Drive file into image data.'
+          )
+        );
+      }
+    };
+
+    reader.onerror = () => {
+      reject(
+        new Error(
+          'Failed to read downloaded Drive file.'
+        )
+      );
+    };
+
+    reader.readAsDataURL(blob);
+  });
+
+// ------------------------------------------------------------
+// ONE-REQUEST UPLOAD
+// ------------------------------------------------------------
+//
+// Uploads the file AND places it in the target folder in a
+// single multipart request (metadata + media).
+//
+// The old flow uploaded the bytes first and then PATCHed the
+// file with addParents. That could leave an "Untitled" file
+// in the root of the user's Drive if the second step failed,
+// and the rollback never knew about it. One request means
+// either the file exists in the right folder or it does not.
+//
+// ------------------------------------------------------------
+
+const uploadMultipart = async (
+  token: string,
+  options: {
+    folderId: string;
+    fileName: string;
+    mimeType: string;
+    blob: Blob;
+  }
+): Promise<UploadedDriveFile> => {
+  const { folderId, fileName, mimeType, blob } =
+    options;
+
+  const boundary =
+    `shinzi_${Date.now().toString(36)}` +
+    `_${Math.random().toString(36).slice(2)}`;
+
+  const metadata = {
+    name: fileName,
+    mimeType,
+    parents: [folderId],
+  };
+
+  const body = new Blob([
+    `--${boundary}\r\n` +
+      'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+      `${JSON.stringify(metadata)}\r\n`,
+
+    `--${boundary}\r\n` +
+      `Content-Type: ${mimeType}\r\n\r\n`,
+
+    blob,
+
+    `\r\n--${boundary}--`,
+  ]);
+
+  const response = await fetch(
+    `${DRIVE_UPLOAD_API}/files` +
+      '?uploadType=multipart' +
+      '&fields=id,name,mimeType,size,parents',
+    {
+      method: 'POST',
+
+      headers: {
+        ...getAuthHeader(token),
+
+        'Content-Type':
+          `multipart/related; boundary=${boundary}`,
+      },
+
+      body,
+    }
+  );
+
+  await throwDriveError(
+    response,
+    'Unable to upload file to Google Drive.'
+  );
+
+  const uploaded = await response.json();
+
+  if (!uploaded?.id) {
+    throw new Error(
+      'Google Drive upload completed without returning a file ID.'
+    );
+  }
+
+  return {
+    fileId: uploaded.id,
+
+    folderId,
+
+    fileName: uploaded.name || fileName,
+
+    mimeType: uploaded.mimeType || mimeType,
+
+    sizeBytes: uploaded.size
+      ? Number(uploaded.size)
+      : blob.size,
+  };
 };
 
 
@@ -217,12 +358,9 @@ const throwDriveError = async (
 let googleScriptPromise:
   Promise<void> | null = null;
 
-
 const loadGoogleIdentityServices =
   (): Promise<void> => {
-    if (
-      typeof window === 'undefined'
-    ) {
+    if (typeof window === 'undefined') {
       return Promise.reject(
         new Error(
           'Google Drive authentication is only available in a browser.'
@@ -230,9 +368,7 @@ const loadGoogleIdentityServices =
       );
     }
 
-    if (
-      window.google?.accounts?.oauth2
-    ) {
+    if (window.google?.accounts?.oauth2) {
       return Promise.resolve();
     }
 
@@ -240,74 +376,69 @@ const loadGoogleIdentityServices =
       return googleScriptPromise;
     }
 
-    googleScriptPromise =
-      new Promise<void>(
-        (resolve, reject) => {
-          const existingScript =
-            document.querySelector(
-              'script[data-shinzi-google-gis="true"]'
-            );
+    googleScriptPromise = new Promise<void>(
+      (resolve, reject) => {
+        const existingScript =
+          document.querySelector(
+            'script[data-shinzi-google-gis="true"]'
+          );
 
-          if (existingScript) {
-            existingScript.addEventListener(
-              'load',
-              () => resolve()
-            );
+        if (existingScript) {
+          existingScript.addEventListener(
+            'load',
+            () => resolve()
+          );
 
-            existingScript.addEventListener(
-              'error',
-              () =>
-                reject(
-                  new Error(
-                    'Unable to load Google authentication.'
-                  )
-                )
-            );
-
-            return;
-          }
-
-          const script =
-            document.createElement(
-              'script'
-            );
-
-          script.src =
-            'https://accounts.google.com/gsi/client';
-
-          script.async = true;
-          script.defer = true;
-
-          script.dataset.shinziGoogleGis =
-            'true';
-
-          script.onload = () => {
-            if (
-              window.google?.accounts?.oauth2
-            ) {
-              resolve();
-            } else {
+          existingScript.addEventListener(
+            'error',
+            () =>
               reject(
                 new Error(
-                  'Google authentication loaded incorrectly.'
+                  'Unable to load Google authentication.'
                 )
-              );
-            }
-          };
+              )
+          );
 
-          script.onerror = () => {
+          return;
+        }
+
+        const script =
+          document.createElement('script');
+
+        script.src =
+          'https://accounts.google.com/gsi/client';
+
+        script.async = true;
+        script.defer = true;
+
+        script.dataset.shinziGoogleGis = 'true';
+
+        script.onload = () => {
+          if (window.google?.accounts?.oauth2) {
+            resolve();
+          } else {
             reject(
               new Error(
-                'Unable to load Google authentication.'
+                'Google authentication loaded incorrectly.'
               )
             );
-          };
+          }
+        };
 
-          document.head.appendChild(
-            script
+        script.onerror = () => {
+          // Allow a later retry instead of caching failure.
+          googleScriptPromise = null;
+
+          reject(
+            new Error(
+              'Unable to load Google authentication.'
+            )
           );
-        }
-      );
+        };
+
+        document.head.appendChild(script);
+      }
+    );
 
     return googleScriptPromise;
   };
@@ -320,16 +451,19 @@ const loadGoogleIdentityServices =
 export const useDriveStore =
   (): DriveStore => {
 
-    const [
-      accessToken,
-      setAccessToken,
-    ] = useState<string | null>(
-      null
-    );
+    // The access token lives in REFS, not only in state.
+    // Async functions capture state at the moment they are
+    // created; a token obtained a moment ago (during the
+    // same click) would look like null to them and trigger
+    // a second consent popup. Refs always hold the latest.
+    const tokenRef =
+      useRef<string | null>(null);
+
+    const expiresAtRef = useRef(0);
 
     const [
-      isLocallyValid,
-      setIsLocallyValid,
+      hasActiveSession,
+      setHasActiveSession,
     ] = useState(false);
 
     const [
@@ -343,167 +477,70 @@ export const useDriveStore =
     ] = useState(false);
 
     const tokenClientRef =
-      useRef<GoogleTokenClient | null>(
-        null
-      );
+      useRef<GoogleTokenClient | null>(null);
 
     const connectionResolverRef =
       useRef<
         ((token: string | null) => void) | null
       >(null);
 
+    const connectPromiseRef =
+      useRef<Promise<string | null> | null>(null);
+
 
     // ========================================================
-    // LOAD GOOGLE GIS
+    // TOKEN HELPERS
     // ========================================================
 
-    useEffect(() => {
-      let cancelled = false;
+    const hasValidToken =
+      useCallback((): boolean => {
+        return (
+          !!tokenRef.current &&
+          Date.now() <
+            expiresAtRef.current -
+              TOKEN_EXPIRY_MARGIN_MS
+        );
+      }, []);
 
-      const initializeGoogle =
-        async () => {
-          try {
-            await loadGoogleIdentityServices();
+    const applyToken =
+      useCallback(
+        (
+          token: string,
+          expiresAt: number,
+          persist: boolean
+        ): void => {
+          tokenRef.current = token;
+          expiresAtRef.current = expiresAt;
 
-            if (cancelled) {
-              return;
+          setHasActiveSession(true);
+
+          if (persist) {
+            try {
+              sessionStorage.setItem(
+                AUTH_STORAGE_KEY,
+                JSON.stringify({
+                  token,
+                  expiresAt,
+                })
+              );
+            } catch (storageError) {
+              console.warn(
+                'Failed to store Drive session:',
+                storageError
+              );
             }
-
-            if (
-              !window.google?.accounts?.oauth2
-            ) {
-              return;
-            }
-
-            const tokenClient =
-              window.google.accounts.oauth2
-                .initTokenClient({
-                  client_id:
-                    googleClientId,
-
-                  scope:
-                    DRIVE_SCOPE,
-
-                  callback:
-                    (
-                      response
-                    ) => {
-                      const resolver =
-                        connectionResolverRef
-                          .current;
-
-                      connectionResolverRef
-                        .current = null;
-
-                      if (
-                        response.error ||
-                        !response.access_token
-                      ) {
-                        if (resolver) {
-                          resolver(null);
-                        }
-
-                        return;
-                      }
-
-                      const expiresInSeconds =
-                        Number(
-                          response.expires_in
-                        ) > 0
-                          ? Number(
-                              response.expires_in
-                            )
-                          : 3600;
-
-                      const expiresAt =
-                        Date.now() +
-                        expiresInSeconds *
-                          1000;
-
-                      setAccessToken(
-                        response.access_token
-                      );
-
-                      setIsLocallyValid(
-                        true
-                      );
-
-                      try {
-                        sessionStorage.setItem(
-                          AUTH_STORAGE_KEY,
-                          JSON.stringify({
-                            token:
-                              response.access_token,
-
-                            expiresAt,
-                          })
-                        );
-                      } catch (
-                        storageError
-                      ) {
-                        console.warn(
-                          'Failed to store Drive session:',
-                          storageError
-                        );
-                      }
-
-                      if (resolver) {
-                        resolver(
-                          response.access_token
-                        );
-                      }
-                    },
-
-                  error_callback:
-                    (error) => {
-                      console.error(
-                        'Google OAuth error:',
-                        error
-                      );
-
-                      const resolver =
-                        connectionResolverRef
-                          .current;
-
-                      connectionResolverRef
-                        .current = null;
-
-                      if (resolver) {
-                        resolver(null);
-                      }
-                    },
-                });
-
-            tokenClientRef.current =
-              tokenClient;
-
-            setIsGoogleReady(true);
-          } catch (error) {
-            console.error(
-              'Google Drive authentication initialization error:',
-              error
-            );
           }
-        };
-
-      initializeGoogle();
-
-      return () => {
-        cancelled = true;
-      };
-    }, []);
-
-
-    // ========================================================
-    // CLEAR AUTH
-    // ========================================================
+        },
+        []
+      );
 
     const clearAuth =
       useCallback(
         async (): Promise<void> => {
-          setAccessToken(null);
+          tokenRef.current = null;
+          expiresAtRef.current = 0;
 
-          setIsLocallyValid(false);
+          setHasActiveSession(false);
 
           try {
             sessionStorage.removeItem(
@@ -521,84 +558,172 @@ export const useDriveStore =
 
 
     // ========================================================
+    // LOAD GOOGLE GIS
+    // ========================================================
+
+    useEffect(() => {
+      let cancelled = false;
+
+      const initializeGoogle = async () => {
+        try {
+          await loadGoogleIdentityServices();
+
+          if (cancelled) {
+            return;
+          }
+
+          if (!window.google?.accounts?.oauth2) {
+            return;
+          }
+
+          const tokenClient =
+            window.google.accounts.oauth2
+              .initTokenClient({
+                client_id: googleClientId,
+
+                scope: DRIVE_SCOPE,
+
+                callback: (response) => {
+                  const resolver =
+                    connectionResolverRef.current;
+
+                  connectionResolverRef.current =
+                    null;
+
+                  if (
+                    response.error ||
+                    !response.access_token
+                  ) {
+                    if (resolver) {
+                      resolver(null);
+                    }
+
+                    return;
+                  }
+
+                  const expiresInSeconds =
+                    Number(response.expires_in) > 0
+                      ? Number(response.expires_in)
+                      : 3600;
+
+                  applyToken(
+                    response.access_token,
+                    Date.now() +
+                      expiresInSeconds * 1000,
+                    true
+                  );
+
+                  if (resolver) {
+                    resolver(
+                      response.access_token
+                    );
+                  }
+                },
+
+                error_callback: (error) => {
+                  console.error(
+                    'Google OAuth error:',
+                    error
+                  );
+
+                  const resolver =
+                    connectionResolverRef.current;
+
+                  connectionResolverRef.current =
+                    null;
+
+                  if (resolver) {
+                    resolver(null);
+                  }
+                },
+              });
+
+          tokenClientRef.current = tokenClient;
+
+          setIsGoogleReady(true);
+        } catch (error) {
+          console.error(
+            'Google Drive authentication initialization error:',
+            error
+          );
+        }
+      };
+
+      initializeGoogle();
+
+      return () => {
+        cancelled = true;
+      };
+    }, [applyToken]);
+
+
+    // ========================================================
     // RESTORE AUTH
     // ========================================================
 
     useEffect(() => {
-      const hydrateAuth =
-        async () => {
-          try {
-            const authData =
-              sessionStorage.getItem(
-                AUTH_STORAGE_KEY
-              );
+      try {
+        const authData =
+          sessionStorage.getItem(
+            AUTH_STORAGE_KEY
+          );
 
-            if (!authData) {
-              return;
-            }
+        if (!authData) {
+          return;
+        }
 
-            const parsed =
-              JSON.parse(
-                authData
-              );
+        const parsed = JSON.parse(authData);
 
-            const token =
-              parsed?.token;
+        const token = parsed?.token;
+        const expiresAt = parsed?.expiresAt;
 
-            const expiresAt =
-              parsed?.expiresAt;
+        if (
+          typeof token === 'string' &&
+          token &&
+          typeof expiresAt === 'number' &&
+          Date.now() <
+            expiresAt - TOKEN_EXPIRY_MARGIN_MS
+        ) {
+          applyToken(token, expiresAt, false);
+        } else {
+          void clearAuth();
+        }
+      } catch (error) {
+        console.warn(
+          'Failed to restore Google Drive auth:',
+          error
+        );
 
-            if (
-              token &&
-              expiresAt &&
-              Date.now() < expiresAt
-            ) {
-              setAccessToken(
-                token
-              );
-
-              setIsLocallyValid(
-                true
-              );
-            } else {
-              await clearAuth();
-            }
-          } catch (error) {
-            console.warn(
-              'Failed to restore Google Drive auth:',
-              error
-            );
-
-            await clearAuth();
-          }
-        };
-
-      hydrateAuth();
-    }, [clearAuth]);
+        void clearAuth();
+      }
+    }, [applyToken, clearAuth]);
 
 
     // ========================================================
     // CONNECT DRIVE
+    // ========================================================
+    //
+    // IMPORTANT: this must be called directly from a user
+    // action (a tap) so the browser allows the Google popup.
+    // If a token is already valid, no popup is shown.
+    //
     // ========================================================
 
     const connectDrive =
       useCallback(
         async (): Promise<string | null> => {
 
-          if (isConnecting) {
-            return null;
+          if (hasValidToken()) {
+            return tokenRef.current;
           }
 
-          if (
-            accessToken &&
-            isLocallyValid
-          ) {
-            return accessToken;
+          // A request is already in flight: share it
+          // instead of opening a second popup.
+          if (connectPromiseRef.current) {
+            return connectPromiseRef.current;
           }
 
-          if (
-            !tokenClientRef.current
-          ) {
+          if (!tokenClientRef.current) {
             try {
               await loadGoogleIdentityServices();
             } catch (error) {
@@ -611,63 +736,47 @@ export const useDriveStore =
             }
           }
 
-          if (
-            !tokenClientRef.current
-          ) {
+          if (!tokenClientRef.current) {
             return null;
           }
 
           setIsConnecting(true);
 
-          try {
-            const token =
-              await new Promise<
-                string | null
-              >(
-                (
-                  resolve
-                ) => {
+          const promise =
+            new Promise<string | null>(
+              (resolve) => {
+                connectionResolverRef.current =
+                  resolve;
 
-                  connectionResolverRef
-                    .current = resolve;
+                try {
+                  // Empty prompt: Google only shows the
+                  // consent screen when it is actually
+                  // needed, not on every new session.
+                  tokenClientRef.current?.requestAccessToken(
+                    { prompt: '' }
+                  );
+                } catch (error) {
+                  connectionResolverRef.current =
+                    null;
 
-                  try {
-                    tokenClientRef.current?.requestAccessToken(
-                      {
-                        prompt:
-                          'consent',
-                      }
-                    );
-                  } catch (error) {
+                  console.error(
+                    'Google Drive permission request failed:',
+                    error
+                  );
 
-                    connectionResolverRef
-                      .current = null;
-
-                    console.error(
-                      'Google Drive permission request failed:',
-                      error
-                    );
-
-                    resolve(
-                      null
-                    );
-                  }
+                  resolve(null);
                 }
-              );
+              }
+            ).finally(() => {
+              connectPromiseRef.current = null;
+              setIsConnecting(false);
+            });
 
-            return token;
+          connectPromiseRef.current = promise;
 
-          } finally {
-            setIsConnecting(
-              false
-            );
-          }
+          return promise;
         },
-        [
-          accessToken,
-          isLocallyValid,
-          isConnecting,
-        ]
+        [hasValidToken]
       );
 
 
@@ -678,21 +787,57 @@ export const useDriveStore =
     const getValidAccessToken =
       useCallback(
         async (): Promise<string | null> => {
-
-          if (
-            accessToken &&
-            isLocallyValid
-          ) {
-            return accessToken;
+          if (hasValidToken()) {
+            return tokenRef.current;
           }
 
           return connectDrive();
         },
-        [
-          accessToken,
-          isLocallyValid,
-          connectDrive,
-        ]
+        [hasValidToken, connectDrive]
+      );
+
+
+    // ========================================================
+    // RUN A DRIVE CALL WITH A VALID TOKEN
+    // ========================================================
+    //
+    // If Google answers 401 the token is no longer good, so
+    // it is cleared and the next call asks for a new one.
+    //
+    // ========================================================
+
+    const withToken =
+      useCallback(
+        async <T>(
+          run: (token: string) => Promise<T>
+        ): Promise<T> => {
+          const token =
+            await getValidAccessToken();
+
+          if (!token) {
+            throw new Error(
+              'Google Drive is not connected.'
+            );
+          }
+
+          try {
+            return await run(token);
+          } catch (error) {
+            if (
+              error instanceof DriveError &&
+              error.status === 401
+            ) {
+              void clearAuth();
+
+              throw new Error(
+                'Your Google Drive session expired. Please reconnect and try again.'
+              );
+            }
+
+            throw error;
+          }
+        },
+        [getValidAccessToken, clearAuth]
       );
 
 
@@ -723,36 +868,23 @@ export const useDriveStore =
 
           const url =
             `${DRIVE_API}/files` +
-            `?q=${encodeURIComponent(
-              query
-            )}` +
+            `?q=${encodeURIComponent(query)}` +
             `&spaces=drive` +
             `&pageSize=1` +
             `&fields=files(id,name,mimeType,parents)`;
 
-          const response =
-            await fetch(
-              url,
-              {
-                headers:
-                  getAuthHeader(
-                    token
-                  ),
-              }
-            );
+          const response = await fetch(url, {
+            headers: getAuthHeader(token),
+          });
 
           await throwDriveError(
             response,
             'Unable to search Google Drive folders.'
           );
 
-          const data =
-            await response.json();
+          const data = await response.json();
 
-          return (
-            data?.files?.[0] ||
-            null
-          );
+          return data?.files?.[0] || null;
         },
         []
       );
@@ -782,32 +914,24 @@ export const useDriveStore =
           };
 
           if (parentId) {
-            body.parents = [
-              parentId,
-            ];
+            body.parents = [parentId];
           }
 
-          const response =
-            await fetch(
-              `${DRIVE_API}/files?fields=id,name,mimeType,parents`,
-              {
-                method: 'POST',
+          const response = await fetch(
+            `${DRIVE_API}/files?fields=id,name,mimeType,parents`,
+            {
+              method: 'POST',
 
-                headers: {
-                  ...getAuthHeader(
-                    token
-                  ),
+              headers: {
+                ...getAuthHeader(token),
 
-                  'Content-Type':
-                    'application/json',
-                },
+                'Content-Type':
+                  'application/json',
+              },
 
-                body:
-                  JSON.stringify(
-                    body
-                  ),
-              }
-            );
+              body: JSON.stringify(body),
+            }
+          );
 
           await throwDriveError(
             response,
@@ -832,12 +956,11 @@ export const useDriveStore =
           parentId: string | null = null
         ): Promise<DriveFile> => {
 
-          const existing =
-            await findFolder(
-              token,
-              name,
-              parentId
-            );
+          const existing = await findFolder(
+            token,
+            name,
+            parentId
+          );
 
           if (existing) {
             return existing;
@@ -849,10 +972,7 @@ export const useDriveStore =
             parentId
           );
         },
-        [
-          findFolder,
-          createFolder,
-        ]
+        [findFolder, createFolder]
       );
 
 
@@ -865,15 +985,12 @@ export const useDriveStore =
         async (
           token: string
         ): Promise<DriveFile> => {
-
           return getOrCreateFolder(
             token,
             SHINZI_FOLDER_NAME
           );
         },
-        [
-          getOrCreateFolder,
-        ]
+        [getOrCreateFolder]
       );
 
 
@@ -889,9 +1006,7 @@ export const useDriveStore =
         ): Promise<DriveFile> => {
 
           const folderName =
-            SHINZI_SUBFOLDERS[
-              folderType
-            ];
+            SHINZI_SUBFOLDERS[folderType];
 
           if (!folderName) {
             throw new Error(
@@ -900,9 +1015,7 @@ export const useDriveStore =
           }
 
           const root =
-            await getShinziFolder(
-              token
-            );
+            await getShinziFolder(token);
 
           return getOrCreateFolder(
             token,
@@ -910,10 +1023,7 @@ export const useDriveStore =
             root.id
           );
         },
-        [
-          getShinziFolder,
-          getOrCreateFolder,
-        ]
+        [getShinziFolder, getOrCreateFolder]
       );
 
 
@@ -924,15 +1034,16 @@ export const useDriveStore =
     const uploadFile =
       useCallback(
         async ({
+          file,
           localUri,
           fileName,
           mimeType,
           folderType = 'others',
         }: UploadFileOptions): Promise<UploadedDriveFile> => {
 
-          if (!localUri) {
+          if (!file && !localUri) {
             throw new Error(
-              'A local file URI is required.'
+              'A file or local file URI is required.'
             );
           }
 
@@ -948,137 +1059,41 @@ export const useDriveStore =
             );
           }
 
-          const token =
-            await getValidAccessToken();
+          // Read the bytes first so a bad file fails
+          // before any Drive folders are created.
+          let blob: Blob;
 
-          if (!token) {
-            throw new Error(
-              'Google Drive is not connected.'
-            );
+          if (file) {
+            blob = file;
+          } else {
+            const localResponse =
+              await fetch(localUri as string);
+
+            if (!localResponse.ok) {
+              throw new Error(
+                'Unable to read the selected local file.'
+              );
+            }
+
+            blob = await localResponse.blob();
           }
 
-          const folder =
-            await getShinziSubfolder(
-              token,
-              folderType
-            );
+          return withToken(async (token) => {
+            const folder =
+              await getShinziSubfolder(
+                token,
+                folderType
+              );
 
-          const localResponse =
-            await fetch(
-              localUri
-            );
-
-          if (!localResponse.ok) {
-            throw new Error(
-              'Unable to read the selected local file.'
-            );
-          }
-
-          const fileBlob =
-            await localResponse.blob();
-
-          if (!fileBlob) {
-            throw new Error(
-              'The selected file could not be converted into upload data.'
-            );
-          }
-
-          const uploadResponse =
-            await fetch(
-              `${DRIVE_UPLOAD_API}/files?uploadType=media&fields=id,name,mimeType,size,parents`,
-              {
-                method: 'POST',
-
-                headers: {
-                  ...getAuthHeader(
-                    token
-                  ),
-
-                  'Content-Type':
-                    mimeType,
-                },
-
-                body: fileBlob,
-              }
-            );
-
-          await throwDriveError(
-            uploadResponse,
-            'Unable to upload file to Google Drive.'
-          );
-
-          const uploaded =
-            await uploadResponse.json();
-
-          if (!uploaded?.id) {
-            throw new Error(
-              'Google Drive upload completed without returning a file ID.'
-            );
-          }
-
-          const updateResponse =
-            await fetch(
-              `${DRIVE_API}/files/${encodeURIComponent(
-                uploaded.id
-              )}` +
-                `?addParents=${encodeURIComponent(
-                  folder.id
-                )}` +
-                `&fields=id,name,mimeType,size,parents`,
-              {
-                method: 'PATCH',
-
-                headers: {
-                  ...getAuthHeader(
-                    token
-                  ),
-
-                  'Content-Type':
-                    'application/json',
-                },
-
-                body:
-                  JSON.stringify({
-                    name: fileName,
-                  }),
-              }
-            );
-
-          await throwDriveError(
-            updateResponse,
-            'File uploaded but could not be organized inside the Shinzi folder.'
-          );
-
-          const finalFile =
-            await updateResponse.json();
-
-          return {
-            fileId:
-              finalFile.id,
-
-            folderId:
-              folder.id,
-
-            fileName:
-              finalFile.name ||
+            return uploadMultipart(token, {
+              folderId: folder.id,
               fileName,
-
-            mimeType:
-              finalFile.mimeType ||
               mimeType,
-
-            sizeBytes:
-              finalFile.size
-                ? Number(
-                    finalFile.size
-                  )
-                : fileBlob.size,
-          };
+              blob,
+            });
+          });
         },
-        [
-          getValidAccessToken,
-          getShinziSubfolder,
-        ]
+        [withToken, getShinziSubfolder]
       );
 
 
@@ -1094,10 +1109,7 @@ export const useDriveStore =
           folderType = 'others',
         }: CreateTextFileOptions): Promise<UploadedDriveFile> => {
 
-          if (
-            typeof text !==
-            'string'
-          ) {
+          if (typeof text !== 'string') {
             throw new Error(
               'Text content must be a string.'
             );
@@ -1109,126 +1121,27 @@ export const useDriveStore =
             );
           }
 
-          const token =
-            await getValidAccessToken();
+          const textBlob = new Blob([text], {
+            type: 'text/plain; charset=utf-8',
+          });
 
-          if (!token) {
-            throw new Error(
-              'Google Drive is not connected.'
-            );
-          }
+          return withToken(async (token) => {
+            const folder =
+              await getShinziSubfolder(
+                token,
+                folderType
+              );
 
-          const folder =
-            await getShinziSubfolder(
-              token,
-              folderType
-            );
-
-          const textBlob =
-            new Blob(
-              [text],
-              {
-                type:
-                  'text/plain; charset=utf-8',
-              }
-            );
-
-          const uploadResponse =
-            await fetch(
-              `${DRIVE_UPLOAD_API}/files?uploadType=media&fields=id,name,mimeType,size,parents`,
-              {
-                method: 'POST',
-
-                headers: {
-                  ...getAuthHeader(
-                    token
-                  ),
-
-                  'Content-Type':
-                    'text/plain; charset=utf-8',
-                },
-
-                body: textBlob,
-              }
-            );
-
-          await throwDriveError(
-            uploadResponse,
-            'Unable to create text file in Google Drive.'
-          );
-
-          const uploaded =
-            await uploadResponse.json();
-
-          if (!uploaded?.id) {
-            throw new Error(
-              'Google Drive text upload completed without returning a file ID.'
-            );
-          }
-
-          const updateResponse =
-            await fetch(
-              `${DRIVE_API}/files/${encodeURIComponent(
-                uploaded.id
-              )}` +
-                `?addParents=${encodeURIComponent(
-                  folder.id
-                )}` +
-                `&fields=id,name,mimeType,size,parents`,
-              {
-                method: 'PATCH',
-
-                headers: {
-                  ...getAuthHeader(
-                    token
-                  ),
-
-                  'Content-Type':
-                    'application/json',
-                },
-
-                body:
-                  JSON.stringify({
-                    name: fileName,
-                  }),
-              }
-            );
-
-          await throwDriveError(
-            updateResponse,
-            'Text file was created but could not be organized inside the Shinzi folder.'
-          );
-
-          const finalFile =
-            await updateResponse.json();
-
-          return {
-            fileId:
-              finalFile.id,
-
-            folderId:
-              folder.id,
-
-            fileName:
-              finalFile.name ||
+            return uploadMultipart(token, {
+              folderId: folder.id,
               fileName,
-
-            mimeType:
-              finalFile.mimeType ||
-              'text/plain',
-
-            sizeBytes:
-              finalFile.size
-                ? Number(
-                    finalFile.size
-                  )
-                : textBlob.size,
-          };
+              mimeType:
+                'text/plain; charset=utf-8',
+              blob: textBlob,
+            });
+          });
         },
-        [
-          getValidAccessToken,
-          getShinziSubfolder,
-        ]
+        [withToken, getShinziSubfolder]
       );
 
 
@@ -1248,39 +1161,26 @@ export const useDriveStore =
             );
           }
 
-          const token =
-            await getValidAccessToken();
-
-          if (!token) {
-            throw new Error(
-              'Google Drive is not connected.'
-            );
-          }
-
-          const response =
-            await fetch(
+          return withToken(async (token) => {
+            const response = await fetch(
               `${DRIVE_API}/files/${encodeURIComponent(
                 fileId
               )}` +
                 `?fields=id,name,mimeType,size,parents,trashed`,
               {
-                headers:
-                  getAuthHeader(
-                    token
-                  ),
+                headers: getAuthHeader(token),
               }
             );
 
-          await throwDriveError(
-            response,
-            'Unable to retrieve Google Drive file metadata.'
-          );
+            await throwDriveError(
+              response,
+              'Unable to retrieve Google Drive file metadata.'
+            );
 
-          return response.json();
+            return response.json();
+          });
         },
-        [
-          getValidAccessToken,
-        ]
+        [withToken]
       );
 
 
@@ -1300,95 +1200,43 @@ export const useDriveStore =
             );
           }
 
-          const token =
-            await getValidAccessToken();
-
-          if (!token) {
-            throw new Error(
-              'Google Drive is not connected.'
-            );
-          }
-
-          const response =
-            await fetch(
+          return withToken(async (token) => {
+            const response = await fetch(
               `${DRIVE_API}/files/${encodeURIComponent(
                 fileId
               )}?alt=media`,
               {
-                headers:
-                  getAuthHeader(
-                    token
-                  ),
+                headers: getAuthHeader(token),
               }
             );
 
-          await throwDriveError(
-            response,
-            'Unable to download Google Drive file.'
-          );
-
-          const blob =
-            await response.blob();
-
-          if (!blob) {
-            throw new Error(
-              'Google Drive returned empty file data.'
+            await throwDriveError(
+              response,
+              'Unable to download Google Drive file.'
             );
-          }
 
-          return new Promise<string>(
-            (
-              resolve,
-              reject
-            ) => {
+            const blob = await response.blob();
 
-              const reader =
-                new FileReader();
-
-              reader.onloadend =
-                () => {
-
-                  if (
-                    typeof reader.result !==
-                    'string'
-                  ) {
-                    reject(
-                      new Error(
-                        'Unable to convert Drive file into image data.'
-                      )
-                    );
-
-                    return;
-                  }
-
-                  resolve(
-                    reader.result
-                  );
-                };
-
-              reader.onerror =
-                () => {
-                  reject(
-                    new Error(
-                      'Failed to read downloaded Drive file.'
-                    )
-                  );
-                };
-
-              reader.readAsDataURL(
-                blob
+            if (!blob) {
+              throw new Error(
+                'Google Drive returned empty file data.'
               );
             }
-          );
+
+            return blobToDataUri(blob);
+          });
         },
-        [
-          getValidAccessToken,
-        ]
+        [withToken]
       );
 
 
     // ========================================================
     // DELETE FILE
+    // ========================================================
+    //
+    // A 404 means the file is already gone, which is the
+    // outcome a delete/rollback wants, so it counts as success.
+    //
     // ========================================================
 
     const deleteFile =
@@ -1403,40 +1251,31 @@ export const useDriveStore =
             );
           }
 
-          const token =
-            await getValidAccessToken();
-
-          if (!token) {
-            throw new Error(
-              'Google Drive is not connected.'
-            );
-          }
-
-          const response =
-            await fetch(
+          return withToken(async (token) => {
+            const response = await fetch(
               `${DRIVE_API}/files/${encodeURIComponent(
                 fileId
               )}`,
               {
                 method: 'DELETE',
 
-                headers:
-                  getAuthHeader(
-                    token
-                  ),
+                headers: getAuthHeader(token),
               }
             );
 
-          await throwDriveError(
-            response,
-            'Unable to delete Google Drive file.'
-          );
+            if (response.status === 404) {
+              return true;
+            }
 
-          return true;
+            await throwDriveError(
+              response,
+              'Unable to delete Google Drive file.'
+            );
+
+            return true;
+          });
         },
-        [
-          getValidAccessToken,
-        ]
+        [withToken]
       );
 
 
@@ -1445,11 +1284,9 @@ export const useDriveStore =
     // ========================================================
 
     return {
-      isReady:
-        isGoogleReady,
+      isReady: isGoogleReady,
 
-      hasActiveSession:
-        isLocallyValid,
+      hasActiveSession,
 
       isConnecting,
 
@@ -1476,4 +1313,3 @@ export const useDriveStore =
       deleteFile,
     };
   };
-
