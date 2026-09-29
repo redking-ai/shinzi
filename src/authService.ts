@@ -25,6 +25,7 @@ import {
 export interface AuthResult {
   user: User | null;
   error: string | null;
+  code: string | null;
 }
 
 export interface LoginResult {
