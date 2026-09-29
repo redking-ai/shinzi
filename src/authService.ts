@@ -657,5 +657,47 @@ export const loginUser = async (
     };
   }
 };
+export const sendPasswordReset = async (
+  email: string
+): Promise<{
+  success: boolean;
+  error: string | null;
+}> => {
+  try {
+    if (
+      typeof email !== 'string' ||
+      !email.trim()
+    ) {
+      return {
+        success: false,
+        error: 'Email is required.',
+      };
+    }
+
+    await sendPasswordResetEmail(
+      auth,
+      email.trim()
+    );
+
+    return {
+      success: true,
+      error: null,
+    };
+
+  } catch (error: unknown) {
+    console.error(
+      '🔥 PASSWORD RESET ERROR:',
+      error
+    );
+
+    return {
+      success: false,
+      error: getFriendlyErrorMessage(
+        error,
+        'Unable to send the password reset email.'
+      ),
+    };
+  }
+};
 
 
