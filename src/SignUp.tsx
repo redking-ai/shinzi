@@ -1,14 +1,20 @@
 import {
-  ChangeEvent,
   useEffect,
   useRef,
   useState,
+  type ChangeEvent,
 } from 'react';
+
+import type { User } from 'firebase/auth';
 
 import {
   createEmailAuthUser,
   createUserProfile,
   deleteCurrentAuthUser,
+  checkUsernameAvailable,
+  sendVerificationEmailSafe,
+  getFriendlyErrorMessage,
+  getErrorCode,
 } from './authService';
 
 import { useDriveStore } from './driveStore';
@@ -23,6 +29,11 @@ import {
 
 interface SignUpProps {
   onBack: () => void;
+
+  // Tells App that signup is running so it keeps this screen
+  // mounted even though Firebase signs the new user in as
+  // soon as the Auth account exists.
+  onBusyChange: (busy: boolean) => void;
 }
 
 interface ProfileImage {
@@ -33,11 +44,32 @@ interface ProfileImage {
   size: number;
 }
 
+interface FormError {
+  message: string;
+  ref?: string;
+}
+
+const GENDER_OPTIONS = [
+  'Male',
+  'Female',
+  'Others',
+] as const;
+
 export default function SignUp({
   onBack,
+  onBusyChange,
 }: SignUpProps) {
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [formError, setFormError] =
+    useState<FormError | null>(null);
+
+  const [successName, setSuccessName] =
+    useState<string | null>(null);
+
+  // Guards against a double tap before state has updated.
+  const submittingRef = useRef(false);
 
   const {
     isReady: isDriveReady,
@@ -54,7 +86,8 @@ export default function SignUp({
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [gender, setGender] = useState('');
-  const [showGenderModal, setShowGenderModal] = useState(false);
+  const [showGenderModal, setShowGenderModal] =
+    useState(false);
 
   const [day, setDay] = useState('');
   const [month, setMonth] = useState('');
@@ -119,8 +152,7 @@ export default function SignUp({
       parsedDate.getMonth() === numM - 1 &&
       parsedDate.getDate() === numD;
 
-    let age =
-      today.getFullYear() - numY;
+    let age = today.getFullYear() - numY;
 
     if (
       today.getMonth() < numM - 1 ||
@@ -144,11 +176,7 @@ export default function SignUp({
     profileImage !== null &&
     name.trim().length > 0 &&
     isUsernameValid &&
-    isValidDate(
-      day,
-      month,
-      year
-    ) &&
+    isValidDate(day, month, year) &&
     gender !== '';
 
   const hasEnteredDate =
@@ -175,53 +203,42 @@ export default function SignUp({
       return;
     }
 
-    const file =
-      event.target.files?.[0];
+    const file = event.target.files?.[0];
 
     if (!file) {
       return;
     }
 
     if (!file.type.startsWith('image/')) {
-      window.alert(
-        'Please select an image file.'
-      );
+      setFormError({
+        message: 'Choose an image file for your profile photo.',
+      });
 
       event.target.value = '';
       return;
     }
 
-    const maxSize =
-      15 * 1024 * 1024;
+    const maxSize = 15 * 1024 * 1024;
 
     if (file.size > maxSize) {
-      window.alert(
-        'Profile photo must be smaller than 15 MB.'
-      );
+      setFormError({
+        message: 'Your profile photo must be smaller than 15 MB.',
+      });
 
       event.target.value = '';
       return;
     }
 
-    const uri =
-      URL.createObjectURL(file);
+    setFormError(null);
 
-    setProfileImage((previous) => {
-      if (previous?.uri) {
-        URL.revokeObjectURL(
-          previous.uri
-        );
-      }
-
-      return {
-        file,
-        uri,
-        mimeType:
-          file.type ||
-          'image/jpeg',
-        name: file.name,
-        size: file.size,
-      };
+    // The previous object URL is revoked by the cleanup
+    // effect below when profileImage changes.
+    setProfileImage({
+      file,
+      uri: URL.createObjectURL(file),
+      mimeType: file.type || 'image/jpeg',
+      name: file.name,
+      size: file.size,
     });
 
     event.target.value = '';
@@ -236,54 +253,42 @@ export default function SignUp({
     assetId: string
   ) => {
     const mimeType =
-      imageAsset.mimeType ||
-      'image/jpeg';
+      imageAsset.mimeType || 'image/jpeg';
 
     let extension = 'jpg';
 
     if (mimeType === 'image/png') {
       extension = 'png';
-    } else if (
-      mimeType === 'image/webp'
-    ) {
+    } else if (mimeType === 'image/webp') {
       extension = 'webp';
-    } else if (
-      mimeType === 'image/heic'
-    ) {
+    } else if (mimeType === 'image/heic') {
       extension = 'heic';
-    } else if (
-      mimeType === 'image/heif'
-    ) {
+    } else if (mimeType === 'image/heif') {
       extension = 'heif';
     } else {
-      const uri =
+      const source =
         imageAsset.name ||
         imageAsset.uri ||
         '';
 
-      const cleanUri =
-        uri.split('?')[0];
+      const cleanSource = source.split('?')[0];
 
-      const uriExtension =
-        cleanUri
+      const sourceExtension =
+        cleanSource
           .split('.')
           .pop()
           ?.toLowerCase();
 
       if (
-        uriExtension &&
-        /^[a-z0-9]{2,5}$/.test(
-          uriExtension
-        )
+        sourceExtension &&
+        /^[a-z0-9]{2,5}$/.test(sourceExtension)
       ) {
-        extension =
-          uriExtension;
+        extension = sourceExtension;
       }
     }
 
     return {
-      fileName:
-        `${assetId}.${extension}`,
+      fileName: `${assetId}.${extension}`,
       mimeType,
     };
   };
@@ -291,63 +296,83 @@ export default function SignUp({
   // ----------------------------------------------------------
   // CREATE ACCOUNT
   // ----------------------------------------------------------
+  //
+  // Order matters:
+  //
+  //  1. Google Drive permission   (must be the first thing
+  //                                run from the tap, so the
+  //                                browser allows the popup)
+  //  2. Firebase Auth user        (signs the user in)
+  //  3. Username availability     (needs auth to read)
+  //  4. Asset ID
+  //  5. Drive upload
+  //  6. Firestore /assets record
+  //  7. Firestore /users + /usernames in ONE batch
+  //  8. Verification email (only after everything worked)
+  //
+  // If anything after step 2 fails, everything created so
+  // far is rolled back: asset record, Drive file, then the
+  // Auth user LAST (Firestore deletes still need auth).
+  //
+  // ----------------------------------------------------------
 
   const executeSignUp =
     async (): Promise<void> => {
-      if (isSubmitting) {
+      if (submittingRef.current) {
         return;
       }
 
+      setFormError(null);
+
       if (!profileImage) {
-        window.alert(
-          'Profile Photo Required\n\nPlease select a profile photo before creating your account.'
-        );
+        setFormError({
+          message: 'Add a profile photo to continue.',
+        });
 
         return;
       }
 
       if (!isDriveReady) {
-        window.alert(
-          'Google Drive Not Ready\n\nPlease wait a moment and try again.'
-        );
+        setFormError({
+          message:
+            'Google Drive is still loading. Wait a moment and try again.',
+        });
 
         return;
       }
 
+      submittingRef.current = true;
       setIsSubmitting(true);
+      onBusyChange(true);
 
-      let createdAuthUser:
-        Awaited<
-          ReturnType<
-            typeof createEmailAuthUser
-          >
-        >['user'] = null;
+      let stage = 'drive';
 
-      let createdAssetId:
-        string | null = null;
-
-      let uploadedDriveFileId:
-        string | null = null;
+      let createdAuthUser: User | null = null;
+      let createdAssetId: string | null = null;
+      let uploadedDriveFileId: string | null = null;
 
       try {
-        // ------------------------------------------------------
+        // ----------------------------------------------------
         // 1. GOOGLE DRIVE PERMISSION
-        // ------------------------------------------------------
+        // ----------------------------------------------------
 
-        const driveToken =
-          await connectDrive();
+        const driveToken = await connectDrive();
 
         if (!driveToken) {
-          window.alert(
-            'Google Drive Permission Required\n\nShinzi requires Google Drive permission to continue creating your account.'
-          );
+          setFormError({
+            message:
+              'Shinzi needs Google Drive access to save your profile photo. Allow access when the Google window opens, then try again.',
+            ref: 'drive',
+          });
 
           return;
         }
 
-        // ------------------------------------------------------
+        // ----------------------------------------------------
         // 2. FIREBASE AUTH USER
-        // ------------------------------------------------------
+        // ----------------------------------------------------
+
+        stage = 'auth';
 
         const authResult =
           await createEmailAuthUser(
@@ -360,60 +385,67 @@ export default function SignUp({
           authResult.error ||
           !authResult.user
         ) {
-          window.alert(
-            `Sign Up Failed\n\n${
+          setFormError({
+            message:
               authResult.error ||
-              'Unable to create your account.'
-            }`
-          );
+              'Unable to create your account.',
+            ref: 'auth',
+          });
 
           return;
         }
 
-        createdAuthUser =
-          authResult.user;
+        createdAuthUser = authResult.user;
 
-        // ------------------------------------------------------
-        // 3. GENERATE PROFILE ASSET ID
-        // ------------------------------------------------------
+        // ----------------------------------------------------
+        // 3. USERNAME AVAILABILITY (signed in now)
+        // ----------------------------------------------------
+
+        stage = 'username';
+
+        const usernameAvailable =
+          await checkUsernameAvailable(
+            normalizedUsername
+          );
+
+        if (!usernameAvailable) {
+          throw new Error(
+            'That username is already taken. Choose another one.'
+          );
+        }
+
+        // ----------------------------------------------------
+        // 4. PROFILE ASSET ID
+        // ----------------------------------------------------
+
+        stage = 'assetId';
 
         const profileAssetId =
           await generateAssetId(
             ASSET_TYPES.PROFILE_PHOTO
           );
 
-        createdAssetId =
-          profileAssetId;
+        createdAssetId = profileAssetId;
 
-        // ------------------------------------------------------
-        // 4. PREPARE DRIVE FILE
-        // ------------------------------------------------------
-
-        const {
-          fileName,
-          mimeType,
-        } =
+        const { fileName, mimeType } =
           getImageUploadInfo(
             profileImage,
             profileAssetId
           );
 
-        // ------------------------------------------------------
+        // ----------------------------------------------------
         // 5. UPLOAD PROFILE PHOTO
-        // ------------------------------------------------------
+        // ----------------------------------------------------
 
-        const uploadResult =
-          await uploadFile({
-            localUri:
-              profileImage.uri,
+        stage = 'upload';
 
-            fileName,
-
-            mimeType,
-
-            folderType:
-              'profiles',
-          });
+        const uploadResult = await uploadFile({
+          file: profileImage.file,
+          localUri: profileImage.uri,
+          fileName,
+          mimeType,
+          folderType: 'profiles',
+        });
 
         if (
           !uploadResult ||
@@ -425,123 +457,118 @@ export default function SignUp({
           );
         }
 
-        uploadedDriveFileId =
-          uploadResult.fileId;
+        uploadedDriveFileId = uploadResult.fileId;
 
-        // ------------------------------------------------------
-        // 6. CREATE ASSET RECORD
-        // ------------------------------------------------------
+        // ----------------------------------------------------
+        // 6. ASSET RECORD
+        // ----------------------------------------------------
 
-        const asset =
-          await createAssetRecord({
-            assetId:
-              profileAssetId,
+        stage = 'assetRecord';
 
-            ownerUid:
-              createdAuthUser.uid,
+        const asset = await createAssetRecord({
+          assetId: profileAssetId,
 
-            type:
-              ASSET_TYPES.PROFILE_PHOTO,
+          ownerUid: createdAuthUser.uid,
 
-            visibility:
-              ASSET_VISIBILITY.PUBLIC,
+          type: ASSET_TYPES.PROFILE_PHOTO,
 
-            providerFileId:
-              uploadResult.fileId,
+          visibility: ASSET_VISIBILITY.PUBLIC,
 
-            driveFolderId:
-              uploadResult.folderId,
+          providerFileId: uploadResult.fileId,
 
-            fileName:
-              uploadResult.fileName ||
-              fileName,
+          driveFolderId: uploadResult.folderId,
 
-            mimeType:
-              uploadResult.mimeType ||
-              mimeType,
+          fileName:
+            uploadResult.fileName || fileName,
 
-            sizeBytes:
-              typeof uploadResult.sizeBytes ===
-              'number'
-                ? uploadResult.sizeBytes
-                : 0,
+          mimeType:
+            uploadResult.mimeType || mimeType,
 
-            version: 1,
+          sizeBytes:
+            typeof uploadResult.sizeBytes ===
+            'number'
+              ? uploadResult.sizeBytes
+              : 0,
 
-            status: 'active',
-          });
+          version: 1,
+
+          status: 'active',
+        });
 
         if (
           !asset ||
-          asset.assetId !==
-            profileAssetId
+          asset.assetId !== profileAssetId
         ) {
           throw new Error(
             'Profile asset record could not be created.'
           );
         }
 
-        // ------------------------------------------------------
-        // 7. CREATE USER PROFILE
-        // ------------------------------------------------------
+        // ----------------------------------------------------
+        // 7. USER PROFILE + USERNAME (one batch)
+        // ----------------------------------------------------
 
+        stage = 'profile';
+
+        // Date of birth is only used above to check the
+        // 13+ requirement. It is not stored on purpose.
         const profileResult =
           await createUserProfile(
             createdAuthUser,
             {
-              displayName:
-                name.trim(),
+              displayName: name.trim(),
 
-              username:
-                normalizedUsername,
+              username: normalizedUsername,
 
               gender,
 
-              dob:
-                `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`,
-
-              profileAssetId:
-                profileAssetId,
+              profileAssetId,
             }
           );
 
-        if (
-          !profileResult.success
-        ) {
+        if (!profileResult.success) {
           throw new Error(
             profileResult.error ||
-            'Unable to create your Shinzi profile.'
+              'Unable to create your Shinzi profile.'
           );
         }
 
-        // ------------------------------------------------------
+        // ----------------------------------------------------
         // 8. SUCCESS
-        // ------------------------------------------------------
+        // ----------------------------------------------------
 
-        window.alert(
-          `Account Created!\n\nWelcome to Shinzi Hub, ${name.trim()}!`
+        stage = 'done';
+
+        void sendVerificationEmailSafe(
+          createdAuthUser
         );
 
-        return;
+        setSuccessName(name.trim());
+
+        // Let the confirmation show briefly before App
+        // switches to the main screen.
+        await new Promise<void>((resolve) => {
+          window.setTimeout(resolve, 1600);
+        });
 
       } catch (err) {
         console.error(
-          'Signup error:',
+          `[SIGNUP] Failed at "${stage}":`,
           err
         );
 
-        // ------------------------------------------------------
-        // ROLLBACK FIRESTORE ASSET
-        // ------------------------------------------------------
+        // ----------------------------------------------------
+        // ROLLBACK (asset record -> Drive file -> Auth user)
+        // ----------------------------------------------------
+
+        let cleanupIncomplete = false;
 
         if (createdAssetId) {
           try {
-            await deleteAsset(
-              createdAssetId
-            );
-          } catch (
-            assetRollbackError
-          ) {
+            await deleteAsset(createdAssetId);
+          } catch (assetRollbackError) {
+            cleanupIncomplete = true;
+
             console.error(
               'Asset metadata rollback failed:',
               assetRollbackError
@@ -549,20 +576,14 @@ export default function SignUp({
           }
         }
 
-        // ------------------------------------------------------
-        // ROLLBACK GOOGLE DRIVE
-        // ------------------------------------------------------
-
-        if (
-          uploadedDriveFileId
-        ) {
+        if (uploadedDriveFileId) {
           try {
             await deleteFile(
               uploadedDriveFileId
             );
-          } catch (
-            driveRollbackError
-          ) {
+          } catch (driveRollbackError) {
+            cleanupIncomplete = true;
+
             console.error(
               'Google Drive rollback failed:',
               driveRollbackError
@@ -570,35 +591,39 @@ export default function SignUp({
           }
         }
 
-        // ------------------------------------------------------
-        // ROLLBACK FIREBASE AUTH
-        // ------------------------------------------------------
-
         if (createdAuthUser) {
-          try {
+          const authRollback =
             await deleteCurrentAuthUser(
               createdAuthUser
             );
-          } catch (
-            authRollbackError
-          ) {
-            console.error(
-              'Firebase Auth rollback failed:',
-              authRollbackError
-            );
+
+          if (!authRollback.success) {
+            cleanupIncomplete = true;
           }
         }
 
-        const errorMessage =
-          err instanceof Error
-            ? err.message
-            : 'An unexpected error occurred during signup.';
+        const code = getErrorCode(err);
 
-        window.alert(
-          `Sign Up Failed\n\n${errorMessage}`
-        );
+        const baseMessage =
+          getFriendlyErrorMessage(
+            err,
+            'Something went wrong while creating your account. Please try again.'
+          );
+
+        setFormError({
+          message: cleanupIncomplete
+            ? `${baseMessage} Some cleanup could not be completed. If you try again with the same email and it says the email is registered, wait a moment or use a different email.`
+            : baseMessage,
+
+          ref: code
+            ? `${stage} / ${code}`
+            : stage,
+        });
+
       } finally {
+        submittingRef.current = false;
         setIsSubmitting(false);
+        onBusyChange(false);
       }
     };
 
@@ -609,9 +634,7 @@ export default function SignUp({
   useEffect(() => {
     return () => {
       if (profileImage?.uri) {
-        URL.revokeObjectURL(
-          profileImage.uri
-        );
+        URL.revokeObjectURL(profileImage.uri);
       }
     };
   }, [profileImage]);
@@ -619,6 +642,12 @@ export default function SignUp({
   // ----------------------------------------------------------
   // UI
   // ----------------------------------------------------------
+
+  const createButtonClass = isSubmitting
+    ? 'signup-continue-button signup-busy-button'
+    : isStep2Valid
+      ? 'signup-continue-button'
+      : 'signup-continue-button signup-disabled-button';
 
   return (
     <div className="signup-page">
@@ -633,6 +662,8 @@ export default function SignUp({
                 return;
               }
 
+              setFormError(null);
+
               if (step === 1) {
                 onBack();
               } else {
@@ -641,31 +672,70 @@ export default function SignUp({
             }}
             disabled={isSubmitting}
           >
-            &lt; Back
+            ‹ Back
           </button>
 
           <div className="signup-step">
-            STEP {step}/2
+            Step {step} of 2
           </div>
 
           <div className="signup-header-spacer" />
         </div>
+
+        <div
+          className="signup-progress"
+          aria-hidden="true"
+        >
+          <div
+            className="signup-progress-bar"
+            style={{
+              width: step === 1 ? '50%' : '100%',
+            }}
+          />
+        </div>
+
+        {formError && (
+          <div
+            className="signup-banner-wrap"
+          >
+            <div
+              className="signup-error-banner"
+              role="alert"
+            >
+              {formError.message}
+
+              {formError.ref && (
+                <span className="signup-error-ref">
+                  Reference: {formError.ref}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* STEP 1 */}
 
         {step === 1 && (
           <div className="signup-content">
 
+            <h1 className="signup-title">
+              Create your account
+            </h1>
+
+            <p className="signup-subtitle">
+              Choose the email and password you will
+              log in with.
+            </p>
+
             <div className="signup-input-box">
               <input
                 className="signup-input"
                 type="email"
                 placeholder="Email address"
+                aria-label="Email address"
                 value={email}
                 onChange={(event) =>
-                  setEmail(
-                    event.target.value
-                  )
+                  setEmail(event.target.value)
                 }
                 autoCapitalize="none"
                 autoCorrect="off"
@@ -679,11 +749,10 @@ export default function SignUp({
                 className="signup-input"
                 type="password"
                 placeholder="Password"
+                aria-label="Password"
                 value={password}
                 onChange={(event) =>
-                  setPassword(
-                    event.target.value
-                  )
+                  setPassword(event.target.value)
                 }
                 autoCapitalize="none"
                 autoCorrect="off"
@@ -692,13 +761,18 @@ export default function SignUp({
               />
             </div>
 
-            {password.length > 0 &&
-              !hasNumber && (
-                <div className="signup-error-text">
-                  * Password must contain at
-                  least 1 number
-                </div>
-              )}
+            <div
+              className={
+                password.length > 0 &&
+                (!hasNumber ||
+                  password.length < 6)
+                  ? 'signup-hint signup-hint-error'
+                  : 'signup-hint'
+              }
+            >
+              Use at least 6 characters, including a
+              number.
+            </div>
 
             <button
               type="button"
@@ -708,12 +782,12 @@ export default function SignUp({
                   : 'signup-continue-button signup-disabled-button'
               }
               disabled={
-                !isStep1Valid ||
-                isSubmitting
+                !isStep1Valid || isSubmitting
               }
-              onClick={() =>
-                setStep(2)
-              }
+              onClick={() => {
+                setFormError(null);
+                setStep(2);
+              }}
             >
               Continue
             </button>
@@ -725,6 +799,15 @@ export default function SignUp({
 
         {step === 2 && (
           <div className="signup-content">
+
+            <h1 className="signup-title">
+              Set up your profile
+            </h1>
+
+            <p className="signup-subtitle">
+              Add a photo and a few details so people
+              can find you.
+            </p>
 
             <input
               ref={fileInputRef}
@@ -742,20 +825,18 @@ export default function SignUp({
 
               <button
                 type="button"
-                className="signup-avatar-button"
-                onClick={
-                  handleAvatarPress
+                className={
+                  profileImage
+                    ? 'signup-avatar-button signup-avatar-filled'
+                    : 'signup-avatar-button'
                 }
-                disabled={
-                  isSubmitting
-                }
+                onClick={handleAvatarPress}
+                disabled={isSubmitting}
                 aria-label="Choose profile photo"
               >
                 {profileImage ? (
                   <img
-                    src={
-                      profileImage.uri
-                    }
+                    src={profileImage.uri}
                     alt="Profile preview"
                     className="signup-avatar-image"
                   />
@@ -770,11 +851,11 @@ export default function SignUp({
                 </span>
               </button>
 
-              {!profileImage && (
-                <div className="signup-photo-required">
-                  Profile photo required
-                </div>
-              )}
+              <div className="signup-photo-required">
+                {profileImage
+                  ? 'Tap to change photo'
+                  : 'Profile photo required'}
+              </div>
 
             </div>
 
@@ -784,12 +865,11 @@ export default function SignUp({
               <input
                 className="signup-input"
                 type="text"
-                placeholder="Display Name"
+                placeholder="Display name"
+                aria-label="Display name"
                 value={name}
                 onChange={(event) =>
-                  setName(
-                    event.target.value
-                  )
+                  setName(event.target.value)
                 }
                 maxLength={50}
                 autoCorrect="off"
@@ -810,15 +890,15 @@ export default function SignUp({
               <input
                 className="signup-input"
                 type="text"
-                placeholder="Username (3-15 chars)"
+                placeholder="Username (3–15 characters)"
+                aria-label="Username"
                 value={username}
                 onChange={(event) =>
-                  setUsername(
-                    event.target.value
-                  )
+                  setUsername(event.target.value)
                 }
                 autoCapitalize="none"
                 autoCorrect="off"
+                autoComplete="off"
                 maxLength={15}
                 disabled={isSubmitting}
               />
@@ -827,13 +907,16 @@ export default function SignUp({
             {username.length > 0 &&
               !isUsernameValid && (
                 <div className="signup-error-text">
-                  * 3-15 characters, lowercase
-                  letters, numbers, and underscores
-                  only
+                  Use 3–15 lowercase letters,
+                  numbers, or underscores.
                 </div>
               )}
 
             {/* DATE OF BIRTH */}
+
+            <div className="signup-field-label">
+              Date of birth
+            </div>
 
             <div className="signup-date-row">
 
@@ -843,6 +926,7 @@ export default function SignUp({
                   type="text"
                   inputMode="numeric"
                   placeholder="DD"
+                  aria-label="Day of birth"
                   value={day}
                   onChange={(event) =>
                     setDay(
@@ -862,6 +946,7 @@ export default function SignUp({
                   type="text"
                   inputMode="numeric"
                   placeholder="MM"
+                  aria-label="Month of birth"
                   value={month}
                   onChange={(event) =>
                     setMonth(
@@ -881,6 +966,7 @@ export default function SignUp({
                   type="text"
                   inputMode="numeric"
                   placeholder="YYYY"
+                  aria-label="Year of birth"
                   value={year}
                   onChange={(event) =>
                     setYear(
@@ -897,16 +983,17 @@ export default function SignUp({
             </div>
 
             {hasEnteredDate &&
-              !isValidDate(
-                day,
-                month,
-                year
-              ) && (
-                <div className="signup-error-text">
-                  * Enter a valid calendar date
-                  (Min. age 13)
-                </div>
-              )}
+            !isValidDate(day, month, year) ? (
+              <div className="signup-error-text">
+                Enter a valid date. You must be at
+                least 13.
+              </div>
+            ) : (
+              <div className="signup-hint">
+                Only used to check that you are 13 or
+                older.
+              </div>
+            )}
 
             {/* GENDER */}
 
@@ -917,6 +1004,7 @@ export default function SignUp({
                 setShowGenderModal(true)
               }
               disabled={isSubmitting}
+              aria-haspopup="dialog"
             >
               <span
                 className={
@@ -925,12 +1013,14 @@ export default function SignUp({
                     : 'signup-gender-placeholder'
                 }
               >
-                {gender ||
-                  'Select Gender'}
+                {gender || 'Select gender'}
               </span>
 
-              <span className="signup-chevron">
-                ▼
+              <span
+                className="signup-chevron"
+                aria-hidden="true"
+              >
+                ▾
               </span>
             </button>
 
@@ -938,23 +1028,22 @@ export default function SignUp({
 
             <button
               type="button"
-              className={
-                isStep2Valid &&
-                !isSubmitting
-                  ? 'signup-continue-button'
-                  : 'signup-continue-button signup-disabled-button'
-              }
+              className={createButtonClass}
               disabled={
-                !isStep2Valid ||
-                isSubmitting
+                !isStep2Valid || isSubmitting
               }
-              onClick={
-                executeSignUp
-              }
+              onClick={executeSignUp}
             >
+              {isSubmitting && (
+                <span
+                  className="signup-spinner"
+                  aria-hidden="true"
+                />
+              )}
+
               {isSubmitting
-                ? 'Creating...'
-                : 'Create Account'}
+                ? 'Creating account…'
+                : 'Create account'}
             </button>
 
           </div>
@@ -967,36 +1056,38 @@ export default function SignUp({
             className="signup-modal-overlay"
             role="dialog"
             aria-modal="true"
+            aria-label="Select gender"
             onMouseDown={(event) => {
               if (
                 event.target ===
                 event.currentTarget
               ) {
-                setShowGenderModal(
-                  false
-                );
+                setShowGenderModal(false);
               }
             }}
           >
             <div className="signup-modal-content">
 
-              {[
-                'Male',
-                'Female',
-                'Others',
-              ].map((g) => (
+              <div className="signup-modal-title">
+                Select gender
+              </div>
+
+              {GENDER_OPTIONS.map((option) => (
                 <button
                   type="button"
-                  key={g}
-                  className="signup-modal-option"
+                  key={option}
+                  className={
+                    option === gender
+                      ? 'signup-modal-option signup-modal-option-selected'
+                      : 'signup-modal-option'
+                  }
+                  aria-pressed={option === gender}
                   onClick={() => {
-                    setGender(g);
-                    setShowGenderModal(
-                      false
-                    );
+                    setGender(option);
+                    setShowGenderModal(false);
                   }}
                 >
-                  {g}
+                  {option}
                 </button>
               ))}
 
@@ -1004,34 +1095,83 @@ export default function SignUp({
           </div>
         )}
 
+        {/* SUCCESS */}
+
+        {successName && (
+          <div
+            className="signup-success"
+            role="status"
+          >
+            <div
+              className="signup-success-mark"
+              aria-hidden="true"
+            >
+              ✓
+            </div>
+
+            <h2 className="signup-success-title">
+              Account created
+            </h2>
+
+            <p className="signup-success-text">
+              Welcome to Shinzi Hub, {successName}.
+            </p>
+          </div>
+        )}
+
       </div>
 
       <style>{`
-        * {
+        .signup-page,
+        .signup-page * {
           box-sizing: border-box;
         }
 
         .signup-page {
+          --su-bg: #000000;
+          --su-surface: #0D0D12;
+          --su-surface-2: #14141C;
+          --su-line: #22222E;
+          --su-line-strong: #34344A;
+          --su-text: #FFFFFF;
+          --su-muted: #8E8EA0;
+          --su-accent: #00D2FF;
+          --su-violet: #8A2BE2;
+          --su-danger: #FF3366;
+
           width: 100%;
-          min-height: 100%;
+          min-height: 100dvh;
           height: 100%;
-          background: #000000;
-          color: #ffffff;
+          background: var(--su-bg);
+          color: var(--su-text);
           overflow-y: auto;
           font-family:
-            Arial,
+            -apple-system,
+            BlinkMacSystemFont,
+            "Segoe UI",
+            Roboto,
             Helvetica,
+            Arial,
             sans-serif;
+          -webkit-font-smoothing: antialiased;
+          text-align: left;
         }
 
         .signup-shell {
           width: 100%;
           max-width: 620px;
-          min-height: 100%;
+          min-height: 100dvh;
           margin: 0 auto;
           display: flex;
           flex-direction: column;
-          background: #000000;
+          background: var(--su-bg);
+          padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        .signup-page button:focus-visible,
+        .signup-page input:focus-visible {
+          outline: 2px solid var(--su-accent);
+          outline-offset: 2px;
         }
 
         .signup-header {
@@ -1040,17 +1180,19 @@ export default function SignUp({
           flex-direction: row;
           justify-content: space-between;
           align-items: center;
-          padding: 18px 20px 20px;
+          padding: 18px 20px 14px;
         }
 
         .signup-back-button {
           border: 0;
           background: transparent;
-          color: #00D2FF;
+          color: var(--su-accent);
           font-size: 16px;
           font-weight: 600;
           cursor: pointer;
-          padding: 4px 0;
+          padding: 6px 0;
+          min-width: 50px;
+          text-align: left;
         }
 
         .signup-back-button:disabled {
@@ -1059,14 +1201,50 @@ export default function SignUp({
         }
 
         .signup-step {
-          color: #8E8EA0;
+          color: var(--su-muted);
           font-size: 14px;
-          font-weight: 700;
-          letter-spacing: 1px;
+          font-weight: 600;
         }
 
         .signup-header-spacer {
           width: 50px;
+        }
+
+        .signup-progress {
+          height: 3px;
+          margin: 0 24px 26px;
+          background: var(--su-line);
+          border-radius: 999px;
+          overflow: hidden;
+        }
+
+        .signup-progress-bar {
+          height: 100%;
+          background: var(--su-accent);
+          border-radius: inherit;
+          transition: width 0.25s ease;
+        }
+
+        .signup-banner-wrap {
+          padding: 0 24px;
+        }
+
+        .signup-error-banner {
+          background: rgba(255, 51, 102, 0.1);
+          border: 1px solid rgba(255, 51, 102, 0.4);
+          border-radius: 12px;
+          padding: 12px 14px;
+          margin-bottom: 18px;
+          color: #FFD3DD;
+          font-size: 14px;
+          line-height: 1.45;
+        }
+
+        .signup-error-ref {
+          display: block;
+          margin-top: 6px;
+          color: #C08A98;
+          font-size: 12px;
         }
 
         .signup-content {
@@ -1077,16 +1255,33 @@ export default function SignUp({
           flex-direction: column;
         }
 
+        .signup-title {
+          margin: 0 0 6px;
+          font-size: 26px;
+          font-weight: 800;
+          letter-spacing: -0.3px;
+          line-height: 1.2;
+          color: var(--su-text);
+        }
+
+        .signup-subtitle {
+          margin: 0 0 24px;
+          max-width: 46ch;
+          font-size: 15px;
+          line-height: 1.45;
+          color: var(--su-muted);
+        }
+
         .signup-input-box {
           width: 100%;
           min-height: 58px;
           display: flex;
           flex-direction: row;
           align-items: center;
-          background: #0D0D12;
+          background: var(--su-surface);
           border-radius: 12px;
-          border: 1px solid #22222E;
-          margin-bottom: 16px;
+          border: 1px solid var(--su-line);
+          margin-bottom: 14px;
           overflow: hidden;
           transition:
             border-color 0.15s ease,
@@ -1094,14 +1289,12 @@ export default function SignUp({
         }
 
         .signup-input-box:focus-within {
-          border-color: #00D2FF;
-          box-shadow:
-            0 0 0 1px
-            rgba(0, 210, 255, 0.15);
+          border-color: var(--su-accent);
+          box-shadow: 0 0 0 3px rgba(0, 210, 255, 0.14);
         }
 
         .signup-error-box {
-          border-color: #FF3366;
+          border-color: var(--su-danger);
         }
 
         .signup-input {
@@ -1111,17 +1304,18 @@ export default function SignUp({
           border: 0;
           outline: none;
           background: transparent;
-          color: #FFFFFF;
+          color: var(--su-text);
           padding: 17px 16px;
           font-size: 16px;
-          font-family:
-            Arial,
-            Helvetica,
-            sans-serif;
+          font-family: inherit;
+        }
+
+        .signup-page .signup-input:focus-visible {
+          outline: none;
         }
 
         .signup-input::placeholder {
-          color: #8E8EA0;
+          color: var(--su-muted);
           opacity: 1;
         }
 
@@ -1130,19 +1324,33 @@ export default function SignUp({
           cursor: not-allowed;
         }
 
+        .signup-hint,
         .signup-error-text {
-          color: #FF3366;
+          margin: -6px 0 16px 4px;
           font-size: 13px;
-          line-height: 1.35;
-          margin-top: -8px;
-          margin-bottom: 16px;
-          margin-left: 4px;
+          line-height: 1.4;
+        }
+
+        .signup-hint {
+          color: var(--su-muted);
+        }
+
+        .signup-hint-error,
+        .signup-error-text {
+          color: var(--su-danger);
+        }
+
+        .signup-field-label {
+          margin: 4px 0 8px 4px;
+          font-size: 14px;
+          font-weight: 600;
+          color: var(--su-text);
         }
 
         .signup-photo-required {
-          color: #FF3366;
-          font-size: 12px;
-          margin-top: 8px;
+          color: var(--su-muted);
+          font-size: 13px;
+          margin-top: 10px;
         }
 
         .signup-date-row {
@@ -1164,22 +1372,26 @@ export default function SignUp({
           display: flex;
           flex-direction: column;
           align-items: center;
-          margin-bottom: 24px;
+          margin-bottom: 26px;
         }
 
         .signup-avatar-button {
           position: relative;
-          width: 90px;
-          height: 90px;
+          width: 96px;
+          height: 96px;
           padding: 0;
-          border: 2px solid #22222E;
+          border: 2px dashed var(--su-line-strong);
           border-radius: 50%;
-          background: #14141C;
+          background: var(--su-surface-2);
           display: flex;
           align-items: center;
           justify-content: center;
           overflow: visible;
           cursor: pointer;
+        }
+
+        .signup-avatar-filled {
+          border: 2px solid var(--su-accent);
         }
 
         .signup-avatar-button:disabled {
@@ -1188,38 +1400,40 @@ export default function SignUp({
         }
 
         .signup-avatar-image {
-          width: 86px;
-          height: 86px;
+          width: 90px;
+          height: 90px;
           border-radius: 50%;
           object-fit: cover;
           display: block;
         }
 
         .signup-person-icon {
-          color: #FFFFFF;
+          color: var(--su-muted);
           font-size: 34px;
           line-height: 1;
         }
 
         .signup-pencil-badge {
           position: absolute;
-          right: -1px;
-          bottom: -1px;
-          width: 28px;
-          height: 28px;
+          right: -2px;
+          bottom: -2px;
+          width: 30px;
+          height: 30px;
           border-radius: 50%;
-          background: #8A2BE2;
-          border: 2px solid #000000;
+          background: var(--su-violet);
+          border: 2px solid var(--su-bg);
           display: flex;
           align-items: center;
           justify-content: center;
           color: #FFFFFF;
-          font-size: 16px;
+          font-size: 15px;
           line-height: 1;
         }
 
         .signup-gender-button {
-          border: 1px solid #22222E;
+          border: 1px solid var(--su-line);
+          color: var(--su-text);
+          font-family: inherit;
           cursor: pointer;
           padding: 0 16px;
           text-align: left;
@@ -1238,16 +1452,16 @@ export default function SignUp({
         }
 
         .signup-gender-selected {
-          color: #FFFFFF;
+          color: var(--su-text);
         }
 
         .signup-gender-placeholder {
-          color: #8E8EA0;
+          color: var(--su-muted);
         }
 
         .signup-chevron {
-          color: #8E8EA0;
-          font-size: 14px;
+          color: var(--su-muted);
+          font-size: 16px;
           margin-left: 10px;
         }
 
@@ -1261,27 +1475,41 @@ export default function SignUp({
           min-height: 54px;
           font-size: 16px;
           font-weight: 700;
+          font-family: inherit;
           cursor: pointer;
           margin-top: auto;
           margin-bottom: 20px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
           transition:
             transform 0.1s ease,
             opacity 0.15s ease;
         }
 
-        .signup-continue-button:not(:disabled):hover {
-          transform: translateY(-1px);
-        }
-
         .signup-continue-button:not(:disabled):active {
-          transform: translateY(0);
+          transform: scale(0.99);
         }
 
         .signup-disabled-button {
-          background: #333333;
-          color: #000000;
-          opacity: 0.5;
+          background: #22222C;
+          color: #6E6E80;
           cursor: not-allowed;
+        }
+
+        .signup-busy-button {
+          opacity: 0.85;
+          cursor: progress;
+        }
+
+        .signup-spinner {
+          width: 16px;
+          height: 16px;
+          border: 2px solid rgba(0, 0, 0, 0.25);
+          border-top-color: #000000;
+          border-radius: 50%;
+          animation: signup-spin 0.7s linear infinite;
         }
 
         .signup-modal-overlay {
@@ -1292,38 +1520,113 @@ export default function SignUp({
           display: flex;
           align-items: flex-end;
           justify-content: center;
+          animation: signup-fade 0.15s ease;
         }
 
         .signup-modal-content {
           width: 100%;
           max-width: 620px;
-          background: #14141C;
+          background: var(--su-surface-2);
           border-top-left-radius: 24px;
           border-top-right-radius: 24px;
-          padding: 24px;
-          box-shadow:
-            0 -10px 40px
-            rgba(0, 0, 0, 0.45);
+          padding:
+            12px 20px
+            calc(20px + env(safe-area-inset-bottom));
+          box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.45);
+          animation: signup-sheet 0.2s ease-out;
+        }
+
+        .signup-modal-title {
+          text-align: center;
+          color: var(--su-muted);
+          font-size: 14px;
+          padding: 8px 0 12px;
         }
 
         .signup-modal-option {
           width: 100%;
           border: 0;
-          border-bottom: 1px solid #22222E;
+          border-top: 1px solid var(--su-line);
           background: transparent;
-          color: #FFFFFF;
+          color: var(--su-text);
           padding: 18px 10px;
           font-size: 18px;
+          font-family: inherit;
           text-align: center;
           cursor: pointer;
         }
 
-        .signup-modal-option:last-child {
-          border-bottom: 0;
+        .signup-modal-option-selected {
+          color: var(--su-accent);
+          font-weight: 700;
         }
 
         .signup-modal-option:hover {
           background: #1D1D28;
+        }
+
+        .signup-success {
+          position: fixed;
+          inset: 0;
+          z-index: 2000;
+          background: #000000;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+          padding: 24px;
+          text-align: center;
+          animation: signup-fade 0.2s ease;
+        }
+
+        .signup-success-mark {
+          width: 64px;
+          height: 64px;
+          border-radius: 50%;
+          border: 2px solid var(--su-accent);
+          color: var(--su-accent);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 30px;
+          margin-bottom: 6px;
+        }
+
+        .signup-success-title {
+          margin: 0;
+          font-size: 24px;
+          font-weight: 800;
+        }
+
+        .signup-success-text {
+          margin: 0;
+          color: var(--su-muted);
+          font-size: 15px;
+        }
+
+        @keyframes signup-spin {
+          to { transform: rotate(360deg); }
+        }
+
+        @keyframes signup-fade {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+
+        @keyframes signup-sheet {
+          from { transform: translateY(24px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .signup-page *,
+          .signup-modal-overlay,
+          .signup-modal-content,
+          .signup-success {
+            animation-duration: 0.01ms !important;
+            transition-duration: 0.01ms !important;
+          }
         }
 
         @media (min-width: 768px) {
@@ -1331,25 +1634,26 @@ export default function SignUp({
             display: flex;
             align-items: center;
             justify-content: center;
-            overflow-y: auto;
           }
 
           .signup-shell {
             min-height: 0;
-            width: 100%;
-            max-width: 620px;
             border: 1px solid #171720;
             border-radius: 20px;
-            box-shadow:
-              0 20px 80px
-              rgba(0, 0, 0, 0.45);
+            box-shadow: 0 20px 80px rgba(0, 0, 0, 0.45);
           }
         }
 
         @media (max-width: 420px) {
-          .signup-content {
+          .signup-content,
+          .signup-banner-wrap {
             padding-left: 18px;
             padding-right: 18px;
+          }
+
+          .signup-progress {
+            margin-left: 18px;
+            margin-right: 18px;
           }
 
           .signup-header {
