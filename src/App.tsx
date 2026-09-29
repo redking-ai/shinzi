@@ -11,6 +11,7 @@ import {
 
 import { auth } from './firebaseConfig';
 import SignUp from './SignUp';
+import Login from './Login';
 
 import background from './assets/background.png';
 import logo from './assets/logo.png';
@@ -146,25 +147,11 @@ export default function App() {
 
   if (currentScreen === 'login') {
     return (
-      <div style={styles.pagePlaceholder}>
-        <h1 style={styles.placeholderTitle}>
-          Log In
-        </h1>
-
-        <p style={styles.placeholderText}>
-          Login page will be connected here.
-        </p>
-
-        <button
-          type="button"
-          style={styles.backButton}
-          onClick={() => {
-            setCurrentScreen('welcome');
-          }}
-        >
-          Back
-        </button>
-      </div>
+      <Login
+        onBack={() => {
+          setCurrentScreen('welcome');
+        }}
+      />
     );
   }
 
