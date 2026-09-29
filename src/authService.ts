@@ -197,6 +197,7 @@ export const createEmailAuthUser = async (
       return {
         user: null,
         error: 'Email is required.',
+        code: null,
       };
     }
 
@@ -207,6 +208,7 @@ export const createEmailAuthUser = async (
       return {
         user: null,
         error: 'Password is required.',
+        code: null,
       };
     }
 
@@ -217,6 +219,7 @@ export const createEmailAuthUser = async (
       return {
         user: null,
         error: 'Username is required.',
+        code: null,
       };
     }
 
@@ -227,6 +230,7 @@ export const createEmailAuthUser = async (
       return {
         user: null,
         error: USERNAME_FORMAT_ERROR,
+        code: null,
       };
     }
 
@@ -240,12 +244,30 @@ export const createEmailAuthUser = async (
     return {
       user: userCredential.user,
       error: null,
+      code: null,
     };
 
   } catch (error: unknown) {
     console.error(
-      'Auth User Creation Error:',
+      '🔥 AUTH USER CREATION ERROR:',
       error
+    );
+
+    const code = getErrorCode(error);
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : String(error);
+
+    console.error(
+      '🔥 Firebase error code:',
+      code
+    );
+
+    console.error(
+      '🔥 Firebase error message:',
+      message
     );
 
     return {
@@ -254,6 +276,7 @@ export const createEmailAuthUser = async (
         error,
         'Failed to create account.'
       ),
+      code,
     };
   }
 };
