@@ -28,6 +28,26 @@ export default function App() {
     useState(false);
 
   // ==========================================================
+  // SIGNUP BUSY FLAG
+  // ==========================================================
+  //
+  // Firebase signs the new user in as soon as the Auth account
+  // is created, which is the FIRST step of signup. Without this
+  // flag, onAuthStateChanged would swap the screen to the main
+  // app and unmount <SignUp /> while the profile photo upload
+  // and Firestore writes are still running (and would also
+  // revoke the photo's object URL).
+  //
+  // While signup is busy we keep <SignUp /> mounted. When it
+  // finishes (success or rollback) it clears the flag and the
+  // normal user/no-user routing takes over.
+  //
+  // ==========================================================
+
+  const [signupBusy, setSignupBusy] =
+    useState(false);
+
+  // ==========================================================
   // FIREBASE AUTH
   // ==========================================================
 
@@ -91,7 +111,7 @@ export default function App() {
   // AUTHENTICATED USER
   // ==========================================================
 
-  if (user) {
+  if (user && !signupBusy) {
     return (
       <div style={styles.mainAppPlaceholder}>
         <h1 style={styles.placeholderTitle}>
@@ -115,6 +135,7 @@ export default function App() {
         onBack={() => {
           setCurrentScreen('welcome');
         }}
+        onBusyChange={setSignupBusy}
       />
     );
   }
@@ -153,58 +174,42 @@ export default function App() {
 
   const safeAreaStyle: CSSProperties = {
     ...styles.safeArea,
-    ...(isDesktop
-      ? styles.desktopSafeArea
-      : {}),
+    ...(isDesktop ? styles.desktopSafeArea : {}),
   };
 
   const heroStyle: CSSProperties = {
     ...styles.heroSection,
-    ...(isDesktop
-      ? styles.desktopHeroSection
-      : {}),
+    ...(isDesktop ? styles.desktopHeroSection : {}),
   };
 
   const logoStyle: CSSProperties = {
     ...styles.logo,
-    ...(isDesktop
-      ? styles.desktopLogo
-      : {}),
+    ...(isDesktop ? styles.desktopLogo : {}),
   };
 
   const titleStyle: CSSProperties = {
     ...styles.title,
-    ...(isDesktop
-      ? styles.desktopTitle
-      : {}),
+    ...(isDesktop ? styles.desktopTitle : {}),
   };
 
   const descriptionStyle: CSSProperties = {
     ...styles.description,
-    ...(isDesktop
-      ? styles.desktopDescription
-      : {}),
+    ...(isDesktop ? styles.desktopDescription : {}),
   };
 
   const actionStyle: CSSProperties = {
     ...styles.actionSection,
-    ...(isDesktop
-      ? styles.desktopActionSection
-      : {}),
+    ...(isDesktop ? styles.desktopActionSection : {}),
   };
 
   const signUpStyle: CSSProperties = {
     ...styles.signUpButton,
-    ...(isDesktop
-      ? styles.desktopButton
-      : {}),
+    ...(isDesktop ? styles.desktopButton : {}),
   };
 
   const logInStyle: CSSProperties = {
     ...styles.logInButton,
-    ...(isDesktop
-      ? styles.desktopButton
-      : {}),
+    ...(isDesktop ? styles.desktopButton : {}),
   };
 
   // ==========================================================
@@ -435,12 +440,15 @@ const styles: Record<string, CSSProperties> = {
     overflow: 'hidden',
   },
 
+  // The keyframes below existed before but were never
+  // applied, so the spinner never actually spun.
   spinner: {
     width: 38,
     height: 38,
     border: '4px solid #22222E',
     borderTop: '4px solid #00D2FF',
     borderRadius: '50%',
+    animation: 'shinzi-spin 0.8s linear infinite',
   },
 
   pagePlaceholder: {
