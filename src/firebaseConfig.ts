@@ -1,9 +1,10 @@
+
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: 'AIzaSyCTYugucY0DX2uTwAmfX3sA_y_KSs5VGA',
+  apiKey: 'AIzaSyCTYugucY0DXU2tTwAmfX3sA_y_KSs5VGA',
   authDomain: 'shinzi-hub.firebaseapp.com',
   projectId: 'shinzi-hub',
   storageBucket: 'shinzi-hub.firebasestorage.app',
