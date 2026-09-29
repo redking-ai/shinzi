@@ -39,6 +39,7 @@ interface SignUpProps {
 interface ProfileImage {
   file: File;
   uri: string;
+
   mimeType: string;
   name: string;
   size: number;
