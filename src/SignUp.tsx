@@ -383,18 +383,20 @@ export default function SignUp({
           );
 
         if (
-          authResult.error ||
-          !authResult.user
-        ) {
-          setFormError({
-            message:
-              authResult.error ||
-              'Unable to create your account.',
-            ref: 'auth',
-          });
+  authResult.error ||
+  !authResult.user
+) {
+  setFormError({
+    message:
+      authResult.error ||
+      'Unable to create your account.',
+    ref: authResult.code
+      ? `auth / ${authResult.code}`
+      : 'auth',
+  });
 
-          return;
-        }
+  return;
+}
 
         createdAuthUser = authResult.user;
 
