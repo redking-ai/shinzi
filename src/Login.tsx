@@ -9,10 +9,6 @@ interface LoginProps {
   onBack: () => void;
 }
 
-interface LoginError {
-  message?: string;
-}
-
 export default function Login({
   onBack,
 }: LoginProps) {
