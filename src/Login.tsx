@@ -1,4 +1,7 @@
-import { useState } from 'react';
+import {
+  useState,
+  type CSSProperties,
+} from 'react';
 
 import {
   loginUser,
@@ -470,9 +473,9 @@ export default function Login({
 // STYLES
 // ======================================================
 
-const styles: Record<
+ const styles: Record<
   string,
-  React.CSSProperties
+  CSSProperties
 > = {
   container: {
     minHeight: '100vh',
