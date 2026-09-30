@@ -586,7 +586,7 @@ export default function Login({
     fontWeight: 700,
     fontFamily: 'inherit',
     cursor: 'pointer',
-    marginTop: 'auto',
+    marginTop: 30,
     marginBottom: 20,
     boxSizing: 'border-box',
   },
