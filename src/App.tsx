@@ -305,7 +305,7 @@ const styles: Record<string, CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    marginTop: 40,
+    marginTop: 130,
   },
 
   logo: {
@@ -380,7 +380,7 @@ const styles: Record<string, CSSProperties> = {
   },
 
   desktopHeroSection: {
-    marginTop: 60,
+    marginTop: 100,
   },
 
   desktopLogo: {
