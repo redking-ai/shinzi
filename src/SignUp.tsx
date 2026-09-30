@@ -210,14 +210,21 @@ export default function SignUp({
       return;
     }
 
-    if (!file.type.startsWith('image/')) {
-      setFormError({
-        message: 'Choose an image file for your profile photo.',
-      });
+   const supportedImageTypes = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+];
 
-      event.target.value = '';
-      return;
-    }
+if (!supportedImageTypes.includes(file.type)) {
+  setFormError({
+    message:
+      'This image format is not supported. Please choose a JPG, PNG, or WebP image.',
+  });
+
+  event.target.value = '';
+  return;
+}
 
     const maxSize = 15 * 1024 * 1024;
 
@@ -262,10 +269,6 @@ export default function SignUp({
       extension = 'png';
     } else if (mimeType === 'image/webp') {
       extension = 'webp';
-    } else if (mimeType === 'image/heic') {
-      extension = 'heic';
-    } else if (mimeType === 'image/heif') {
-      extension = 'heif';
     } else {
       const source =
         imageAsset.name ||
@@ -813,14 +816,14 @@ export default function SignUp({
             </p>
 
             <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleImageChange}
-              style={{
-                display: 'none',
-              }}
-            />
+  ref={fileInputRef}
+  type="file"
+  accept="image/jpeg,image/png,image/webp"
+  onChange={handleImageChange}
+  style={{
+    display: 'none',
+  }}
+/>
 
             {/* AVATAR */}
 
