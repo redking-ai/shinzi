@@ -1640,44 +1640,46 @@ if (!supportedImageTypes.includes(file.type)) {
           }
         }
 
-        @media (min-width: 768px) {
+                @media (min-width: 768px) {
           .signup-page {
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            display: block;
+            width: 100%;
+            min-height: 100dvh;
           }
 
           .signup-shell {
-            min-height: 0;
-            border: 1px solid #171720;
-            border-radius: 20px;
-            box-shadow: 0 20px 80px rgba(0, 0, 0, 0.45);
+            width: 100%;
+            max-width: none;
+            min-height: 100dvh;
+            margin: 0;
+            border: none;
+            border-radius: 0;
+            box-shadow: none;
+          }
+
+          .signup-content {
+            max-width: 760px;
+            margin-left: auto;
+            margin-right: auto;
+            padding-left: 40px;
+            padding-right: 40px;
+          }
+
+          .signup-header {
+            padding-left: 40px;
+            padding-right: 40px;
+          }
+
+          .signup-progress {
+            margin-left: 40px;
+            margin-right: 40px;
+          }
+
+          .signup-banner-wrap {
+            padding-left: 40px;
+            padding-right: 40px;
           }
         }
-
-  .signup-content {
-    max-width: 760px;
-    margin-left: auto;
-    margin-right: auto;
-    padding-left: 40px;
-    padding-right: 40px;
-  }
-
-  .signup-header {
-    padding-left: 40px;
-    padding-right: 40px;
-  }
-
-  .signup-progress {
-    margin-left: 40px;
-    margin-right: 40px;
-  }
-
-  .signup-banner-wrap {
-    padding-left: 40px;
-    padding-right: 40px;
-  }
-}
       `}</style>
     </div>
   );
