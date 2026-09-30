@@ -226,8 +226,8 @@ export default function Login({
               : {}),
           }}
         >
-          &lt; Back
-        </button>
+          ←
+         </button>
 
         <div style={styles.stepText}>
           LOG IN
@@ -500,8 +500,8 @@ export default function Login({
     border: 'none',
     background: 'transparent',
     color: '#00D2FF',
-    fontSize: 16,
-    fontWeight: 600,
+    fontSize: 26,
+    fontWeight: 400,
     padding: 0,
     cursor: 'pointer',
   },
@@ -532,7 +532,7 @@ export default function Login({
     backgroundColor: '#0D0D12',
     borderRadius: 12,
     border: '1px solid #22222E',
-    marginBottom: 16,
+    marginBottom: 10,
     overflow: 'hidden',
   },
 
@@ -566,7 +566,7 @@ export default function Login({
     color: '#00D2FF',
     fontSize: 14,
     fontWeight: 600,
-    marginBottom: 30,
+    marginBottom: 24,
     marginLeft: 4,
     padding: 0,
     cursor: 'pointer',
