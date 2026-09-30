@@ -1491,6 +1491,10 @@ export default function SignUp({
             transform 0.1s ease,
             opacity 0.15s ease;
         }
+          /* Step 1 button spacing */
+.signup-content .signup-hint + .signup-continue-button {
+  margin-top: 30px;
+}
 
         .signup-continue-button:not(:disabled):active {
           transform: scale(0.99);
