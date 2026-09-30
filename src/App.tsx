@@ -289,6 +289,7 @@ const styles: Record<string, CSSProperties> = {
   safeArea: {
     width: '100%',
     height: '100dvh',
+    position: 'relative',
     boxSizing: 'border-box',
     display: 'flex',
     flexDirection: 'column',
@@ -302,15 +303,20 @@ const styles: Record<string, CSSProperties> = {
   },
 
   heroSection: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    marginTop: 130,
-  },
+  position: 'absolute',
+  top: '50%',
+  left: 24,
+  right: 24,
+  transform: 'translateY(-50%)',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  marginTop: 0,
+},
 
   logo: {
-    width: 100,
-    height: 100,
+    width: 120,
+    height: 120,
     objectFit: 'contain',
     marginBottom: 24,
   },
@@ -318,7 +324,7 @@ const styles: Record<string, CSSProperties> = {
   title: {
     margin: 0,
     color: '#FFFFFF',
-    fontSize: 28,
+    fontSize: 34,
     fontWeight: 900,
     textAlign: 'center',
     letterSpacing: 0.5,
@@ -329,7 +335,7 @@ const styles: Record<string, CSSProperties> = {
     margin: 0,
     marginTop: 12,
     color: '#A5A5BA',
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: 400,
     textAlign: 'center',
     lineHeight: 1.47,
@@ -380,7 +386,7 @@ const styles: Record<string, CSSProperties> = {
   },
 
   desktopHeroSection: {
-    marginTop: 100,
+    marginTop: 0,
   },
 
   desktopLogo: {
