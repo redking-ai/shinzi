@@ -410,18 +410,23 @@ desktopActionSection: {
   left: 60,
   right: 60,
   bottom: 40,
-  width: '100%',
-  maxWidth: 440,
+  width: 'auto',
+  maxWidth: 760,
   marginLeft: 'auto',
   marginRight: 'auto',
-  gap: 16,
+
+  display: 'flex',
+  flexDirection: 'row',
+  gap: 20,
 },
 
 desktopButton: {
-  paddingTop: 19,
-  paddingBottom: 19,
-  borderRadius: 32,
-  fontSize: 18,
+  flex: 1,
+  width: 'auto',
+  paddingTop: 20,
+  paddingBottom: 20,
+  borderRadius: 34,
+  fontSize: 19,
 },
 
   desktopHeroSection: {
