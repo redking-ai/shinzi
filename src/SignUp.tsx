@@ -660,45 +660,42 @@ if (!supportedImageTypes.includes(file.type)) {
       <div className="signup-shell">
 
         <div className="signup-header">
-          <button
-            type="button"
-            className="signup-back-button"
-            onClick={() => {
-              if (isSubmitting) {
-                return;
-              }
+  <button
+    type="button"
+    className="signup-back-button"
+    onClick={() => {
+      if (isSubmitting) {
+        return;
+      }
 
-              setFormError(null);
+      setFormError(null);
 
-              if (step === 1) {
-                onBack();
-              } else {
-                setStep(1);
-              }
-            }}
-            disabled={isSubmitting}
-           >
-             ←
-        </button>
+      if (step === 1) {
+        onBack();
+      } else {
+        setStep(1);
+      }
+    }}
+    disabled={isSubmitting}
+    aria-label="Back"
+  >
+    ←
+  </button>
+</div>
 
-          <div className="signup-step">
-            Step {step} of 2
-          </div>
+{formError && (
+  ...
+)}
 
-          <div className="signup-header-spacer" />
-        </div>
+{/* STEP 1 */}
+{step === 1 && (
+  ...
+)}
 
-        <div
-          className="signup-progress"
-          aria-hidden="true"
-        >
-          <div
-            className="signup-progress-bar"
-            style={{
-              width: step === 1 ? '50%' : '100%',
-            }}
-          />
-        </div>
+{/* STEP 2 */}
+{step === 2 && (
+  ...
+)}
 
         {formError && (
           <div
@@ -1180,57 +1177,33 @@ if (!supportedImageTypes.includes(file.type)) {
           outline-offset: 2px;
         }
 
-        .signup-header {
-          width: 100%;
-          display: flex;
-          flex-direction: row;
-          justify-content: space-between;
-          align-items: center;
-          padding: 18px 20px 14px;
-        }
+         .signup-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  padding: 22px 24px 18px;
+}
 
          .signup-back-button {
-          border: 0;
-          background: transparent;
-       color: var(--su-accent);
-        font-size: 26px;
-        font-weight: 400;
-        line-height: 1;
-       cursor: pointer;
-      padding: 4px 0;
-        min-width: 50px;
-    text-align: left;
-                      }
+  border: 0;
+  background: transparent;
+  color: var(--su-accent);
+  font-size: 30px;
+  font-weight: 400;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
 
-        .signup-back-button:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-
-        .signup-step {
-          color: var(--su-muted);
-          font-size: 14px;
-          font-weight: 600;
-        }
-
-        .signup-header-spacer {
-          width: 50px;
-        }
-
-        .signup-progress {
-          height: 3px;
-          margin: 0 24px 26px;
-          background: var(--su-line);
-          border-radius: 999px;
-          overflow: hidden;
-        }
-
-        .signup-progress-bar {
-          height: 100%;
-          background: var(--su-accent);
-          border-radius: inherit;
-          transition: width 0.25s ease;
-        }
+.signup-back-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
         .signup-banner-wrap {
           padding: 0 24px;
@@ -1668,11 +1641,6 @@ if (!supportedImageTypes.includes(file.type)) {
           .signup-header {
             padding-left: 40px;
             padding-right: 40px;
-          }
-
-          .signup-progress {
-            margin-left: 40px;
-            margin-right: 40px;
           }
 
           .signup-banner-wrap {
