@@ -674,9 +674,9 @@ export default function SignUp({
               }
             }}
             disabled={isSubmitting}
-          >
-            ‹ Back
-          </button>
+           >
+             ←
+        </button>
 
           <div className="signup-step">
             Step {step} of 2
@@ -1186,17 +1186,18 @@ export default function SignUp({
           padding: 18px 20px 14px;
         }
 
-        .signup-back-button {
+         .signup-back-button {
           border: 0;
           background: transparent;
-          color: var(--su-accent);
-          font-size: 16px;
-          font-weight: 600;
-          cursor: pointer;
-          padding: 6px 0;
-          min-width: 50px;
-          text-align: left;
-        }
+       color: var(--su-accent);
+        font-size: 26px;
+        font-weight: 400;
+        line-height: 1;
+       cursor: pointer;
+      padding: 4px 0;
+        min-width: 50px;
+    text-align: left;
+                      }
 
         .signup-back-button:disabled {
           opacity: 0.5;
@@ -1284,7 +1285,7 @@ export default function SignUp({
           background: var(--su-surface);
           border-radius: 12px;
           border: 1px solid var(--su-line);
-          margin-bottom: 14px;
+          margin-bottom: 10px;
           overflow: hidden;
           transition:
             border-color 0.15s ease,
