@@ -341,13 +341,16 @@ const styles: Record<string, CSSProperties> = {
     lineHeight: 1.47,
   },
 
-  actionSection: {
-    width: '100%',
-    marginBottom: 20,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 12,
-  },
+ actionSection: {
+  position: 'absolute',
+  left: 24,
+  right: 24,
+  bottom: 20,
+  width: 'auto',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 12,
+},
 
   signUpButton: {
     width: '100%',
@@ -408,13 +411,15 @@ const styles: Record<string, CSSProperties> = {
   },
 
   desktopActionSection: {
-    width: '100%',
-    maxWidth: 560,
-    marginLeft: 'auto',
-    marginRight: 'auto',
-    marginBottom: 30,
-    gap: 16,
-  },
+  left: 40,
+  right: 40,
+  bottom: 30,
+  width: 'auto',
+  maxWidth: 560,
+  marginLeft: 'auto',
+  marginRight: 'auto',
+  gap: 16,
+},
 
   desktopButton: {
     paddingTop: 18,
