@@ -381,52 +381,53 @@ const styles: Record<string, CSSProperties> = {
   },
 
   desktopSafeArea: {
-    maxWidth: 760,
-    paddingLeft: 40,
-    paddingRight: 40,
-    paddingTop: 40,
-    paddingBottom: 40,
-  },
+  maxWidth: 1100,
+  paddingLeft: 60,
+  paddingRight: 60,
+  paddingTop: 40,
+  paddingBottom: 40,
+},
 
-  desktopHeroSection: {
-    marginTop: 0,
-  },
+desktopLogo: {
+  width: 190,
+  height: 190,
+  marginBottom: 34,
+},
 
-  desktopLogo: {
-    width: 150,
-    height: 150,
-    marginBottom: 30,
-  },
+desktopTitle: {
+  fontSize: 58,
+  lineHeight: 1.12,
+  letterSpacing: 0.3,
+},
 
-  desktopTitle: {
-    fontSize: 46,
-    lineHeight: 1.15,
-    letterSpacing: 0.3,
-  },
+desktopDescription: {
+  marginTop: 20,
+  fontSize: 20,
+  lineHeight: 1.5,
+},
 
-  desktopDescription: {
-    marginTop: 18,
-    fontSize: 19,
-    lineHeight: 1.5,
-  },
-
-  desktopActionSection: {
-  left: 40,
-  right: 40,
-  bottom: 30,
-  width: 'auto',
-  maxWidth: 560,
+desktopActionSection: {
+  left: 60,
+  right: 60,
+  bottom: 40,
+  width: '100%',
+  maxWidth: 440,
   marginLeft: 'auto',
   marginRight: 'auto',
   gap: 16,
 },
 
-  desktopButton: {
-    paddingTop: 18,
-    paddingBottom: 18,
-    borderRadius: 32,
-    fontSize: 18,
+desktopButton: {
+  paddingTop: 19,
+  paddingBottom: 19,
+  borderRadius: 32,
+  fontSize: 18,
+},
+
+  desktopHeroSection: {
+    marginTop: 0,
   },
+
 
   loadingContainer: {
     width: '100%',
