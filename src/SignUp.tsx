@@ -1652,23 +1652,46 @@ export default function SignUp({
           }
         }
 
-        @media (max-width: 420px) {
-          .signup-content,
-          .signup-banner-wrap {
-            padding-left: 18px;
-            padding-right: 18px;
-          }
+       @media (min-width: 768px) {
+  .signup-page {
+    display: block;
+    width: 100%;
+    min-height: 100dvh;
+  }
 
-          .signup-progress {
-            margin-left: 18px;
-            margin-right: 18px;
-          }
+  .signup-shell {
+    width: 100%;
+    max-width: none;
+    min-height: 100dvh;
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
 
-          .signup-header {
-            padding-left: 16px;
-            padding-right: 16px;
-          }
-        }
+  .signup-content {
+    max-width: 760px;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 40px;
+    padding-right: 40px;
+  }
+
+  .signup-header {
+    padding-left: 40px;
+    padding-right: 40px;
+  }
+
+  .signup-progress {
+    margin-left: 40px;
+    margin-right: 40px;
+  }
+
+  .signup-banner-wrap {
+    padding-left: 40px;
+    padding-right: 40px;
+  }
+}
       `}</style>
     </div>
   );
