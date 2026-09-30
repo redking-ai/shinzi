@@ -1655,23 +1655,6 @@ if (!supportedImageTypes.includes(file.type)) {
           }
         }
 
-       @media (min-width: 768px) {
-  .signup-page {
-    display: block;
-    width: 100%;
-    min-height: 100dvh;
-  }
-
-  .signup-shell {
-    width: 100%;
-    max-width: none;
-    min-height: 100dvh;
-    margin: 0;
-    border: none;
-    border-radius: 0;
-    box-shadow: none;
-  }
-
   .signup-content {
     max-width: 760px;
     margin-left: auto;
