@@ -245,53 +245,79 @@ export default function Login({
 
         {/* Email */}
 
-        <div style={styles.inputBox}>
+<div style={styles.fieldGroup}>
 
-          <input
-            type="email"
-           aria-label="Email"
-            value={identity}
-            onChange={(event) =>
-              setIdentity(event.target.value)
-            }
-            autoCapitalize="none"
-            autoCorrect="off"
-            autoComplete="email"
-            disabled={loggingIn}
-            style={styles.input}
-          />
+  <label
+    htmlFor="login-email"
+    style={styles.inputLabel}
+  >
+    Email
+  </label>
 
-        </div>
+  <div style={styles.inputBox}>
+
+    <input
+      id="login-email"
+      type="email"
+      aria-label="Email"
+      placeholder="Enter your email address"
+      value={identity}
+      onChange={(event) =>
+        setIdentity(event.target.value)
+      }
+      autoCapitalize="none"
+      autoCorrect="off"
+      autoComplete="email"
+      disabled={loggingIn}
+      style={styles.input}
+    />
+
+  </div>
+
+</div>
 
         {/* Password */}
 
-        <div style={styles.inputBox}>
+<div style={styles.fieldGroup}>
 
-          <input
-            type="password"
-           aria-label="password"
-            value={password}
-            onChange={(event) =>
-              setPassword(event.target.value)
-            }
-            autoCapitalize="none"
-            autoCorrect="off"
-            autoComplete="current-password"
-            disabled={loggingIn}
-            onKeyDown={(event) => {
-              if (
-                event.key === 'Enter' &&
-                identity &&
-                password &&
-                hasNumber
-              ) {
-                void handleFirebaseLogin();
-              }
-            }}
-            style={styles.input}
-          />
+  <label
+    htmlFor="login-password"
+    style={styles.inputLabel}
+  >
+    Password
+  </label>
 
-        </div>
+  <div style={styles.inputBox}>
+
+    <input
+      id="login-password"
+      type="password"
+      aria-label="Password"
+      placeholder="Enter your password"
+      value={password}
+      onChange={(event) =>
+        setPassword(event.target.value)
+      }
+      autoCapitalize="none"
+      autoCorrect="off"
+      autoComplete="current-password"
+      disabled={loggingIn}
+      onKeyDown={(event) => {
+        if (
+          event.key === 'Enter' &&
+          identity &&
+          password &&
+          hasNumber
+        ) {
+          void handleFirebaseLogin();
+        }
+      }}
+      style={styles.input}
+    />
+
+  </div>
+
+</div>
 
         {/* Password number warning */}
 
