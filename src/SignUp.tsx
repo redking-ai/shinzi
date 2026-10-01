@@ -762,7 +762,7 @@ export default function SignUp({
       className="signup-input"
       type="email"
       aria-label="Email"
-      placeholder="Enter a Email address"
+      placeholder="Enter a email address"
       value={email}
       onChange={(event) =>
         setEmail(event.target.value)
@@ -924,7 +924,7 @@ export default function SignUp({
       className="signup-input"
       type="text"
       aria-label="Display name"
-        placeholder="Enter any name"
+        placeholder="Enter your name"
       value={name}
       onChange={(event) =>
         setName(event.target.value)
