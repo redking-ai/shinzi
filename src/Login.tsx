@@ -249,7 +249,7 @@ export default function Login({
 
           <input
             type="email"
-            placeholder="Email"
+           aria-label="Email"
             value={identity}
             onChange={(event) =>
               setIdentity(event.target.value)
@@ -269,7 +269,7 @@ export default function Login({
 
           <input
             type="password"
-            placeholder="Password"
+           aria-label="password"
             value={password}
             onChange={(event) =>
               setPassword(event.target.value)
