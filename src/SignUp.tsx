@@ -761,7 +761,6 @@ export default function SignUp({
       id="signup-email"
       className="signup-input"
       type="email"
-      placeholder="Email address"
       aria-label="Email address"
       value={email}
       onChange={(event) =>
@@ -790,7 +789,6 @@ export default function SignUp({
       id="signup-password"
       className="signup-input"
       type="password"
-      placeholder="Password"
       aria-label="Password"
       value={password}
       onChange={(event) =>
@@ -923,7 +921,6 @@ export default function SignUp({
       id="signup-display-name"
       className="signup-input"
       type="text"
-      placeholder="Display name"
       aria-label="Display name"
       value={name}
       onChange={(event) =>
@@ -958,7 +955,6 @@ export default function SignUp({
       id="signup-username"
       className="signup-input"
       type="text"
-      placeholder="Username"
       aria-label="Username"
       value={username}
       onChange={(event) =>
