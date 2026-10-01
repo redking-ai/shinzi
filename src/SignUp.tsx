@@ -746,43 +746,63 @@ export default function SignUp({
               you will log in with.
             </p>
 
-            <div className="signup-input-box">
-              <input
-                className="signup-input"
-                type="email"
-                placeholder="Email address"
-                aria-label="Email address"
-                value={email}
-                onChange={(event) =>
-                  setEmail(
-                    event.target.value
-                  )
-                }
-                autoCapitalize="none"
-                autoCorrect="off"
-                autoComplete="email"
-                disabled={isSubmitting}
-              />
-            </div>
+             {/* EMAIL */}
 
-            <div className="signup-input-box">
-              <input
-                className="signup-input"
-                type="password"
-                placeholder="Password"
-                aria-label="Password"
-                value={password}
-                onChange={(event) =>
-                  setPassword(
-                    event.target.value
-                  )
-                }
-                autoCapitalize="none"
-                autoCorrect="off"
-                autoComplete="new-password"
-                disabled={isSubmitting}
-              />
-            </div>
+<div className="signup-field-group">
+  <label
+    className="signup-input-label"
+    htmlFor="signup-email"
+  >
+    Email
+  </label>
+
+  <div className="signup-input-box">
+    <input
+      id="signup-email"
+      className="signup-input"
+      type="email"
+      placeholder="Email address"
+      aria-label="Email address"
+      value={email}
+      onChange={(event) =>
+        setEmail(event.target.value)
+      }
+      autoCapitalize="none"
+      autoCorrect="off"
+      autoComplete="email"
+      disabled={isSubmitting}
+    />
+  </div>
+</div>
+
+{/* PASSWORD */}
+
+<div className="signup-field-group">
+  <label
+    className="signup-input-label"
+    htmlFor="signup-password"
+  >
+    Password
+  </label>
+
+  <div className="signup-input-box">
+    <input
+      id="signup-password"
+      className="signup-input"
+      type="password"
+      placeholder="Password"
+      aria-label="Password"
+      value={password}
+      onChange={(event) =>
+        setPassword(event.target.value)
+      }
+      autoCapitalize="none"
+      autoCorrect="off"
+      autoComplete="new-password"
+      disabled={isSubmitting}
+    />
+  </div>
+</div>
 
             <div
               className={
@@ -890,52 +910,68 @@ export default function SignUp({
 
             {/* DISPLAY NAME */}
 
-            <div className="signup-input-box">
-              <input
-                className="signup-input"
-                type="text"
-                placeholder="Display name"
-                aria-label="Display name"
-                value={name}
-                onChange={(event) =>
-                  setName(
-                    event.target.value
-                  )
-                }
-                maxLength={50}
-                autoCorrect="off"
-                disabled={isSubmitting}
-              />
-            </div>
+            <div className="signup-field-group">
+  <label
+    className="signup-input-label"
+    htmlFor="signup-display-name"
+  >
+    Display name
+  </label>
+
+  <div className="signup-input-box">
+    <input
+      id="signup-display-name"
+      className="signup-input"
+      type="text"
+      placeholder="Display name"
+      aria-label="Display name"
+      value={name}
+      onChange={(event) =>
+        setName(event.target.value)
+      }
+      maxLength={50}
+      autoCorrect="off"
+      disabled={isSubmitting}
+    />
+  </div>
+</div>
 
             {/* USERNAME */}
 
-            <div
-              className={
-                username.length > 0 &&
-                !isUsernameValid
-                  ? 'signup-input-box signup-error-box'
-                  : 'signup-input-box'
-              }
-            >
-              <input
-                className="signup-input"
-                type="text"
-                placeholder="Username (3–15 characters)"
-                aria-label="Username"
-                value={username}
-                onChange={(event) =>
-                  setUsername(
-                    event.target.value
-                  )
-                }
-                autoCapitalize="none"
-                autoCorrect="off"
-                autoComplete="off"
-                maxLength={15}
-                disabled={isSubmitting}
-              />
-            </div>
+            <div className="signup-field-group">
+  <label
+    className="signup-input-label"
+    htmlFor="signup-username"
+  >
+    Username
+  </label>
+
+  <div
+    className={
+      username.length > 0 &&
+      !isUsernameValid
+        ? 'signup-input-box signup-error-box'
+        : 'signup-input-box'
+    }
+  >
+    <input
+      id="signup-username"
+      className="signup-input"
+      type="text"
+      placeholder="Username"
+      aria-label="Username"
+      value={username}
+      onChange={(event) =>
+        setUsername(event.target.value)
+      }
+      autoCapitalize="none"
+      autoCorrect="off"
+      autoComplete="off"
+      maxLength={15}
+      disabled={isSubmitting}
+    />
+  </div>
+</div>      
 
             {username.length > 0 &&
               !isUsernameValid && (
@@ -1383,6 +1419,29 @@ export default function SignUp({
         /* ==============================================
            INPUTS
            ============================================== */
+/* ==============================================
+   LABELED INPUT GROUPS
+   ============================================== */
+
+.signup-field-group {
+  width: 100%;
+  margin-bottom: 18px;
+}
+
+.signup-input-label {
+  display: block;
+
+  margin:
+    0 0 8px 4px;
+
+  color:
+    var(--su-text);
+
+  font-size: 14px;
+  font-weight: 600;
+
+  line-height: 1.3;
+}
 
         .signup-input-box {
           width: 100%;
