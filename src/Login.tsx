@@ -21,10 +21,13 @@ export default function Login({
   // Forgot Password States
   const [showForgotModal, setShowForgotModal] =
     useState(false);
+
   const [resetEmail, setResetEmail] =
     useState('');
+
   const [resetSent, setResetSent] =
     useState(false);
+
   const [sendingReset, setSendingReset] =
     useState(false);
 
@@ -68,10 +71,11 @@ export default function Login({
     try {
       setLoggingIn(true);
 
-      const { user, error } = await loginUser(
-        email,
-        password
-      );
+      const { user, error } =
+        await loginUser(
+          email,
+          password
+        );
 
       if (error) {
         window.alert(
@@ -92,7 +96,7 @@ export default function Login({
        *
        * We do NOT manually navigate to ChatScreen here.
        *
-       * App.tsx should listen to Firebase's
+       * App.tsx listens to Firebase's
        * onAuthStateChanged().
        *
        * Once Firebase authentication succeeds,
@@ -130,7 +134,8 @@ export default function Login({
   const handleSendReset = async () => {
     if (sendingReset) return;
 
-    const email = resetEmail.trim();
+    const email =
+      resetEmail.trim();
 
     if (!email) {
       window.alert(
@@ -150,7 +155,9 @@ export default function Login({
       setSendingReset(true);
 
       const result =
-        await sendPasswordReset(email);
+        await sendPasswordReset(
+          email
+        );
 
       if (!result.success) {
         window.alert(
@@ -225,15 +232,10 @@ export default function Login({
               ? styles.disabledControl
               : {}),
           }}
+          aria-label="Back"
         >
           ←
-         </button>
-
-        <div style={styles.stepText}>
-          LOG IN
-        </div>
-
-        <div style={styles.headerSpacer} />
+        </button>
 
       </div>
 
@@ -243,83 +245,111 @@ export default function Login({
 
       <div style={styles.content}>
 
-        {/* Email */}
+        {/* ==================================================
+            WELCOME
+        ================================================== */}
 
-<div style={styles.fieldGroup}>
+        <div style={styles.welcomeSection}>
 
-  <label
-    htmlFor="login-email"
-    style={styles.inputLabel}
-  >
-    Email
-  </label>
+          <div style={styles.welcomeTitle}>
+            WELCOME BACK
+          </div>
 
-  <div style={styles.inputBox}>
+          <div style={styles.welcomeSubtitle}>
+            We're so excited to see you again!
+          </div>
 
-    <input
-      id="login-email"
-      type="email"
-      aria-label="Email"
-      placeholder="Enter your email address"
-      value={identity}
-      onChange={(event) =>
-        setIdentity(event.target.value)
-      }
-      autoCapitalize="none"
-      autoCorrect="off"
-      autoComplete="email"
-      disabled={loggingIn}
-      style={styles.input}
-    />
+        </div>
 
-  </div>
+        {/* ==================================================
+            EMAIL
+        ================================================== */}
 
-</div>
+        <div style={styles.fieldGroup}>
 
-        {/* Password */}
+          <label
+            htmlFor="login-email"
+            style={styles.inputLabel}
+          >
+            Email
+          </label>
 
-<div style={styles.fieldGroup}>
+          <div style={styles.inputBox}>
 
-  <label
-    htmlFor="login-password"
-    style={styles.inputLabel}
-  >
-    Password
-  </label>
+            <input
+              id="login-email"
+              className="login-input"
+              type="email"
+              aria-label="Email"
+              placeholder="Enter your email address"
+              value={identity}
+              onChange={(event) =>
+                setIdentity(
+                  event.target.value
+                )
+              }
+              autoCapitalize="none"
+              autoCorrect="off"
+              autoComplete="email"
+              disabled={loggingIn}
+              style={styles.input}
+            />
 
-  <div style={styles.inputBox}>
+          </div>
 
-    <input
-      id="login-password"
-      type="password"
-      aria-label="Password"
-      placeholder="Enter your password"
-      value={password}
-      onChange={(event) =>
-        setPassword(event.target.value)
-      }
-      autoCapitalize="none"
-      autoCorrect="off"
-      autoComplete="current-password"
-      disabled={loggingIn}
-      onKeyDown={(event) => {
-        if (
-          event.key === 'Enter' &&
-          identity &&
-          password &&
-          hasNumber
-        ) {
-          void handleFirebaseLogin();
-        }
-      }}
-      style={styles.input}
-    />
+        </div>
 
-  </div>
+        {/* ==================================================
+            PASSWORD
+        ================================================== */}
 
-</div>
+        <div style={styles.fieldGroup}>
 
-        {/* Password number warning */}
+          <label
+            htmlFor="login-password"
+            style={styles.inputLabel}
+          >
+            Password
+          </label>
+
+          <div style={styles.inputBox}>
+
+            <input
+              id="login-password"
+              className="login-input"
+              type="password"
+              aria-label="Password"
+              placeholder="Enter your password"
+              value={password}
+              onChange={(event) =>
+                setPassword(
+                  event.target.value
+                )
+              }
+              autoCapitalize="none"
+              autoCorrect="off"
+              autoComplete="current-password"
+              disabled={loggingIn}
+              onKeyDown={(event) => {
+                if (
+                  event.key === 'Enter' &&
+                  identity &&
+                  password &&
+                  hasNumber
+                ) {
+                  void handleFirebaseLogin();
+                }
+              }}
+              style={styles.input}
+            />
+
+          </div>
+
+        </div>
+
+        {/* ==================================================
+            PASSWORD NUMBER WARNING
+        ================================================== */}
 
         {password.length > 0 &&
           !hasNumber && (
@@ -328,7 +358,9 @@ export default function Login({
             </div>
           )}
 
-        {/* Forgot Password */}
+        {/* ==================================================
+            FORGOT PASSWORD
+        ================================================== */}
 
         <button
           type="button"
@@ -344,7 +376,9 @@ export default function Login({
           Forgot Password?
         </button>
 
-        {/* Continue */}
+        {/* ==================================================
+            LOG IN
+        ================================================== */}
 
         <button
           type="button"
@@ -371,7 +405,7 @@ export default function Login({
         >
           {loggingIn
             ? 'Logging in...'
-            : 'Continue'}
+            : 'Log In'}
         </button>
 
       </div>
@@ -385,7 +419,8 @@ export default function Login({
           style={styles.modalBg}
           onMouseDown={(event) => {
             if (
-              event.target === event.currentTarget
+              event.target ===
+              event.currentTarget
             ) {
               closeForgotModal();
             }
@@ -411,6 +446,7 @@ export default function Login({
                 <div style={styles.inputBox}>
 
                   <input
+                    className="login-input"
                     type="email"
                     placeholder="Enter your registered email"
                     value={resetEmail}
@@ -491,6 +527,22 @@ export default function Login({
         </div>
       )}
 
+      {/* ==================================================
+          PLACEHOLDER STYLING
+      ================================================== */}
+
+      <style>{`
+        .login-input::placeholder {
+          color: #FFFFFF;
+          opacity: 1;
+          font-weight: 600;
+        }
+
+        .login-input:disabled::placeholder {
+          opacity: 0.55;
+        }
+      `}</style>
+
     </div>
   );
 }
@@ -499,10 +551,11 @@ export default function Login({
 // STYLES
 // ======================================================
 
- const styles: Record<
+const styles: Record<
   string,
   CSSProperties
 > = {
+
   container: {
     minHeight: '100vh',
     width: '100%',
@@ -511,14 +564,17 @@ export default function Login({
     boxSizing: 'border-box',
   },
 
+  // ====================================================
+  // HEADER
+  // ====================================================
+
   header: {
     display: 'flex',
-    justifyContent: 'space-between',
     alignItems: 'center',
     paddingLeft: 20,
     paddingRight: 20,
     paddingTop: 20,
-    paddingBottom: 30,
+    paddingBottom: 10,
     boxSizing: 'border-box',
   },
 
@@ -526,39 +582,83 @@ export default function Login({
     border: 'none',
     background: 'transparent',
     color: '#00D2FF',
-    fontSize: 26,
+    fontSize: 30,
     fontWeight: 400,
     padding: 0,
     cursor: 'pointer',
+    lineHeight: 1,
   },
 
-  stepText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 700,
-    letterSpacing: 1,
-  },
-
-  headerSpacer: {
-    width: 50,
-  },
+  // ====================================================
+  // CONTENT
+  // ====================================================
 
   content: {
     minHeight:
-      'calc(100vh - 100px)',
+      'calc(100vh - 80px)',
+
     display: 'flex',
     flexDirection: 'column',
+
     paddingLeft: 24,
     paddingRight: 24,
-    paddingTop: 20,
+    paddingTop: 10,
+
     boxSizing: 'border-box',
   },
+
+  // ====================================================
+  // WELCOME
+  // ====================================================
+
+  welcomeSection: {
+    marginBottom: 30,
+  },
+
+  welcomeTitle: {
+    color: '#FFFFFF',
+    fontSize: 26,
+    fontWeight: 800,
+    letterSpacing: -0.3,
+    lineHeight: 1.2,
+    marginBottom: 6,
+  },
+
+  welcomeSubtitle: {
+    color: '#8E8EA0',
+    fontSize: 15,
+    fontWeight: 400,
+    lineHeight: 1.45,
+  },
+
+  // ====================================================
+  // FIELD GROUP
+  // ====================================================
+
+  fieldGroup: {
+    width: '100%',
+    marginBottom: 22,
+  },
+
+  inputLabel: {
+    display: 'block',
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: 600,
+    marginBottom: 8,
+    marginLeft: 4,
+    lineHeight: 1.3,
+  },
+
+  // ====================================================
+  // INPUT
+  // ====================================================
 
   inputBox: {
     backgroundColor: '#0D0D12',
     borderRadius: 12,
     border: '1px solid #22222E',
-    marginBottom: 10,
+    marginBottom: 0,
     overflow: 'hidden',
   },
 
@@ -569,13 +669,19 @@ export default function Login({
     outline: 'none',
     backgroundColor: 'transparent',
     color: '#FFFFFF',
+
     paddingLeft: 16,
     paddingRight: 16,
     paddingTop: 18,
     paddingBottom: 18,
+
     fontSize: 16,
     fontFamily: 'inherit',
   },
+
+  // ====================================================
+  // ERROR
+  // ====================================================
 
   errorText: {
     color: '#FF3366',
@@ -584,6 +690,10 @@ export default function Login({
     marginBottom: 16,
     marginLeft: 4,
   },
+
+  // ====================================================
+  // FORGOT PASSWORD
+  // ====================================================
 
   forgotButton: {
     alignSelf: 'flex-start',
@@ -598,22 +708,31 @@ export default function Login({
     cursor: 'pointer',
   },
 
+  // ====================================================
+  // LOG IN BUTTON
+  // ====================================================
+
   continueBtn: {
     width: '100%',
     border: 'none',
     backgroundColor: '#FFFFFF',
     color: '#000000',
     borderRadius: 28,
+
     paddingTop: 16,
     paddingBottom: 16,
     paddingLeft: 20,
     paddingRight: 20,
+
     fontSize: 16,
     fontWeight: 700,
     fontFamily: 'inherit',
+
     cursor: 'pointer',
+
     marginTop: 30,
     marginBottom: 20,
+
     boxSizing: 'border-box',
   },
 
@@ -634,23 +753,35 @@ export default function Login({
     cursor: 'not-allowed',
   },
 
+  // ====================================================
+  // FORGOT PASSWORD MODAL
+  // ====================================================
+
   modalBg: {
     position: 'fixed',
     inset: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+
+    backgroundColor:
+      'rgba(0, 0, 0, 0.8)',
+
     display: 'flex',
     justifyContent: 'flex-end',
     alignItems: 'stretch',
+
     zIndex: 1000,
   },
 
   modalContent: {
     width: '100%',
+
     backgroundColor: '#14141C',
+
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
+
     padding: 24,
     paddingBottom: 40,
+
     boxSizing: 'border-box',
   },
 
@@ -675,10 +806,13 @@ export default function Login({
     border: 'none',
     background: 'transparent',
     color: '#8E8EA0',
+
     fontSize: 16,
     fontWeight: 600,
+
     paddingTop: 16,
     paddingBottom: 16,
+
     cursor: 'pointer',
     fontFamily: 'inherit',
   },
