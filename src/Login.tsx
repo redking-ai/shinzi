@@ -504,6 +504,7 @@ export default function Login({
                     ? 'Sending...'
                     : 'Send Reset Link'}
                 </button>
+                                      </>
 
                         ) : (
               <>
