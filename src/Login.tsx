@@ -431,15 +431,29 @@ export default function Login({
 
             {!resetSent ? (
               <>
+                  <button
+  type="button"
+  onClick={closeForgotModal}
+  disabled={sendingReset}
+  style={{
+    ...styles.modalBackButton,
+    ...(sendingReset
+      ? styles.disabledControl
+      : {}),
+  }}
+  aria-label="Back"
+>
+  ←
+</button>
                 <div style={styles.modalTitle}>
                   Reset Password
                 </div>
 
-                <div style={styles.modalSub}>
-                  Note: For password reset you will
-                  get an email. You must verify your
-                  email address to reset your password.
-                </div>
+                 <div style={styles.modalSub}>
+  You'll receive an email with a password
+  reset link. Open it and follow the
+  instructions to create a new password.
+</div>
 
                 {/* Reset email */}
 
@@ -493,16 +507,7 @@ export default function Login({
               </>
             ) : (
               <>
-                <div style={styles.modalTitle}>
-                  Email Sent! ✉️
-                </div>
-
-                <div style={styles.modalSub}>
-                  A password reset email has been
-                  sent to the address you entered.
-                  Check your inbox and follow the
-                  instructions to reset your password.
-                </div>
+                <di
               </>
             )}
 
@@ -518,9 +523,7 @@ export default function Login({
                   ? styles.disabledControl
                   : {}),
               }}
-            >
-              Close
-            </button>
+            
 
           </div>
 
@@ -766,7 +769,7 @@ const styles: Record<
 
     display: 'flex',
     justifyContent: 'flex-end',
-    alignItems: 'stretch',
+    alignItems: 'flex-end,
 
     zIndex: 1000,
   },
