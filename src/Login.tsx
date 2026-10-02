@@ -533,9 +533,9 @@ export default function Login({
 
       <style>{`
         .login-input::placeholder {
-          color: #FFFFFF;
+          color: #8E8EA0;
           opacity: 1;
-          font-weight: 600;
+          font-weight: 400;
         }
 
         .login-input:disabled::placeholder {
