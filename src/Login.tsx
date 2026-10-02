@@ -504,25 +504,40 @@ export default function Login({
                     ? 'Sending...'
                     : 'Send Reset Link'}
                 </button>
-              </>
-            ) : (
+
+                        ) : (
               <>
-                <di
+                <div style={styles.modalTitle}>
+                  Email Sent! ✉️
+                </div>
+
+                <div style={styles.modalSub}>
+                  A password reset email has been sent
+                  to the email address you entered.
+                  Check your inbox and follow the
+                  instructions to reset your password.
+                </div>
+
+                <button
+                  type="button"
+                  onClick={closeForgotModal}
+                  disabled={sendingReset}
+                  style={{
+                    ...styles.continueBtn,
+                    ...styles.resetButton,
+                    ...(sendingReset
+                      ? styles.disabledBtn
+                      : {}),
+                  }}
+                >
+                  Done
+                </button>
               </>
             )}
 
-            {/* Close */}
-
-            <button
-              type="button"
-              onClick={closeForgotModal}
-              disabled={sendingReset}
-              style={{
-                ...styles.cancelBtn,
-                ...(sendingReset
-                  ? styles.disabledControl
-                  : {}),
-              }}
+          </div>
+        </div>
+      )}
             
 
           </div>
@@ -769,24 +784,27 @@ const styles: Record<
 
     display: 'flex',
     justifyContent: 'flex-end',
-    alignItems: 'flex-end,
+    alignItems: 'flex-end',
 
     zIndex: 1000,
   },
 
   modalContent: {
-    width: '100%',
+  width: '100%',
+  maxHeight: '85vh',
 
-    backgroundColor: '#14141C',
+  backgroundColor: '#14141C',
 
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+  borderTopLeftRadius: 24,
+  borderTopRightRadius: 24,
 
-    padding: 24,
-    paddingBottom: 40,
+  padding: 24,
+  paddingBottom: 30,
 
-    boxSizing: 'border-box',
-  },
+  boxSizing: 'border-box',
+
+  overflowY: 'auto',
+},
 
   modalTitle: {
     color: '#FFFFFF',
@@ -819,4 +837,71 @@ const styles: Record<
     cursor: 'pointer',
     fontFamily: 'inherit',
   },
+
+modalBackButton: {
+  alignSelf: 'flex-start',
+
+  border: 'none',
+  background: 'transparent',
+
+  color: '#00D2FF',
+
+  fontSize: 30,
+  fontWeight: 400,
+
+  padding: 0,
+  marginBottom: 10,
+
+  cursor: 'pointer',
+  lineHeight: 1,
+  },
+ 
+successContent: {
+  minHeight: '55vh',
+
+  display: 'flex',
+  flexDirection: 'column',
+  justifyContent: 'center',
+  alignItems: 'center',
+
+  boxSizing: 'border-box',
+   },
+
+  successText: {
+  color: '#A5A5BA',
+
+  fontSize: 15,
+  fontWeight: 400,
+
+  lineHeight: 1.5,
+
+  textAlign: 'center',
+
+  maxWidth: 420,
+  marginTop: 16,
+   },
+
+doneButton: {
+  width: '100%',
+
+  border: 'none',
+
+  backgroundColor: '#FFFFFF',
+  color: '#000000',
+
+  borderRadius: 28,
+
+  paddingTop: 16,
+  paddingBottom: 16,
+  paddingLeft: 20,
+  paddingRight: 20,
+
+  fontSize: 16,
+  fontWeight: 700,
+  fontFamily: 'inherit',
+
+  cursor: 'pointer',
+
+  boxSizing: 'border-box',
+   },
 };
