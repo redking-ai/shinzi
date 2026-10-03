@@ -352,11 +352,15 @@ const styles: Record<string, CSSProperties> = {
   gap: 12,
 },
 
-  signUpButton: {
+    signUpButton: {
     width: '100%',
     boxSizing: 'border-box',
-    backgroundColor: 'rgba(10, 10, 14, 0.75)',
-    border: '1px solid #2E2E42',
+
+    // Register — Deep Purple
+    backgroundColor: '#39265D',
+    border: '1px solid rgba(164, 104, 255, 0.65)',
+    boxShadow: '0 0 10px rgba(130, 65, 220, 0.16)',
+
     borderRadius: 28,
     paddingTop: 16,
     paddingBottom: 16,
@@ -369,12 +373,16 @@ const styles: Record<string, CSSProperties> = {
   logInButton: {
     width: '100%',
     boxSizing: 'border-box',
-    backgroundColor: '#FFFFFF',
-    border: 'none',
+
+    // Log In — Blue-Purple Gradient
+    background: 'linear-gradient(110deg, #3020A0 0%, #762BFF 100%)',
+    border: '1px solid rgba(32, 217, 255, 0.55)',
+    boxShadow: '0 0 12px rgba(118, 43, 255, 0.24)',
+
     borderRadius: 28,
     paddingTop: 16,
     paddingBottom: 16,
-    color: '#000000',
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 700,
     cursor: 'pointer',
