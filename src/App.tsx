@@ -274,7 +274,7 @@ const styles: Record<string, CSSProperties> = {
     width: '100%',
     height: '100dvh',
     minHeight: 0,
-    backgroundColor: '#000000',
+    backgroundColor: '#080612',
     overflow: 'hidden',
   },
 
@@ -458,7 +458,7 @@ desktopButton: {
     width: 38,
     height: 38,
     border: '4px solid #22222E',
-    borderTop: '4px solid #00D2FF',
+    borderTop: '4px solid #20D9FF',
     borderRadius: '50%',
     animation: 'shinzi-spin 0.8s linear infinite',
   },
