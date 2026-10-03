@@ -507,33 +507,34 @@ export default function Login({
                                       </>
 
                         ) : (
-              <>
-                <div style={styles.modalTitle}>
-                  Email Sent! ✉️
-                </div>
+              
+<>
+  <div style={styles.successContent}>
+    <div style={styles.modalTitle}>
+      Email Sent! ✉️
+    </div>
 
-                <div style={styles.modalSub}>
-                  A password reset email has been sent
-                  to the email address you entered.
-                  Check your inbox and follow the
-                  instructions to reset your password.
-                </div>
+    <div style={styles.successText}>
+      If an account matches that email address,
+      you'll receive a password reset link.
+      Check your inbox, spam folder, and follow
+      the instructions to reset your password.
+    </div>
 
-                <button
-                  type="button"
-                  onClick={closeForgotModal}
-                  disabled={sendingReset}
-                  style={{
-                    ...styles.continueBtn,
-                    ...styles.resetButton,
-                    ...(sendingReset
-                      ? styles.disabledBtn
-                      : {}),
-                  }}
-                >
-                  Done
-                </button>
-              </>
+    <button
+      type="button"
+      onClick={closeForgotModal}
+      disabled={sendingReset}
+      style={{
+        ...styles.doneButton,
+        ...(sendingReset ? styles.disabledBtn : {}),
+      }}
+    >
+      Done
+    </button>
+  </div>
+</>
+
             )}
 
           </div>
@@ -786,7 +787,12 @@ const styles: Record<
 
   modalContent: {
   width: '100%',
-  maxHeight: '85vh',
+  maxHeight: '85dvh',
+  flexShrink: 0,
+
+  display: 'flex',
+  flexDirection: 'column',
+  justifyContent: 'flex-start',
 
   backgroundColor: '#14141C',
 
@@ -794,11 +800,11 @@ const styles: Record<
   borderTopRightRadius: 24,
 
   padding: 24,
-  paddingBottom: 30,
+  paddingBottom: 'calc(24px + env(safe-area-inset-bottom))',
 
   boxSizing: 'border-box',
-
   overflowY: 'auto',
+  overscrollBehavior: 'contain',
 },
 
   modalTitle: {
@@ -810,12 +816,14 @@ const styles: Record<
   },
 
   modalSub: {
-    color: '#A5A5BA',
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 20,
-  },
+  color: '#A5A5BA',
+  fontSize: 14,
+  textAlign: 'center',
+  marginTop: 0,
+  marginBottom: 24,
+  lineHeight: 1.5,
+  flexShrink: 0,
+},
 
   cancelBtn: {
     width: '100%',
@@ -852,51 +860,39 @@ modalBackButton: {
   },
  
 successContent: {
-  minHeight: '55vh',
-
   display: 'flex',
   flexDirection: 'column',
-  justifyContent: 'center',
-  alignItems: 'center',
-
+  justifyContent: 'flex-start',
+  alignItems: 'stretch',
+  width: '100%',
+  minHeight: 0,
+  gap: 12,
   boxSizing: 'border-box',
-   },
+},
 
-  successText: {
+successText: {
   color: '#A5A5BA',
-
   fontSize: 15,
   fontWeight: 400,
-
   lineHeight: 1.5,
-
   textAlign: 'center',
-
-  maxWidth: 420,
-  marginTop: 16,
-   },
+  width: '100%',
+  margin: '0 0 12px',
+  boxSizing: 'border-box',
+},
 
 doneButton: {
   width: '100%',
-
+  flexShrink: 0,
   border: 'none',
-
   backgroundColor: '#FFFFFF',
   color: '#000000',
-
   borderRadius: 28,
-
-  paddingTop: 16,
-  paddingBottom: 16,
-  paddingLeft: 20,
-  paddingRight: 20,
-
+  padding: '16px 20px',
   fontSize: 16,
   fontWeight: 700,
   fontFamily: 'inherit',
-
   cursor: 'pointer',
-
   boxSizing: 'border-box',
    },
 };
