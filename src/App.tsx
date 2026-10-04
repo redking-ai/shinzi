@@ -445,7 +445,7 @@ desktopButton: {
   loadingContainer: {
     width: '100%',
     height: '100dvh',
-    backgroundColor: '#000000',
+    backgroundColor: '#080612',
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
