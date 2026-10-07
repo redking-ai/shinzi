@@ -762,7 +762,7 @@ export default function SignUp({
       className="signup-input"
       type="email"
       aria-label="Email"
-      placeholder="Enter a email address"
+      placeholder="Enter an email address"
       value={email}
       onChange={(event) =>
         setEmail(event.target.value)
@@ -1245,16 +1245,16 @@ export default function SignUp({
         }
 
         .signup-page {
-          --su-bg: #000000;
-          --su-surface: #0D0D12;
-          --su-surface-2: #14141C;
-          --su-line: #22222E;
-          --su-line-strong: #34344A;
-          --su-text: #FFFFFF;
-          --su-muted: #8E8EA0;
-          --su-accent: #00D2FF;
-          --su-violet: #8A2BE2;
-          --su-danger: #FF3366;
+          --su-bg: #080612;
+--su-surface: #17102A;
+--su-surface-2: #17102A;
+--su-line: #39265D;
+--su-line-strong: #594080;
+--su-text: #FFFFFF;
+--su-muted: #A6A2B5;
+--su-accent: #20D9FF;
+--su-violet: #39265D;
+--su-danger: #FF3366;
 
           width: 100%;
           min-height: 100dvh;
@@ -1473,9 +1473,7 @@ export default function SignUp({
           border-color:
             var(--su-accent);
 
-          box-shadow:
-            0 0 0 3px
-            rgba(0, 210, 255, 0.14);
+          box-shadow: 0 0 0 3px rgba(32, 217, 255, 0.14);
         }
 
         .signup-error-box {
@@ -1742,11 +1740,11 @@ export default function SignUp({
         .signup-continue-button {
           width: 100%;
 
-          border: 0;
+          border: 1px solid #594080;
 
           border-radius: 28px;
 
-          background: #FFFFFF;
+          background: #39265D;
           color: #000000;
 
           padding: 16px;
@@ -1786,15 +1784,13 @@ export default function SignUp({
         }
 
         .signup-disabled-button {
-          background:
-            #22222C;
-
-          color:
-            #6E6E80;
-
-          cursor:
-            not-allowed;
-        }
+  background: #211B30;
+  border-color: #302641;
+  color: #777184;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+        
 
         .signup-busy-button {
           opacity: 0.85;
@@ -1802,22 +1798,14 @@ export default function SignUp({
         }
 
         .signup-spinner {
-          width: 16px;
-          height: 16px;
-
-          border:
-            2px solid
-            rgba(0, 0, 0, 0.25);
-
-          border-top-color:
-            #000000;
-
-          border-radius: 50%;
-
-          animation:
-            signup-spin
-            0.7s linear infinite;
-        }
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(32, 217, 255, 0.22);
+  border-top-color: #20D9FF;
+  border-radius: 50%;
+  animation: signup-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
 
         /* ==============================================
            GENDER MODAL
@@ -1927,7 +1915,7 @@ export default function SignUp({
           z-index: 2000;
 
           background:
-            #000000;
+            #080612;
 
           display: flex;
           flex-direction: column;
