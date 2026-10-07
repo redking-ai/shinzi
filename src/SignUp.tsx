@@ -1745,7 +1745,7 @@ export default function SignUp({
           border-radius: 28px;
 
           background: #39265D;
-          color: #000000;
+          color: #FFFFFF;
 
           padding: 16px;
 
