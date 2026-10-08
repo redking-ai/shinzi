@@ -1517,6 +1517,27 @@ export default function SignUp({
           opacity: 0.55;
           cursor: not-allowed;
         }
+     /* ==============================================
+   CHROME / ANDROID AUTOFILL
+   ============================================== */
+
+.signup-input:-webkit-autofill,
+.signup-input:-webkit-autofill:hover,
+.signup-input:-webkit-autofill:focus,
+.signup-input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--su-text);
+
+  -webkit-box-shadow:
+    0 0 0 1000px var(--su-surface) inset;
+
+  box-shadow:
+    0 0 0 1000px var(--su-surface) inset;
+
+  caret-color: var(--su-text);
+
+  transition:
+    background-color 9999s ease-out;
+}
 
         /* ==============================================
            HINTS
