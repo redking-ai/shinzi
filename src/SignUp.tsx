@@ -1761,12 +1761,20 @@ export default function SignUp({
         .signup-continue-button {
           width: 100%;
 
-          border: 1px solid #594080;
+          border: 1px solid rgba(118, 43, 255, 0.8);
 
-          border-radius: 28px;
+border-radius: 28px;
 
-          background: #39265D;
-          color: #FFFFFF;
+background: linear-gradient(
+  90deg,
+  #3020A0,
+  #762BFF
+);
+
+color: #FFFFFF;
+
+box-shadow:
+  0 0 14px rgba(118, 43, 255, 0.22);
 
           padding: 16px;
 
