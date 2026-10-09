@@ -274,7 +274,7 @@ export default function Login({
             Email
           </label>
 
-          <div style={styles.inputBox}>
+          <div className="login-input-box" style={styles.inputBox}>
 
             <input
               id="login-email"
@@ -312,7 +312,7 @@ export default function Login({
             Password
           </label>
 
-          <div style={styles.inputBox}>
+          <div className="login-input-box" style={styles.inputBox}>
 
             <input
               id="login-password"
@@ -547,7 +547,7 @@ export default function Login({
 
       <style>{`
         .login-input::placeholder {
-          color: #8E8EA0;
+          color: #A6A2B5;
           opacity: 1;
           font-weight: 400;
         }
@@ -555,6 +555,37 @@ export default function Login({
         .login-input:disabled::placeholder {
           opacity: 0.55;
         }
+          .login-input:focus {
+  outline: none;
+}
+
+.login-input:focus-visible {
+  outline: none;
+}
+
+.login-input:focus-visible {
+  outline: none;
+}
+
+.login-input:focus {
+  caret-color: #FFFFFF;
+}
+
+.login-input:focus {
+  outline: none;
+}
+
+.login-input:focus {
+  color: #FFFFFF;
+}
+.login-input-box {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.login-input-box:focus-within {
+  border-color: #20D9FF;
+  box-shadow: 0 0 0 3px rgba(32, 217, 255, 0.14);
+}
       `}</style>
 
     </div>
@@ -573,7 +604,7 @@ const styles: Record<
   container: {
     minHeight: '100vh',
     width: '100%',
-    backgroundColor: '#000000',
+    backgroundColor: '#080612',
     color: '#FFFFFF',
     boxSizing: 'border-box',
   },
@@ -668,13 +699,13 @@ const styles: Record<
   // INPUT
   // ====================================================
 
-  inputBox: {
-    backgroundColor: '#0D0D12',
-    borderRadius: 12,
-    border: '1px solid #22222E',
-    marginBottom: 0,
-    overflow: 'hidden',
-  },
+ inputBox: {
+  backgroundColor: '#17102A',
+  borderRadius: 12,
+  border: '1px solid #39265D',
+  marginBottom: 0,
+  overflow: 'hidden',
+}, 
 
   input: {
     width: '100%',
@@ -728,9 +759,10 @@ const styles: Record<
 
   continueBtn: {
     width: '100%',
-    border: 'none',
-    backgroundColor: '#FFFFFF',
-    color: '#000000',
+    border: '1px solid rgba(118, 43, 255, 0.8)',
+background: 'linear-gradient(90deg, #3020A0, #762BFF)',
+color: '#FFFFFF',
+boxShadow: '0 0 14px rgba(118, 43, 255, 0.22)',
     borderRadius: 28,
 
     paddingTop: 16,
@@ -756,11 +788,13 @@ const styles: Record<
   },
 
   disabledBtn: {
-    backgroundColor: '#333333',
-    color: '#000000',
-    opacity: 0.7,
-    cursor: 'not-allowed',
-  },
+  background: '#211B30',
+  border: '1px solid #302641',
+  color: '#777184',
+  boxShadow: 'none',
+  opacity: 1,
+  cursor: 'not-allowed',
+},
 
   disabledControl: {
     opacity: 0.5,
