@@ -457,7 +457,7 @@ export default function Login({
 
                 {/* Reset email */}
 
-                <div style={styles.inputBox}>
+                <div className="login-input-box" style={styles.inputBox}>
 
                   <input
                     className="login-input"
