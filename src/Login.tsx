@@ -584,7 +584,7 @@ export default function Login({
 }
 
 .login-input-box:focus-within {
-  border-color: #20D9FF;
+  border-color: #39265D;
   box-shadow:
     0 0 0 3px rgba(32, 217, 255, 0.18),
     0 0 12px rgba(32, 217, 255, 0.22);
