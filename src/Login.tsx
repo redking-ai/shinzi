@@ -578,14 +578,18 @@ export default function Login({
 .login-input:focus {
   color: #FFFFFF;
 }
+
 .login-input-box {
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .login-input-box:focus-within {
   border-color: #20D9FF;
-  box-shadow: 0 0 0 3px rgba(32, 217, 255, 0.14);
+  box-shadow:
+    0 0 0 3px rgba(32, 217, 255, 0.18),
+    0 0 12px rgba(32, 217, 255, 0.22);
 }
+
       `}</style>
 
     </div>
