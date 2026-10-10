@@ -178,10 +178,7 @@ export default function Terms() {
             sans-serif;
 
           -webkit-font-smoothing: antialiased;
-          overflow-x: hidden;
-          overflow-y: auto;
-          overscroll-behavior-y: contain;
-          -webkit-overflow-scrolling: touch;
+          overflow: visible;
         }
 
         .terms-content {
@@ -282,6 +279,14 @@ export default function Terms() {
             animation: none;
           }
         }
+        html:has(.terms-page),
+body:has(.terms-page),
+#root:has(.terms-page) {
+  height: auto !important;
+  min-height: 100% !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
       `}</style>
     </main>
   );
