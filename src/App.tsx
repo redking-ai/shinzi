@@ -10,13 +10,14 @@ import {
 } from 'firebase/auth';
 
 import { auth } from './firebaseConfig';
+import Terms from './Terms';
 import SignUp from './SignUp';
 import Login from './Login';
 
 import background from './assets/background.png';
 import logo from './assets/logo.png';
 
-type Screen = 'welcome' | 'signup' | 'login';
+type Screen = 'welcome' | 'signup' | 'login' | 'terms';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -63,6 +64,14 @@ export default function App() {
 
     return unsubscribe;
   }, []);
+
+// ==========================================================
+// TERMS OF SERVICE
+// ==========================================================
+
+if (window.location.pathname === '/terms') {
+  return <Terms />;
+}
 
   // ==========================================================
   // RESPONSIVE CHECK
