@@ -10,6 +10,7 @@ import {
 } from 'firebase/auth';
 
 import { auth } from './firebaseConfig';
+import Privacy from './Privacy';
 import Terms from './Terms';
 import SignUp from './SignUp';
 import Login from './Login';
@@ -100,6 +101,10 @@ if (window.location.pathname === '/terms') {
   return <Terms />;
 }
 
+
+if (window.location.pathname === '/privacy') {
+  return <Privacy />;
+}
   // ==========================================================
   // AUTH LOADING
   // ==========================================================
