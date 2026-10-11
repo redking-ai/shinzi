@@ -18,7 +18,7 @@ import Login from './Login';
 import background from './assets/background.png';
 import logo from './assets/logo.png';
 
-type Screen = 'welcome' | 'signup' | 'login' | 'terms';
+type Screen = 'welcome' | 'signup' | 'login' | 'terms' | 'privacy';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
