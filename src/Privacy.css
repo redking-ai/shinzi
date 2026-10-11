@@ -1,3 +1,4 @@
+
 .privacy-page {
   min-height: 100vh;
   min-height: 100dvh;
@@ -6,7 +7,7 @@
   background: #080612;
   color: #FFFFFF;
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: visible;
   -webkit-overflow-scrolling: touch;
   animation: privacy-enter 0.35s ease-out;
 }
@@ -123,6 +124,9 @@
   .privacy-page {
     animation: none;
   }
+}
+
+/* Allow the document to scroll while Privacy is displayed. */
 html:has(.privacy-page),
 body:has(.privacy-page),
 #root:has(.privacy-page) {
@@ -138,5 +142,4 @@ body:has(.privacy-page),
   min-height: 100dvh;
   overflow-y: visible !important;
   overflow-x: hidden !important;
-}
 }
