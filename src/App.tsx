@@ -8,7 +8,8 @@ import {
   onAuthStateChanged,
   type User,
 } from 'firebase/auth';
-
+import Profile from './Profile';
+import OtherProfile from './OtherProfile';
 import { auth } from './firebaseConfig';
 import Privacy from './Privacy';
 import Terms from './Terms';
@@ -121,11 +122,31 @@ if (window.location.pathname === '/privacy') {
     );
   }
 
+  
   // ==========================================================
-  // AUTHENTICATED USER
+  // PROFILE SCREENS
   // ==========================================================
 
   if (user && !signupBusy) {
+    const pathname = window.location.pathname;
+    const params = new URLSearchParams(window.location.search);
+    const targetUid = params.get('uid');
+
+    // Another user's profile
+    if (
+      pathname.toLowerCase() === '/profile' &&
+      targetUid &&
+      targetUid !== user.uid
+    ) {
+      return <OtherProfile targetUid={targetUid} />;
+    }
+
+    // Your own profile
+    if (pathname.toLowerCase() === '/profile') {
+      return <Profile />;
+    }
+
+    // Existing placeholder for other app screens
     return (
       <div style={styles.mainAppPlaceholder}>
         <h1 style={styles.placeholderTitle}>
@@ -135,9 +156,20 @@ if (window.location.pathname === '/privacy') {
         <p style={styles.placeholderText}>
           Main Shinzi app coming soon.
         </p>
+
+        <button
+          type="button"
+          style={styles.backButton}
+          onClick={() => {
+            window.location.href = '/profile';
+          }}
+        >
+          Open my profile
+        </button>
       </div>
     );
   }
+
 
   // ==========================================================
   // SIGN UP
