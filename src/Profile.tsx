@@ -388,28 +388,15 @@ export default function Profile() {
 
         <h1>Profile</h1>
 
-        <div className="sh-top-actions">
-          {isEditing ? (
-            <button
-              className="sh-icon-button sh-accent"
-              disabled={saving}
-              onClick={() => void saveProfile()}
-              aria-label="Save profile"
-            >
-              ✓
-            </button>
-          ) : (
-            <button
-              className="sh-icon-button sh-accent"
-              onClick={() => {
-                setError('');
-                setIsEditing(true);
-              }}
-              aria-label="Edit profile"
-            >
-              ✎
-            </button>
-          )}
+        <button
+  type="button"
+  className="sh-icon-button sh-accent"
+  aria-label="Edit profile"
+  title="Edit profile"
+>
+  ✎
+</button>
+  
 
           <button
             className="sh-icon-button"
