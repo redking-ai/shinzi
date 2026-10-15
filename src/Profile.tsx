@@ -6,6 +6,7 @@ import {
   serverTimestamp,
   writeBatch,
 } from 'firebase/firestore';
+import { Pencil } from 'lucide-react';
 import { auth, db } from './firebaseConfig';
 import { useDriveStore } from './driveStore';
 import './Profile.css';
@@ -17,16 +18,25 @@ const usernamePattern = /^[a-z0-9_]{3,15}$/;
 
 function dateValue(value: any): Date | null {
   if (!value) return null;
-  if (typeof value.toDate === 'function') return value.toDate();
+
+  if (typeof value.toDate === 'function') {
+    return value.toDate();
+  }
+
   if (typeof value.seconds === 'number') {
     return new Date(value.seconds * 1000);
   }
-  if (value instanceof Date) return value;
+
+  if (value instanceof Date) {
+    return value;
+  }
+
   return null;
 }
 
 function dateLabel(value: any): string {
   const date = dateValue(value);
+
   return date
     ? date.toLocaleDateString(undefined, {
         month: 'long',
@@ -68,6 +78,15 @@ export default function Profile() {
     bubleText: '',
   });
 
+  const resetEditForm = useCallback((data: AnyRecord) => {
+    setEditForm({
+      displayName: String(data.displayName ?? ''),
+      username: String(data.username ?? ''),
+      bio: String(data.bio ?? ''),
+      bubleText: String(data.bubleText ?? ''),
+    });
+  }, []);
+
   const loadProfile = useCallback(async () => {
     if (!currentUser) {
       setUserData(null);
@@ -88,26 +107,20 @@ export default function Profile() {
 
       const data = snap.data() as AnyRecord;
       setUserData(data);
-
-      setEditForm({
-        displayName: String(data.displayName ?? ''),
-        username: String(data.username ?? ''),
-        bio: String(data.bio ?? ''),
-        bubleText: String(data.bubleText ?? ''),
-      });
+      resetEditForm(data);
     } catch (e) {
       console.error('[PROFILE] Failed to load user document:', e);
       setError(messageOf(e));
     } finally {
       setLoading(false);
     }
-  }, [currentUser]);
+  }, [currentUser, resetEditForm]);
 
   useEffect(() => {
     void loadProfile();
   }, [loadProfile]);
 
-  // Load images from the asset documents and Google Drive.
+  // Load profile and banner assets from Firestore and Google Drive.
   useEffect(() => {
     let cancelled = false;
 
@@ -122,29 +135,18 @@ export default function Profile() {
       const fallbackAvatar = String(userData.photoURL ?? '');
       const fallbackBanner = String(userData.bannerUrl ?? '');
 
-      // Show any existing fallback while Drive images load.
-      setProfileImageUri((previous) => previous || fallbackAvatar);
-      setBannerImageUri((previous) => previous || fallbackBanner);
+      setProfileImageUri(fallbackAvatar);
+      setBannerImageUri(fallbackBanner);
 
       const profileAssetId = userData.profileAssetId;
       const bannerAssetId = userData.bannerAssetId;
 
-      // No banner asset is normal if the user has not set one.
-      if (
-        !profileAssetId &&
-        !bannerAssetId
-      ) {
-        setProfileImageUri(fallbackAvatar);
-        setBannerImageUri(fallbackBanner);
+      if (!profileAssetId && !bannerAssetId) {
         setAssetLoading(false);
         return;
       }
 
-      // Do not start a Drive download without a session.
-      // Keep the profile photo fallback visible until connected.
       if (!drive.hasActiveSession) {
-        setProfileImageUri(fallbackAvatar);
-        setBannerImageUri(fallbackBanner);
         setAssetLoading(false);
         return;
       }
@@ -153,7 +155,7 @@ export default function Profile() {
 
       const loadAsset = async (
         assetId: unknown,
-        kind: 'profile' | 'banner'
+        kind: 'profile' | 'banner',
       ): Promise<string> => {
         if (typeof assetId !== 'string' || !assetId.trim()) {
           console.info(`[PROFILE IMAGE] No ${kind} asset ID found.`);
@@ -166,7 +168,7 @@ export default function Profile() {
           if (!snap.exists()) {
             console.error(
               `[PROFILE IMAGE] ${kind} asset document not found:`,
-              assetId
+              assetId,
             );
             return '';
           }
@@ -185,7 +187,7 @@ export default function Profile() {
           if (asset.status !== 'active') {
             console.error(
               `[PROFILE IMAGE] ${kind} asset is not active:`,
-              asset.status
+              asset.status,
             );
             return '';
           }
@@ -193,7 +195,7 @@ export default function Profile() {
           if (asset.provider !== 'google_drive') {
             console.error(
               `[PROFILE IMAGE] Unexpected ${kind} provider:`,
-              asset.provider
+              asset.provider,
             );
             return '';
           }
@@ -203,7 +205,7 @@ export default function Profile() {
             !asset.providerFileId.trim()
           ) {
             console.error(
-              `[PROFILE IMAGE] ${kind} asset has no providerFileId.`
+              `[PROFILE IMAGE] ${kind} asset has no providerFileId.`,
             );
             return '';
           }
@@ -214,18 +216,18 @@ export default function Profile() {
           ) {
             console.error(
               `[PROFILE IMAGE] ${kind} file is not an image:`,
-              asset.mimeType
+              asset.mimeType,
             );
             return '';
           }
 
           const dataUri = await drive.getFileDataUri(
-            asset.providerFileId
+            asset.providerFileId,
           );
 
           if (!dataUri.startsWith('data:image/')) {
             console.error(
-              `[PROFILE IMAGE] ${kind} download did not return an image data URI.`
+              `[PROFILE IMAGE] ${kind} download did not return an image data URI.`,
             );
             return '';
           }
@@ -234,7 +236,7 @@ export default function Profile() {
         } catch (e) {
           console.error(
             `[PROFILE IMAGE] Failed to load ${kind} asset "${assetId}":`,
-            e
+            e,
           );
           return '';
         }
@@ -276,8 +278,17 @@ export default function Profile() {
       mutualServers: Number(userData?.socialStats?.mutualServers ?? 0),
       serversJoined: Number(userData?.socialStats?.serversJoined ?? 0),
     }),
-    [userData]
+    [userData],
   );
+
+  const cancelEditing = () => {
+    if (userData) {
+      resetEditForm(userData);
+    }
+
+    setIsEditing(false);
+    setError('');
+  };
 
   const saveProfile = async () => {
     if (!currentUser || !userData || saving) return;
@@ -290,9 +301,14 @@ export default function Profile() {
       return;
     }
 
+    if (displayName.length > 50) {
+      setError('Display name cannot exceed 50 characters.');
+      return;
+    }
+
     if (!usernamePattern.test(username)) {
       setError(
-        'Username must be 3–15 characters using lowercase letters, numbers, or underscores.'
+        'Username must be 3–15 characters using lowercase letters, numbers, or underscores.',
       );
       return;
     }
@@ -323,11 +339,11 @@ export default function Profile() {
         ) {
           const daysLeft = Math.ceil(
             (thirtyDays - (Date.now() - lastChanged.getTime())) /
-              (24 * 60 * 60 * 1000)
+              (24 * 60 * 60 * 1000),
           );
 
           throw new Error(
-            `You can change your username again in about ${daysLeft} day(s).`
+            `You can change your username again in about ${daysLeft} day(s).`,
           );
         }
 
@@ -341,15 +357,28 @@ export default function Profile() {
           throw new Error('That username is already taken.');
         }
 
-        if (oldUsername) {
-          batch.delete(doc(db, 'usernames', oldUsername));
+        // Delete only a reservation owned by this user.
+        if (oldUsername && oldUsername !== username) {
+          const oldUsernameRef = doc(db, 'usernames', oldUsername);
+          const oldUsernameSnap = await getDoc(oldUsernameRef);
+
+          if (
+            oldUsernameSnap.exists() &&
+            oldUsernameSnap.data().uid === currentUser.uid
+          ) {
+            batch.delete(oldUsernameRef);
+          }
         }
 
-        batch.set(newUsernameRef, {
-          uid: currentUser.uid,
-          username,
-          updatedAt: serverTimestamp(),
-        });
+        // An existing reservation belonging to this user does not
+        // need to be recreated; the rules prohibit reservation updates.
+        if (!newUsernameSnap.exists()) {
+          batch.set(newUsernameRef, {
+            uid: currentUser.uid,
+            username,
+            updatedAt: serverTimestamp(),
+          });
+        }
 
         updates.username = username;
         updates.usernameLastChanged = serverTimestamp();
@@ -426,7 +455,7 @@ export default function Profile() {
             aria-label="Settings"
             onClick={() =>
               setError(
-                'Settings are not connected to this profile screen yet.'
+                'Settings are not connected to this profile screen yet.',
               )
             }
           >
@@ -476,7 +505,7 @@ export default function Profile() {
                 alt="Profile"
                 onError={() => {
                   console.error(
-                    '[PROFILE IMAGE] Browser could not render the profile image.'
+                    '[PROFILE IMAGE] Browser could not render the profile image.',
                   );
                   setProfileImageUri('');
                 }}
@@ -501,20 +530,21 @@ export default function Profile() {
           </div>
         </div>
 
-        <div className="sh-profile-edit-action">
-          <button
-            type="button"
-            className="sh-profile-edit-button"
-            onClick={() => {
-              setError('');
-              setIsEditing((current) => !current);
-            }}
-            aria-expanded={isEditing}
-          >
-            <span aria-hidden="true">✏</span>
-            <span>{isEditing ? 'Cancel Editing' : 'Edit Profile'}</span>
-          </button>
-        </div>
+        {!isEditing && (
+          <div className="sh-profile-edit-action">
+            <button
+              type="button"
+              className="sh-profile-edit-button"
+              onClick={() => {
+                setError('');
+                setIsEditing(true);
+              }}
+            >
+              <Pencil size={20} aria-hidden="true" />
+              <span>Edit Profile</span>
+            </button>
+          </div>
+        )}
 
         {userData.bubleText && (
           <div className="sh-profile-bubble">
@@ -527,7 +557,7 @@ export default function Profile() {
             <label>
               Display name
               <input
-                maxLength={40}
+                maxLength={50}
                 value={editForm.displayName}
                 onChange={(e) =>
                   setEditForm((v) => ({
@@ -543,6 +573,8 @@ export default function Profile() {
               <input
                 maxLength={15}
                 autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 value={editForm.username}
                 onChange={(e) =>
                   setEditForm((v) => ({
@@ -592,10 +624,8 @@ export default function Profile() {
               <button
                 type="button"
                 className="sh-button sh-button-muted"
-                onClick={() => {
-                  setIsEditing(false);
-                  setError('');
-                }}
+                disabled={saving}
+                onClick={cancelEditing}
               >
                 Cancel
               </button>
@@ -617,7 +647,10 @@ export default function Profile() {
           </section>
         ) : (
           <>
-            <nav className="sh-profile-tabs" aria-label="Profile sections">
+            <nav
+              className="sh-profile-tabs"
+              aria-label="Profile sections"
+            >
               <button
                 type="button"
                 className={activeTab === 'Personal' ? 'active' : ''}
@@ -689,7 +722,7 @@ export default function Profile() {
                               </p>
                             </div>
                           </div>
-                        )
+                        ),
                       )}
                     </div>
                   ) : (
@@ -738,15 +771,19 @@ export default function Profile() {
             className="sh-button"
             disabled={!drive.isReady || drive.isConnecting}
             onClick={async () => {
-              const token = await drive.connectDrive();
+              try {
+                const token = await drive.connectDrive();
 
-              if (token) {
-                // Drive session state will trigger image loading.
-                setError('');
-              } else {
-                setError(
-                  'Google Drive connection was cancelled or could not be completed.'
-                );
+                if (token) {
+                  setError('');
+                } else {
+                  setError(
+                    'Google Drive connection was cancelled or could not be completed.',
+                  );
+                }
+              } catch (e) {
+                console.error('[PROFILE] Drive connection failed:', e);
+                setError(messageOf(e));
               }
             }}
           >
