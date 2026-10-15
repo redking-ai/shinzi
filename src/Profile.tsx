@@ -1,3 +1,4 @@
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   doc,
@@ -16,25 +17,16 @@ const usernamePattern = /^[a-z0-9_]{3,15}$/;
 
 function dateValue(value: any): Date | null {
   if (!value) return null;
-
-  if (typeof value.toDate === 'function') {
-    return value.toDate();
-  }
-
+  if (typeof value.toDate === 'function') return value.toDate();
   if (typeof value.seconds === 'number') {
     return new Date(value.seconds * 1000);
   }
-
-  if (value instanceof Date) {
-    return value;
-  }
-
+  if (value instanceof Date) return value;
   return null;
 }
 
 function dateLabel(value: any): string {
   const date = dateValue(value);
-
   return date
     ? date.toLocaleDateString(undefined, {
         month: 'long',
@@ -46,7 +38,6 @@ function dateLabel(value: any): string {
 function pronouns(gender: string): string {
   if (gender?.toLowerCase() === 'male') return 'He/Him';
   if (gender?.toLowerCase() === 'female') return 'She/Her';
-
   return '';
 }
 
@@ -88,9 +79,7 @@ export default function Profile() {
     setError('');
 
     try {
-      const snap = await getDoc(
-        doc(db, 'users', currentUser.uid)
-      );
+      const snap = await getDoc(doc(db, 'users', currentUser.uid));
 
       if (!snap.exists()) {
         setUserData(null);
@@ -98,7 +87,6 @@ export default function Profile() {
       }
 
       const data = snap.data() as AnyRecord;
-
       setUserData(data);
 
       setEditForm({
@@ -108,6 +96,7 @@ export default function Profile() {
         bubleText: String(data.bubleText ?? ''),
       });
     } catch (e) {
+      console.error('[PROFILE] Failed to load user document:', e);
       setError(messageOf(e));
     } finally {
       setLoading(false);
@@ -118,6 +107,7 @@ export default function Profile() {
     void loadProfile();
   }, [loadProfile]);
 
+  // Load images from the asset documents and Google Drive.
   useEffect(() => {
     let cancelled = false;
 
@@ -129,64 +119,136 @@ export default function Profile() {
         return;
       }
 
+      const fallbackAvatar = String(userData.photoURL ?? '');
+      const fallbackBanner = String(userData.bannerUrl ?? '');
+
+      // Show any existing fallback while Drive images load.
+      setProfileImageUri((previous) => previous || fallbackAvatar);
+      setBannerImageUri((previous) => previous || fallbackBanner);
+
+      const profileAssetId = userData.profileAssetId;
+      const bannerAssetId = userData.bannerAssetId;
+
+      // No banner asset is normal if the user has not set one.
+      if (
+        !profileAssetId &&
+        !bannerAssetId
+      ) {
+        setProfileImageUri(fallbackAvatar);
+        setBannerImageUri(fallbackBanner);
+        setAssetLoading(false);
+        return;
+      }
+
+      // Do not start a Drive download without a session.
+      // Keep the profile photo fallback visible until connected.
+      if (!drive.hasActiveSession) {
+        setProfileImageUri(fallbackAvatar);
+        setBannerImageUri(fallbackBanner);
+        setAssetLoading(false);
+        return;
+      }
+
       setAssetLoading(true);
 
-      const avatar = String(userData.photoURL ?? '');
-      const banner = String(userData.bannerUrl ?? '');
-
       const loadAsset = async (
-        assetId: unknown
+        assetId: unknown,
+        kind: 'profile' | 'banner'
       ): Promise<string> => {
-        if (typeof assetId !== 'string' || !assetId) {
+        if (typeof assetId !== 'string' || !assetId.trim()) {
+          console.info(`[PROFILE IMAGE] No ${kind} asset ID found.`);
           return '';
         }
 
         try {
-          const snap = await getDoc(
-            doc(db, 'assets', assetId)
-          );
+          const snap = await getDoc(doc(db, 'assets', assetId));
 
-          if (!snap.exists()) return '';
-
-          const asset = snap.data() as AnyRecord;
-
-          if (
-            asset.status !== 'active' ||
-            asset.provider !== 'google_drive' ||
-            !asset.providerFileId
-          ) {
+          if (!snap.exists()) {
+            console.error(
+              `[PROFILE IMAGE] ${kind} asset document not found:`,
+              assetId
+            );
             return '';
           }
 
-          // Never open Google consent automatically when
-          // the profile page renders.
-          if (!drive.hasActiveSession) return '';
+          const asset = snap.data() as AnyRecord;
+
+          console.info(`[PROFILE IMAGE] ${kind} asset metadata:`, {
+            assetId,
+            status: asset.status,
+            provider: asset.provider,
+            providerFileIdPresent: Boolean(asset.providerFileId),
+            mimeType: asset.mimeType,
+            visibility: asset.visibility,
+          });
+
+          if (asset.status !== 'active') {
+            console.error(
+              `[PROFILE IMAGE] ${kind} asset is not active:`,
+              asset.status
+            );
+            return '';
+          }
+
+          if (asset.provider !== 'google_drive') {
+            console.error(
+              `[PROFILE IMAGE] Unexpected ${kind} provider:`,
+              asset.provider
+            );
+            return '';
+          }
+
+          if (
+            typeof asset.providerFileId !== 'string' ||
+            !asset.providerFileId.trim()
+          ) {
+            console.error(
+              `[PROFILE IMAGE] ${kind} asset has no providerFileId.`
+            );
+            return '';
+          }
 
           if (
             asset.mimeType &&
             !String(asset.mimeType).startsWith('image/')
           ) {
+            console.error(
+              `[PROFILE IMAGE] ${kind} file is not an image:`,
+              asset.mimeType
+            );
             return '';
           }
 
-          return await drive.getFileDataUri(
-            String(asset.providerFileId)
+          const dataUri = await drive.getFileDataUri(
+            asset.providerFileId
           );
+
+          if (!dataUri.startsWith('data:image/')) {
+            console.error(
+              `[PROFILE IMAGE] ${kind} download did not return an image data URI.`
+            );
+            return '';
+          }
+
+          return dataUri;
         } catch (e) {
-          console.warn('Unable to load profile asset:', e);
+          console.error(
+            `[PROFILE IMAGE] Failed to load ${kind} asset "${assetId}":`,
+            e
+          );
           return '';
         }
       };
 
       try {
         const [avatarUri, bannerUri] = await Promise.all([
-          loadAsset(userData.profileAssetId),
-          loadAsset(userData.bannerAssetId),
+          loadAsset(profileAssetId, 'profile'),
+          loadAsset(bannerAssetId, 'banner'),
         ]);
 
         if (!cancelled) {
-          setProfileImageUri(avatarUri || avatar);
-          setBannerImageUri(bannerUri || banner);
+          setProfileImageUri(avatarUri || fallbackAvatar);
+          setBannerImageUri(bannerUri || fallbackBanner);
         }
       } finally {
         if (!cancelled) {
@@ -208,21 +270,11 @@ export default function Profile() {
 
   const stats = useMemo(
     () => ({
-      friendsCount: Number(
-        userData?.socialStats?.friendsCount ?? 0
-      ),
-      followersCount: Number(
-        userData?.socialStats?.followersCount ?? 0
-      ),
-      mutualFriends: Number(
-        userData?.socialStats?.mutualFriends ?? 0
-      ),
-      mutualServers: Number(
-        userData?.socialStats?.mutualServers ?? 0
-      ),
-      serversJoined: Number(
-        userData?.socialStats?.serversJoined ?? 0
-      ),
+      friendsCount: Number(userData?.socialStats?.friendsCount ?? 0),
+      followersCount: Number(userData?.socialStats?.followersCount ?? 0),
+      mutualFriends: Number(userData?.socialStats?.mutualFriends ?? 0),
+      mutualServers: Number(userData?.socialStats?.mutualServers ?? 0),
+      serversJoined: Number(userData?.socialStats?.serversJoined ?? 0),
     }),
     [userData]
   );
@@ -250,11 +302,7 @@ export default function Profile() {
 
     try {
       const userRef = doc(db, 'users', currentUser.uid);
-
-      const oldUsername = String(
-        userData.username ?? ''
-      ).toLowerCase();
-
+      const oldUsername = String(userData.username ?? '').toLowerCase();
       const usernameChanged = username !== oldUsername;
       const batch = writeBatch(db);
 
@@ -266,10 +314,7 @@ export default function Profile() {
       };
 
       if (usernameChanged) {
-        const lastChanged = dateValue(
-          userData.usernameLastChanged
-        );
-
+        const lastChanged = dateValue(userData.usernameLastChanged);
         const thirtyDays = 30 * 24 * 60 * 60 * 1000;
 
         if (
@@ -277,10 +322,7 @@ export default function Profile() {
           Date.now() - lastChanged.getTime() < thirtyDays
         ) {
           const daysLeft = Math.ceil(
-            (
-              thirtyDays -
-              (Date.now() - lastChanged.getTime())
-            ) /
+            (thirtyDays - (Date.now() - lastChanged.getTime())) /
               (24 * 60 * 60 * 1000)
           );
 
@@ -289,15 +331,8 @@ export default function Profile() {
           );
         }
 
-        const newUsernameRef = doc(
-          db,
-          'usernames',
-          username
-        );
-
-        const newUsernameSnap = await getDoc(
-          newUsernameRef
-        );
+        const newUsernameRef = doc(db, 'usernames', username);
+        const newUsernameSnap = await getDoc(newUsernameRef);
 
         if (
           newUsernameSnap.exists() &&
@@ -307,9 +342,7 @@ export default function Profile() {
         }
 
         if (oldUsername) {
-          batch.delete(
-            doc(db, 'usernames', oldUsername)
-          );
+          batch.delete(doc(db, 'usernames', oldUsername));
         }
 
         batch.set(newUsernameRef, {
@@ -323,13 +356,12 @@ export default function Profile() {
       }
 
       batch.update(userRef, updates);
-
       await batch.commit();
 
       setIsEditing(false);
-
       await loadProfile();
     } catch (e) {
+      console.error('[PROFILE] Failed to save profile:', e);
       setError(messageOf(e));
     } finally {
       setSaving(false);
@@ -339,9 +371,7 @@ export default function Profile() {
   if (loading) {
     return (
       <main className="sh-profile-page">
-        <div className="sh-profile-state">
-          Loading profile…
-        </div>
+        <div className="sh-profile-state">Loading profile…</div>
       </main>
     );
   }
@@ -361,10 +391,9 @@ export default function Profile() {
       <main className="sh-profile-page">
         <div className="sh-profile-state">
           Your profile could not be found.
-
           {error && <p>{error}</p>}
-
           <button
+            type="button"
             className="sh-button"
             onClick={() => void loadProfile()}
           >
@@ -378,35 +407,23 @@ export default function Profile() {
   return (
     <main className="sh-profile-page">
       <header className="sh-profile-topbar">
-  <button
-    type="button"
-    className="sh-icon-button"
-    onClick={() => window.history.back()}
-    aria-label="Go back"
-  >
-    ←
-  </button>
+        <button
+          type="button"
+          className="sh-icon-button"
+          onClick={() => window.history.back()}
+          aria-label="Go back"
+        >
+          ←
+        </button>
 
-  <h1>Profile</h1>
+        <h1>Profile</h1>
 
-  <button
-    type="button"
-    className="sh-icon-button sh-accent"
-    aria-label="Edit profile"
-    title="Edit profile"
-    onClick={() => {
-      setError('');
-      setIsEditing(true);
-    }}
-  >
-    ✎
-  </button>
-</header>
-  
-
+        <div className="sh-top-actions">
           <button
+            type="button"
             className="sh-icon-button"
             title="Settings"
+            aria-label="Settings"
             onClick={() =>
               setError(
                 'Settings are not connected to this profile screen yet.'
@@ -421,8 +438,8 @@ export default function Profile() {
       {error && (
         <div className="sh-profile-alert" role="alert">
           <span>{error}</span>
-
           <button
+            type="button"
             onClick={() => setError('')}
             aria-label="Dismiss"
           >
@@ -438,19 +455,15 @@ export default function Profile() {
             bannerImageUri
               ? {
                   backgroundImage:
-                    `linear-gradient(180deg, transparent, #09090f99), url("${bannerImageUri}")`,
+                    `linear-gradient(180deg, transparent, #08061299), url("${bannerImageUri}")`,
                 }
               : undefined
           }
         >
-          {!bannerImageUri && (
-            <div className="sh-banner-glow" />
-          )}
+          {!bannerImageUri && <div className="sh-banner-glow" />}
 
           {assetLoading && (
-            <span className="sh-asset-status">
-              Loading images…
-            </span>
+            <span className="sh-asset-status">Loading images…</span>
           )}
         </div>
 
@@ -461,12 +474,16 @@ export default function Profile() {
                 className="sh-avatar"
                 src={profileImageUri}
                 alt="Profile"
+                onError={() => {
+                  console.error(
+                    '[PROFILE IMAGE] Browser could not render the profile image.'
+                  );
+                  setProfileImageUri('');
+                }}
               />
             ) : (
               <div className="sh-avatar sh-avatar-fallback">
-                {String(
-                  userData.displayName ?? '?'
-                )
+                {String(userData.displayName ?? '?')
                   .slice(0, 1)
                   .toUpperCase()}
               </div>
@@ -474,18 +491,29 @@ export default function Profile() {
           </div>
 
           <div className="sh-identity-copy">
-            <h2>
-  {userData.displayName || 'Shinzi User'}
-</h2>
-
+            <h2>{userData.displayName || 'Shinzi User'}</h2>
             <p className="sh-username">
               @{userData.username || 'username'}
             </p>
-
             <p className="sh-pronouns">
               {pronouns(String(userData.gender ?? ''))}
             </p>
           </div>
+        </div>
+
+        <div className="sh-profile-edit-action">
+          <button
+            type="button"
+            className="sh-profile-edit-button"
+            onClick={() => {
+              setError('');
+              setIsEditing((current) => !current);
+            }}
+            aria-expanded={isEditing}
+          >
+            <span aria-hidden="true">✏</span>
+            <span>{isEditing ? 'Cancel Editing' : 'Edit Profile'}</span>
+          </button>
         </div>
 
         {userData.bubleText && (
@@ -498,7 +526,6 @@ export default function Profile() {
           <section className="sh-edit-panel">
             <label>
               Display name
-
               <input
                 maxLength={40}
                 value={editForm.displayName}
@@ -513,7 +540,6 @@ export default function Profile() {
 
             <label>
               Username
-
               <input
                 maxLength={15}
                 autoCapitalize="none"
@@ -527,17 +553,14 @@ export default function Profile() {
                   }))
                 }
               />
-
               <small>
-                3–15 lowercase letters, numbers, or
-                underscores. Username changes are limited
-                to once every 30 days.
+                3–15 lowercase letters, numbers, or underscores.
+                Username changes are limited to once every 30 days.
               </small>
             </label>
 
             <label>
               Bio
-
               <textarea
                 maxLength={300}
                 rows={3}
@@ -553,7 +576,6 @@ export default function Profile() {
 
             <label>
               Profile bubble
-
               <input
                 maxLength={100}
                 value={editForm.bubleText}
@@ -568,6 +590,7 @@ export default function Profile() {
 
             <div className="sh-edit-actions">
               <button
+                type="button"
                 className="sh-button sh-button-muted"
                 onClick={() => {
                   setIsEditing(false);
@@ -578,6 +601,7 @@ export default function Profile() {
               </button>
 
               <button
+                type="button"
                 className="sh-button"
                 disabled={saving}
                 onClick={() => void saveProfile()}
@@ -587,30 +611,24 @@ export default function Profile() {
             </div>
 
             <p className="sh-muted-note">
-              Profile image, banner, and visual style
-              syncing are not edited here. No fake upload
-              action is shown.
+              Profile image and banner editing are not available in
+              this form yet.
             </p>
           </section>
         ) : (
           <>
-            <nav
-              className="sh-profile-tabs"
-              aria-label="Profile sections"
-            >
+            <nav className="sh-profile-tabs" aria-label="Profile sections">
               <button
-                className={
-                  activeTab === 'Personal' ? 'active' : ''
-                }
+                type="button"
+                className={activeTab === 'Personal' ? 'active' : ''}
                 onClick={() => setActiveTab('Personal')}
               >
                 Personal
               </button>
 
               <button
-                className={
-                  activeTab === 'Social' ? 'active' : ''
-                }
+                type="button"
+                className={activeTab === 'Social' ? 'active' : ''}
                 onClick={() => setActiveTab('Social')}
               >
                 Social
@@ -621,7 +639,6 @@ export default function Profile() {
               <div className="sh-profile-content">
                 <section className="sh-info-section">
                   <h3>About me</h3>
-
                   <p className="sh-bio">
                     {userData.bio ||
                       'This user has not added a bio yet.'}
@@ -648,13 +665,10 @@ export default function Profile() {
                             <span
                               className="sh-platform-dot"
                               style={{
-                                background:
-                                  item.color || '#4DA8DA',
+                                background: item.color || '#762BFF',
                               }}
                             >
-                              {String(
-                                item.iconName ?? '•'
-                              )
+                              {String(item.iconName ?? '•')
                                 .slice(0, 1)
                                 .toUpperCase()}
                             </span>
@@ -665,11 +679,8 @@ export default function Profile() {
                                   item.platform ||
                                   'Platform'}
                               </strong>
-
                               <p>
-                                {item.handle ||
-                                  'No handle provided'}{' '}
-
+                                {item.handle || 'No handle provided'}{' '}
                                 {item.verified && (
                                   <span className="sh-verified">
                                     ✓ verified
@@ -700,10 +711,7 @@ export default function Profile() {
                     'Mutual servers': stats.mutualServers,
                     'Servers joined': stats.serversJoined,
                   }).map(([label, value]) => (
-                    <div
-                      className="sh-stat-tile"
-                      key={label}
-                    >
+                    <div className="sh-stat-tile" key={label}>
                       <strong>{value}</strong>
                       <span>{label}</span>
                     </div>
@@ -719,21 +727,22 @@ export default function Profile() {
         <div className="sh-drive-note">
           <div>
             <strong>Private profile images</strong>
-
             <p>
-              Connect Google Drive to load profile/banner
-              images stored in your private Drive.
+              Connect Google Drive to load profile/banner images
+              stored in your Drive.
             </p>
           </div>
 
           <button
+            type="button"
             className="sh-button"
             disabled={!drive.isReady || drive.isConnecting}
             onClick={async () => {
               const token = await drive.connectDrive();
 
               if (token) {
-                await loadProfile();
+                // Drive session state will trigger image loading.
+                setError('');
               } else {
                 setError(
                   'Google Drive connection was cancelled or could not be completed.'
