@@ -565,4 +565,37 @@
     font-size: 22px;
   }
 }
+/* Allow the profile page to scroll vertically */
+html,
+body,
+#root {
+  min-height: 100%;
+  height: auto;
+}
 
+html,
+body {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.sh-profile-page {
+  min-height: 100vh;
+  height: auto;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  padding-bottom: 48px;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Keep the page content reachable on smaller screens */
+.sh-profile-card,
+.sh-profile-content,
+.sh-edit-panel {
+  min-width: 0;
+}
+
+/* Hide the old BETA badge if any old markup remains */
+.sh-beta-badge {
+  display: none !important;
+}
