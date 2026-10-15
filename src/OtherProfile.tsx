@@ -8,7 +8,7 @@ import {
   setDoc,
 } from 'firebase/firestore';
 import { auth, db } from './firebaseConfig';
-import { useDriveStore } from './DriveStore';
+import { useDriveStore } from './driveStore';
 import './Profile.css';
 
 type AnyRecord = Record<string, any>;
