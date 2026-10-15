@@ -378,24 +378,26 @@ export default function Profile() {
   return (
     <main className="sh-profile-page">
       <header className="sh-profile-topbar">
-        <button
-          className="sh-icon-button"
-          onClick={() => window.history.back()}
-          aria-label="Go back"
-        >
-          ←
-        </button>
+  <button
+    type="button"
+    className="sh-icon-button"
+    onClick={() => window.history.back()}
+    aria-label="Go back"
+  >
+    ←
+  </button>
 
-        <h1>Profile</h1>
+  <h1>Profile</h1>
 
-        <button
-  type="button"
-  className="sh-icon-button sh-accent"
-  aria-label="Edit profile"
-  title="Edit profile"
->
-  ✎
-</button>
+  <button
+    type="button"
+    className="sh-icon-button sh-accent"
+    aria-label="Edit profile"
+    title="Edit profile"
+  >
+    ✎
+  </button>
+</header>
   
 
           <button
