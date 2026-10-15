@@ -482,11 +482,8 @@ export default function Profile() {
 
           <div className="sh-identity-copy">
             <h2>
-              {userData.displayName || 'Shinzi User'}{' '}
-              <span className="sh-beta-badge">
-                BETA
-              </span>
-            </h2>
+  {userData.displayName || 'Shinzi User'}
+</h2>
 
             <p className="sh-username">
               @{userData.username || 'username'}
