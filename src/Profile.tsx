@@ -394,6 +394,10 @@ export default function Profile() {
     className="sh-icon-button sh-accent"
     aria-label="Edit profile"
     title="Edit profile"
+    onClick={() => {
+      setError('');
+      setIsEditing(true);
+    }}
   >
     ✎
   </button>
