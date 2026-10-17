@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   doc,
@@ -491,6 +490,52 @@ const [retryAssets, setRetryAssets] = useState(0);
           </button>
         </div>
       )}
+      
+     
+{assetError && (
+  <div className="sh-profile-alert" role="alert">
+    <span>{assetError}</span>
+
+    <div className="sh-drive-recovery-actions">
+      <button
+        type="button"
+        className="sh-button sh-button-muted"
+        disabled={assetLoading}
+        onClick={() => setRetryAssets((value) => value + 1)}
+      >
+        {assetLoading ? 'Retrying…' : 'Retry images'}
+      </button>
+
+      <button
+        type="button"
+        className="sh-button"
+        disabled={!drive.isReady || drive.isConnecting}
+        onClick={async () => {
+          try {
+            const token = await drive.connectDrive(true);
+
+            if (token) {
+              setAssetError('');
+              setRetryAssets((value) => value + 1);
+            } else {
+              setAssetError(
+                'Google account selection was cancelled. Please try again.',
+              );
+            }
+          } catch (e) {
+            console.error('[PROFILE] Drive account switch failed:', e);
+            setAssetError(messageOf(e));
+          }
+        }}
+      >
+        {drive.isConnecting
+          ? 'Connecting…'
+          : 'Switch Google account'}
+      </button>
+    </div>
+  </div>
+)}
+
 
       <section className="sh-profile-card">
         <div
