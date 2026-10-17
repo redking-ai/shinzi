@@ -775,3 +775,17 @@ body {
     padding: 18px 15px 0;
   }
 }
+/* Position the profile bubble closer to the avatar area. */
+.sh-profile-bubble {
+  position: relative;
+  margin-top: -12px;
+  margin-left: 26px;
+  z-index: 1;
+}
+
+@media (max-width: 600px) {
+  .sh-profile-bubble {
+    margin-top: -10px;
+    margin-left: 15px;
+  }
+}
