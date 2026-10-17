@@ -63,6 +63,8 @@ export default function Profile() {
   const [userData, setUserData] = useState<AnyRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [assetLoading, setAssetLoading] = useState(false);
+const [assetError, setAssetError] = useState('');
+const [retryAssets, setRetryAssets] = useState(0);
   const [profileImageUri, setProfileImageUri] = useState('');
   const [bannerImageUri, setBannerImageUri] = useState('');
   const [activeTab, setActiveTab] = useState<ProfileTab>('Personal');
@@ -124,6 +126,8 @@ export default function Profile() {
     let cancelled = false;
 
     const loadAssets = async () => {
+      setAssetError('');
+
       if (!userData) {
         setProfileImageUri('');
         setBannerImageUri('');
@@ -146,6 +150,9 @@ export default function Profile() {
       }
 
       if (!drive.hasActiveSession) {
+        setAssetError(
+          'Google Drive is not connected. Reconnect the Google account you used during signup to load your profile images.',
+        );
         setAssetLoading(false);
         return;
       }
@@ -237,6 +244,13 @@ export default function Profile() {
             `[PROFILE IMAGE] Failed to load ${kind} asset "${assetId}":`,
             e,
           );
+
+          if (!cancelled) {
+            setAssetError(
+              'The profile image could not be loaded. The connected Google account may not have access to this file.',
+            );
+          }
+
           return '';
         }
       };
@@ -267,6 +281,7 @@ export default function Profile() {
     userData,
     drive.hasActiveSession,
     drive.getFileDataUri,
+      retryAssets,
   ]);
 
   const stats = useMemo(
