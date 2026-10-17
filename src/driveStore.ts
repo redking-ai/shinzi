@@ -94,7 +94,7 @@ interface DriveStore {
   hasActiveSession: boolean;
   isConnecting: boolean;
 
-  connectDrive: () => Promise<string | null>;
+  connectDrive: (switchAccount?: boolean) => Promise<string | null>;
 
   clearAuth: () => Promise<void>;
 
@@ -709,75 +709,57 @@ export const useDriveStore =
     //
     // ========================================================
 
-    const connectDrive =
-      useCallback(
-        async (): Promise<string | null> => {
+    const connectDrive = useCallback(
+  async (switchAccount = false): Promise<string | null> => {
+    if (!switchAccount && hasValidToken()) {
+      return tokenRef.current;
+    }
 
-          if (hasValidToken()) {
-            return tokenRef.current;
-          }
+    if (connectPromiseRef.current) {
+      return connectPromiseRef.current;
+    }
 
-          // A request is already in flight: share it
-          // instead of opening a second popup.
-          if (connectPromiseRef.current) {
-            return connectPromiseRef.current;
-          }
+    if (!tokenClientRef.current) {
+      try {
+        await loadGoogleIdentityServices();
+      } catch (error) {
+        console.error('Unable to load Google authentication:', error);
+        throw new Error(
+          'Google sign-in could not load. Check your connection and try again.',
+        );
+      }
 
-          if (!tokenClientRef.current) {
-            try {
-              await loadGoogleIdentityServices();
-            } catch (error) {
-              console.error(
-                'Unable to load Google authentication:',
-                error
-              );
+      // The initialization effect may not have finished yet.
+      if (!tokenClientRef.current) {
+        throw new Error(
+          'Google sign-in is still initializing. Please try again.',
+        );
+      }
+    }
 
-              return null;
-            }
-          }
+    setIsConnecting(true);
 
-          if (!tokenClientRef.current) {
-            return null;
-          }
+    const promise = new Promise<string | null>((resolve, reject) => {
+      connectionResolverRef.current = resolve;
 
-          setIsConnecting(true);
+      try {
+        tokenClientRef.current?.requestAccessToken({
+          prompt: switchAccount ? 'select_account' : '',
+        });
+      } catch (error) {
+        connectionResolverRef.current = null;
+        reject(error);
+      }
+    }).finally(() => {
+      connectPromiseRef.current = null;
+      setIsConnecting(false);
+    });
 
-          const promise =
-            new Promise<string | null>(
-              (resolve) => {
-                connectionResolverRef.current =
-                  resolve;
-
-                try {
-                  // Empty prompt: Google only shows the
-                  // consent screen when it is actually
-                  // needed, not on every new session.
-                  tokenClientRef.current?.requestAccessToken(
-                    { prompt: '' }
-                  );
-                } catch (error) {
-                  connectionResolverRef.current =
-                    null;
-
-                  console.error(
-                    'Google Drive permission request failed:',
-                    error
-                  );
-
-                  resolve(null);
-                }
-              }
-            ).finally(() => {
-              connectPromiseRef.current = null;
-              setIsConnecting(false);
-            });
-
-          connectPromiseRef.current = promise;
-
-          return promise;
-        },
-        [hasValidToken]
-      );
+    connectPromiseRef.current = promise;
+    return promise;
+  },
+  [hasValidToken],
+);
 
 
     // ========================================================
@@ -1200,15 +1182,42 @@ export const useDriveStore =
             );
           }
 
-          return withToken(async (token) => {
-            const response = await fetch(
-              `${DRIVE_API}/files/${encodeURIComponent(
-                fileId
-              )}?alt=media`,
-              {
-                headers: getAuthHeader(token),
-              }
-            );
+         return withToken(async (token) => {
+  const controller = new AbortController();
+
+  const timeoutId = window.setTimeout(
+    () => controller.abort(),
+    15000
+  );
+
+  let response: Response;
+
+  try {
+    response = await fetch(
+      `${DRIVE_API}/files/${encodeURIComponent(
+        fileId
+      )}?alt=media`,
+      {
+        headers: getAuthHeader(token),
+        signal: controller.signal,
+      }
+    );
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.name === 'AbortError'
+    ) {
+      throw new Error(
+        'Google Drive took too long to load this image. Please retry.'
+      );
+    }
+
+    throw new Error(
+      'Unable to reach Google Drive. Check your connection and retry.'
+    );
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 
             await throwDriveError(
               response,
