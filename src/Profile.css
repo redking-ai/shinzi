@@ -785,6 +785,7 @@ body {
   position: absolute;
   top: 225px;
   left: 26px;
+  transform: translateY(0);
   z-index: 5;
   margin: 0;
   display: inline-flex;
