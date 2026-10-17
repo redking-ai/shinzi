@@ -1,5 +1,5 @@
 
-import { adminDb } from "./_lib/firebaseAdmin";
+import { adminDb } from "./_lib/firebaseAdmin.js";
 
 export default {
   async fetch(): Promise<Response> {
