@@ -804,11 +804,5 @@ body {
 }
 
 
-@media (max-width: 600px) {
-  .sh-profile-bubble {
-    top: 225px;
-    left: 26px;
-    max-width: 65%;
-  }
-}
+
 
