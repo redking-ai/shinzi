@@ -1,5 +1,11 @@
 
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHmac,
+  randomBytes,
+  timingSafeEqual,
+} from "node:crypto";
 
 const ENCRYPTION_KEY = process.env.DRIVE_TOKEN_ENCRYPTION_KEY;
 
@@ -76,40 +82,31 @@ export function verifyOAuthState(
 }
 
 export function encryptRefreshToken(token: string): string {
-  const key = getKey();
   const iv = randomBytes(12);
-
-  const { createCipheriv } = require("node:crypto") as typeof import("node:crypto");
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const cipher = createCipheriv("aes-256-gcm", getKey(), iv);
 
   const encrypted = Buffer.concat([
     cipher.update(token, "utf8"),
     cipher.final(),
   ]);
 
-  const tag = cipher.getAuthTag();
-
   return [
     iv.toString("base64url"),
-    tag.toString("base64url"),
+    cipher.getAuthTag().toString("base64url"),
     encrypted.toString("base64url"),
   ].join(".");
 }
 
 export function decryptRefreshToken(value: string): string {
-  const key = getKey();
   const parts = value.split(".");
-
   if (parts.length !== 3) {
     throw new Error("Invalid encrypted token format");
   }
 
   const [ivPart, tagPart, encryptedPart] = parts;
-  const { createDecipheriv } = require("node:crypto") as typeof import("node:crypto");
-
   const decipher = createDecipheriv(
     "aes-256-gcm",
-    key,
+    getKey(),
     Buffer.from(ivPart, "base64url")
   );
 
