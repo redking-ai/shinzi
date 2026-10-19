@@ -490,6 +490,17 @@ export const useDriveStore =
     const connectPromiseRef =
       useRef<Promise<string | null> | null>(null);
 
+const [firebaseUserReady, setFirebaseUserReady] =
+  useState(false);
+
+useEffect(() => {
+  const unsubscribe = onAuthStateChanged(auth, () => {
+    setFirebaseUserReady(true);
+  });
+
+  return unsubscribe;
+}, []);
+
 
     // ========================================================
     // TOKEN HELPERS
