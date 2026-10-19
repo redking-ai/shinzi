@@ -170,16 +170,6 @@ const SHINZI_SUBFOLDERS: Record<
   others: 'Others',
 };
 
-const DRIVE_SCOPE =
-  'https://www.googleapis.com/auth/drive.file';
-
-
-// ============================================================
-// GOOGLE WEB CLIENT ID
-// ============================================================
-
-const googleClientId =
-  '1063333455169-ht2ld80klgvb89tgmj276mll1uacev8e.apps.googleusercontent.com';
 
 
 // ============================================================
