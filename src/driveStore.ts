@@ -144,7 +144,7 @@ interface DriveStore {
 // CONSTANTS
 // ============================================================
 
-const AUTH_STORAGE_KEY = 'drive_auth';
+
 
 // Treat a token as expired a little early so it does not
 // die halfway through an upload.
@@ -354,152 +354,288 @@ const uploadMultipart = async (
 };
 
 
-// ============================================================
-// GOOGLE IDENTITY SERVICES SCRIPT
-// ============================================================
 
-let googleScriptPromise:
-  Promise<void> | null = null;
+export const useDriveStore = (): DriveStore => {
+  const tokenRef = useRef<string | null>(null);
+  const expiresAtRef = useRef(0);
 
-const loadGoogleIdentityServices =
-  (): Promise<void> => {
-    if (typeof window === 'undefined') {
-      return Promise.reject(
-        new Error(
-          'Google Drive authentication is only available in a browser.'
-        )
-      );
-    }
+  const [hasActiveSession, setHasActiveSession] =
+    useState(false);
 
-    if (window.google?.accounts?.oauth2) {
-      return Promise.resolve();
-    }
+  const [isConnecting, setIsConnecting] =
+    useState(false);
 
-    if (googleScriptPromise) {
-      return googleScriptPromise;
-    }
+  const [firebaseUserReady, setFirebaseUserReady] =
+    useState(false);
 
-    googleScriptPromise = new Promise<void>(
-      (resolve, reject) => {
-        const existingScript =
-          document.querySelector(
-            'script[data-shinzi-google-gis="true"]'
+  const refreshPromiseRef =
+    useRef<Promise<string | null> | null>(null);
+
+  const connectPromiseRef =
+    useRef<Promise<string | null> | null>(null);
+
+  const applyToken = useCallback(
+    (token: string, expiresIn: number) => {
+      tokenRef.current = token;
+      expiresAtRef.current =
+        Date.now() + Math.max(60, expiresIn) * 1000;
+      setHasActiveSession(true);
+    },
+    [],
+  );
+
+  const clearAuth = useCallback(async (): Promise<void> => {
+    tokenRef.current = null;
+    expiresAtRef.current = 0;
+    setHasActiveSession(false);
+  }, []);
+
+  const hasValidToken = useCallback((): boolean => {
+    return Boolean(
+      tokenRef.current &&
+      Date.now() <
+        expiresAtRef.current - TOKEN_EXPIRY_MARGIN_MS,
+    );
+  }, []);
+
+  const refreshAccessToken = useCallback(
+    async (): Promise<string | null> => {
+      if (hasValidToken()) {
+        return tokenRef.current;
+      }
+
+      if (refreshPromiseRef.current) {
+        return refreshPromiseRef.current;
+      }
+
+      const user = auth.currentUser;
+
+      if (!user) {
+        await clearAuth();
+        return null;
+      }
+
+      const refreshPromise = (async () => {
+        const firebaseIdToken = await user.getIdToken();
+
+        const response = await fetch('/api/drive/refresh', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${firebaseIdToken}`,
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store',
+          },
+          cache: 'no-store',
+        });
+
+        if (response.status === 404) {
+          await clearAuth();
+          return null;
+        }
+
+        if (!response.ok) {
+          await clearAuth();
+
+          if (response.status === 401) {
+            return null;
+          }
+
+          throw new Error(
+            `Drive refresh failed (${response.status}). Please retry.`,
           );
+        }
 
-        if (existingScript) {
-          existingScript.addEventListener(
-            'load',
-            () => resolve()
+        const data: {
+          accessToken?: string;
+          expiresIn?: number;
+        } = await response.json();
+
+        if (
+          typeof data.accessToken !== 'string' ||
+          !data.accessToken
+        ) {
+          throw new Error(
+            'The Drive refresh endpoint returned no access token.',
           );
+        }
 
-          existingScript.addEventListener(
-            'error',
-            () =>
-              reject(
-                new Error(
-                  'Unable to load Google authentication.'
-                )
-              )
-          );
+        applyToken(
+          data.accessToken,
+          Number(data.expiresIn) || 3600,
+        );
 
+        return data.accessToken;
+      })();
+
+      refreshPromiseRef.current = refreshPromise;
+
+      try {
+        return await refreshPromise;
+      } finally {
+        if (refreshPromiseRef.current === refreshPromise) {
+          refreshPromiseRef.current = null;
+        }
+      }
+    },
+    [applyToken, clearAuth, hasValidToken],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      async (user) => {
+        setFirebaseUserReady(true);
+
+        if (!user) {
+          await clearAuth();
           return;
         }
 
-        const script =
-          document.createElement('script');
-
-        script.src =
-          'https://accounts.google.com/gsi/client';
-
-        script.async = true;
-        script.defer = true;
-
-        script.dataset.shinziGoogleGis = 'true';
-
-        script.onload = () => {
-          if (window.google?.accounts?.oauth2) {
-            resolve();
-          } else {
-            reject(
-              new Error(
-                'Google authentication loaded incorrectly.'
-              )
+        try {
+          await refreshAccessToken();
+        } catch (error) {
+          if (!cancelled) {
+            console.error(
+              'Unable to restore the Drive session:',
+              error,
             );
           }
-        };
-
-        script.onerror = () => {
-          // Allow a later retry instead of caching failure.
-          googleScriptPromise = null;
-
-          reject(
-            new Error(
-              'Unable to load Google authentication.'
-            )
-          );
-        };
-
-        document.head.appendChild(script);
-      }
+        }
+      },
     );
 
-    return googleScriptPromise;
-  };
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [clearAuth, refreshAccessToken]);
 
+  const connectDrive = useCallback(
+    async (
+      switchAccount = false,
+    ): Promise<string | null> => {
+      if (connectPromiseRef.current) {
+        return connectPromiseRef.current;
+      }
 
-// ============================================================
-// GOOGLE DRIVE STORE
-// ============================================================
+      const user = auth.currentUser;
 
-export const useDriveStore =
-  (): DriveStore => {
+      if (!user) {
+        throw new Error(
+          'Please sign in to Shinzi Hub before connecting Google Drive.',
+        );
+      }
 
-    // The access token lives in REFS, not only in state.
-    // Async functions capture state at the moment they are
-    // created; a token obtained a moment ago (during the
-    // same click) would look like null to them and trigger
-    // a second consent popup. Refs always hold the latest.
-    const tokenRef =
-      useRef<string | null>(null);
+      if (!switchAccount) {
+        const existingToken = await refreshAccessToken();
 
-    const expiresAtRef = useRef(0);
+        if (existingToken) {
+          return existingToken;
+        }
+      }
 
-    const [
-      hasActiveSession,
-      setHasActiveSession,
-    ] = useState(false);
+      setIsConnecting(true);
 
-    const [
-      isConnecting,
-      setIsConnecting,
-    ] = useState(false);
+      const connectPromise = (async () => {
+        const firebaseIdToken = await user.getIdToken();
 
-    const [
-      isGoogleReady,
-      setIsGoogleReady,
-    ] = useState(false);
+        const response = await fetch('/api/drive/start', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${firebaseIdToken}`,
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store',
+          },
+          cache: 'no-store',
+          body: JSON.stringify({ switchAccount }),
+        });
 
-    const tokenClientRef =
-      useRef<GoogleTokenClient | null>(null);
+        if (!response.ok) {
+          throw new Error(
+            `Unable to start Google authorization (${response.status}).`,
+          );
+        }
 
-    const connectionResolverRef =
-      useRef<
-        ((token: string | null) => void) | null
-      >(null);
+        const data: { url?: string } =
+          await response.json();
 
-    const connectPromiseRef =
-      useRef<Promise<string | null> | null>(null);
+        if (
+          typeof data.url !== 'string' ||
+          !data.url.startsWith(
+            'https://accounts.google.com/',
+          )
+        ) {
+          throw new Error(
+            'The server returned an invalid Google authorization URL.',
+          );
+        }
 
-const [firebaseUserReady, setFirebaseUserReady] =
-  useState(false);
+        // The OAuth callback returns to Shinzi Hub.
+        window.location.assign(data.url);
 
-useEffect(() => {
-  const unsubscribe = onAuthStateChanged(auth, () => {
-    setFirebaseUserReady(true);
-  });
+        return null;
+      })();
 
-  return unsubscribe;
-}, []);
+      connectPromiseRef.current = connectPromise;
+
+      try {
+        return await connectPromise;
+      } finally {
+        connectPromiseRef.current = null;
+        setIsConnecting(false);
+      }
+    },
+    [refreshAccessToken],
+  );
+
+  const getValidAccessToken = useCallback(
+    async (): Promise<string | null> => {
+      if (hasValidToken()) {
+        return tokenRef.current;
+      }
+
+      // Background image loading must never unexpectedly
+      // launch a Google authorization screen.
+      return refreshAccessToken();
+    },
+    [hasValidToken, refreshAccessToken],
+  );
+
+  const withToken = useCallback(
+    async <T>(
+      run: (token: string) => Promise<T>,
+    ): Promise<T> => {
+      const token = await getValidAccessToken();
+
+      if (!token) {
+        throw new Error(
+          'Google Drive is not connected. Use the Connect Drive button to authorize it.',
+        );
+      }
+
+      try {
+        return await run(token);
+      } catch (error) {
+        if (
+          error instanceof DriveError &&
+          error.status === 401
+        ) {
+          await clearAuth();
+
+          throw new Error(
+            'Your Google Drive authorization expired. Please reconnect Drive and retry.',
+          );
+        }
+
+        throw error;
+      }
+    },
+    [getValidAccessToken, clearAuth],
+  );
+
+  // Keep your existing FIND FOLDER section below this point.
 
 
     // ========================================================
@@ -570,148 +706,7 @@ useEffect(() => {
         []
       );
 
-
-    // ========================================================
-    // LOAD GOOGLE GIS
-    // ========================================================
-
-    useEffect(() => {
-      let cancelled = false;
-
-      const initializeGoogle = async () => {
-        try {
-          await loadGoogleIdentityServices();
-
-          if (cancelled) {
-            return;
-          }
-
-          if (!window.google?.accounts?.oauth2) {
-            return;
-          }
-
-          const tokenClient =
-            window.google.accounts.oauth2
-              .initTokenClient({
-                client_id: googleClientId,
-
-                scope: DRIVE_SCOPE,
-
-                callback: (response) => {
-                  const resolver =
-                    connectionResolverRef.current;
-
-                  connectionResolverRef.current =
-                    null;
-
-                  if (
-                    response.error ||
-                    !response.access_token
-                  ) {
-                    if (resolver) {
-                      resolver(null);
-                    }
-
-                    return;
-                  }
-
-                  const expiresInSeconds =
-                    Number(response.expires_in) > 0
-                      ? Number(response.expires_in)
-                      : 3600;
-
-                  applyToken(
-                    response.access_token,
-                    Date.now() +
-                      expiresInSeconds * 1000,
-                    true
-                  );
-
-                  if (resolver) {
-                    resolver(
-                      response.access_token
-                    );
-                  }
-                },
-
-                error_callback: (error) => {
-                  console.error(
-                    'Google OAuth error:',
-                    error
-                  );
-
-                  const resolver =
-                    connectionResolverRef.current;
-
-                  connectionResolverRef.current =
-                    null;
-
-                  if (resolver) {
-                    resolver(null);
-                  }
-                },
-              });
-
-          tokenClientRef.current = tokenClient;
-
-          setIsGoogleReady(true);
-        } catch (error) {
-          console.error(
-            'Google Drive authentication initialization error:',
-            error
-          );
-        }
-      };
-
-      initializeGoogle();
-
-      return () => {
-        cancelled = true;
-      };
-    }, [applyToken]);
-
-
-    // ========================================================
-    // RESTORE AUTH
-    // ========================================================
-
-    useEffect(() => {
-      try {
-        const authData =
-          sessionStorage.getItem(
-            AUTH_STORAGE_KEY
-          );
-
-        if (!authData) {
-          return;
-        }
-
-        const parsed = JSON.parse(authData);
-
-        const token = parsed?.token;
-        const expiresAt = parsed?.expiresAt;
-
-        if (
-          typeof token === 'string' &&
-          token &&
-          typeof expiresAt === 'number' &&
-          Date.now() <
-            expiresAt - TOKEN_EXPIRY_MARGIN_MS
-        ) {
-          applyToken(token, expiresAt, false);
-        } else {
-          void clearAuth();
-        }
-      } catch (error) {
-        console.warn(
-          'Failed to restore Google Drive auth:',
-          error
-        );
-
-        void clearAuth();
-      }
-    }, [applyToken, clearAuth]);
-
+    
 
     // ========================================================
     // CONNECT DRIVE
