@@ -1106,7 +1106,7 @@ export const useDriveStore = (): DriveStore => {
     // ========================================================
 
     return {
-      isReady: isGoogleReady,
+      isReady: firebaseUserReady,
 
       hasActiveSession,
 
