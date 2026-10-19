@@ -636,6 +636,55 @@ export const useDriveStore = (): DriveStore => {
   );
 
 
+// ========================================================
+    // FIND FOLDER
+    // ========================================================
+
+    const findFolder =
+      useCallback(
+        async (
+          token: string,
+          name: string,
+          parentId: string | null = null
+        ): Promise<DriveFile | null> => {
+
+          let query =
+            `name = '${name.replace(
+              /'/g,
+              "\\'"
+            )}'` +
+            ` and mimeType = 'application/vnd.google-apps.folder'` +
+            ` and trashed = false`;
+
+          if (parentId) {
+            query +=
+              ` and '${parentId}' in parents`;
+          }
+
+          const url =
+            `${DRIVE_API}/files` +
+            `?q=${encodeURIComponent(query)}` +
+            `&spaces=drive` +
+            `&pageSize=1` +
+            `&fields=files(id,name,mimeType,parents)`;
+
+          const response = await fetch(url, {
+            headers: getAuthHeader(token),
+          });
+
+          await throwDriveError(
+            response,
+            'Unable to search Google Drive folders.'
+          );
+
+          const data = await response.json();
+
+          return data?.files?.[0] || null;
+        },
+        []
+      );
+
+
     // ========================================================
     // CREATE FOLDER
     // ========================================================
