@@ -739,6 +739,73 @@ body {
 }
 
 
+/* Profile status thought bubble — below avatar, above Edit Profile */
+.sh-profile-bubble {
+  order: 3;
+  align-self: flex-start;
+  position: relative;
+  z-index: 5;
+  width: fit-content;
+  max-width: calc(100% - 78px);
+  margin: 12px 26px 0 52px;
+  margin: -6px 26px 0 52px;
+  padding: 8px 16px;
+  border: 1px solid var(--sh-line-strong);
+  border-radius: 18px;
+  background: var(--sh-surface-2);
+  color: var(--sh-text);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.38),
+    0 0 12px rgba(118, 43, 255, 0.14);
+}
+
+/* Smallest thought dot near the avatar's lower curve */
+.sh-profile-bubble::before {
+  content: "";
+  position: absolute;
+  left: -18px;
+  top: -7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--sh-surface-2);
+  border: 1px solid var(--sh-line-strong);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* Medium thought dot leading into the bubble */
+.sh-profile-bubble::after {
+  content: "";
+  position: absolute;
+  left: -10px;
+  top: 2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--sh-surface-2);
+  border: 1px solid var(--sh-line-strong);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+@media (max-width: 600px) {
+  .sh-profile-edit-action {
+    padding: 16px 15px 0;
+  }
+
+  .sh-profile-bubble {
+    margin: 10px 15px 0 38px;
+   margin: -6px 15px 0 38px;
+    max-width: calc(100% - 53px);
+    padding: 7px 14px;
+    font-size: 13.5px;
+  }
+}
+
+
 /* ===== Thought bubble: top-right of avatar (like image 2) ===== */
 .sh-profile-bubble {
   position: absolute;
