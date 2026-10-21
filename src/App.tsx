@@ -6,11 +6,17 @@ import {
 
 import {
   onAuthStateChanged,
+  signOut,
   type User,
 } from 'firebase/auth';
+
+import {
+  doc,
+  getDoc,
+} from 'firebase/firestore';
 import Profile from './Profile';
 import OtherProfile from './OtherProfile';
-import { auth } from './firebaseConfig';
+import { auth, db } from './firebaseConfig';
 import Privacy from './Privacy';
 import Terms from './Terms';
 import SignUp from './SignUp';
@@ -51,6 +57,9 @@ export default function App() {
   const [signupBusy, setSignupBusy] =
     useState(false);
 
+const [profileExists, setProfileExists] =
+  useState<boolean | null>(null);
+
   // ==========================================================
   // FIREBASE AUTH
   // ==========================================================
@@ -66,6 +75,33 @@ export default function App() {
 
     return unsubscribe;
   }, []);
+
+// Does this signed-in user already have a profile document?
+useEffect(() => {
+  if (!user) {
+    setProfileExists(null);
+    return;
+  }
+
+  // SignUp is running, so leave it alone until it finishes.
+  if (signupBusy) return;
+
+  let cancelled = false;
+  setProfileExists(null);
+
+  getDoc(doc(db, 'users', user.uid))
+    .then((snap) => {
+      if (!cancelled) setProfileExists(snap.exists());
+    })
+    .catch(() => {
+      // On error, let Profile show its own error and retry button.
+      if (!cancelled) setProfileExists(true);
+    });
+
+  return () => {
+    cancelled = true;
+  };
+}, [user, signupBusy]);
 
   // ==========================================================
   // RESPONSIVE CHECK
@@ -110,7 +146,10 @@ if (window.location.pathname === '/privacy') {
   // AUTH LOADING
   // ==========================================================
 
-  if (authLoading) {
+  if (
+  authLoading ||
+  (user && !signupBusy && profileExists === null)
+) {
     return (
       <>
         <div style={styles.loadingContainer}>
@@ -127,7 +166,7 @@ if (window.location.pathname === '/privacy') {
   // PROFILE SCREENS
   // ==========================================================
 
-  if (user && !signupBusy) {
+  if (user && !signupBusy && profileExists) {
     const pathname = window.location.pathname;
     const params = new URLSearchParams(window.location.search);
     const targetUid = params.get('uid');
@@ -175,7 +214,10 @@ if (window.location.pathname === '/privacy') {
   // SIGN UP
   // ==========================================================
 
-  if (currentScreen === 'signup') {
+  if (
+  currentScreen === 'signup' ||
+  (user && profileExists === false)
+) {
     return (
       <SignUp
         onBack={() => {
