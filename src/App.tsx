@@ -220,9 +220,13 @@ if (window.location.pathname === '/privacy') {
 ) {
     return (
       <SignUp
-        onBack={() => {
-          setCurrentScreen('welcome');
-        }}
+        onBack={async () => {
+  if (auth.currentUser) {
+    await signOut(auth);
+  }
+
+  setCurrentScreen('welcome');
+}}
         onBusyChange={setSignupBusy}
       />
     );
