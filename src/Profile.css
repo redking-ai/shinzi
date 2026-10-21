@@ -746,7 +746,7 @@ body {
   z-index: 5;
   width: fit-content;
   max-width: calc(100% - 78px);
-  margin: 12px 26px 0 52px;
+  margin: -6px 26px 0 52px;
   padding: 8px 16px;
   border: 1px solid var(--sh-line-strong);
   border-radius: 18px;
@@ -795,7 +795,7 @@ body {
   }
 
   .sh-profile-bubble {
-    margin: 10px 15px 0 38px;
+   margin: -6px 15px 0 38px;
     max-width: calc(100% - 53px);
     padding: 7px 14px;
     font-size: 13.5px;
