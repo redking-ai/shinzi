@@ -339,6 +339,7 @@ export default function SignUp({
       let createdAuthUser: User | null = null;
       let createdAssetId: string | null = null;
       let uploadedDriveFileId: string | null = null;
+   let activeUser: User | null = null;
     let redirecting = false;
 
       try {
@@ -388,7 +389,7 @@ export default function SignUp({
           return;
         }
 
-        createdAuthUser =
+        activeUser =
           authResult.user;
 
         // ----------------------------------------------------
