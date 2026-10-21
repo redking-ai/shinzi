@@ -503,7 +503,7 @@ useEffect(() => {
       )}
       
      
-{assetError && (
+{assetError && showAssetError && (
   <div className="sh-profile-alert" role="alert">
     <span>{assetError}</span>
 
@@ -562,9 +562,9 @@ useEffect(() => {
         >
           {!bannerImageUri && <div className="sh-banner-glow" />}
 
-          {assetLoading && (
-            <span className="sh-asset-status">Loading images…</span>
-          )}
+          {(assetLoading || (assetError && !showAssetError)) && (
+  <span className="sh-asset-status">Loading images…</span>
+)}
         </div>
 
         <div className="sh-profile-identity">
