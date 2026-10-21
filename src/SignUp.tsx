@@ -650,13 +650,13 @@ export default function SignUp({
         });
 
       } finally {
-        submittingRef.current =
-          false;
-
-        setIsSubmitting(false);
-
-        onBusyChange(false);
-      }
+  if (!redirecting) {
+    submittingRef.current = false;
+    setIsSubmitting(false);
+    onBusyChange(false);
+  }
+}
+        
     };
 
 // Back from Google: restore the text fields, and if the
