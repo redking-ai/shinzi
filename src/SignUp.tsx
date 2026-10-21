@@ -351,7 +351,7 @@ export default function SignUp({
 
 stage = 'auth';
 
-activeUser = auth.currentUser;
+createdAuthUser = authResult.user;
 
 if (!activeUser) {
   const authResult = await createEmailAuthUser(
