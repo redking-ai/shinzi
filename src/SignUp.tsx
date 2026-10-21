@@ -343,54 +343,76 @@ export default function SignUp({
     let redirecting = false;
 
       try {
-        // ----------------------------------------------------
-        // 1. GOOGLE DRIVE PERMISSION
-        // ----------------------------------------------------
+       
 
-        const driveToken =
-          await connectDrive();
+      // ----------------------------------------------------
+// 1. FIREBASE AUTH USER
+// ----------------------------------------------------
 
-        if (!driveToken) {
-          setFormError({
-            message:
-              'Shinzi needs Google Drive access to save your profile photo. Allow access when the Google window opens, then try again.',
-            ref: 'drive',
-          });
+stage = 'auth';
 
-          return;
-        }
+activeUser = auth.currentUser;
 
-        // ----------------------------------------------------
-        // 2. FIREBASE AUTH USER
-        // ----------------------------------------------------
+if (!activeUser) {
+  const authResult = await createEmailAuthUser(
+    email.trim(),
+    password,
+    normalizedUsername
+  );
 
-        stage = 'auth';
+  if (authResult.error || !authResult.user) {
+    setFormError({
+      message:
+        authResult.error ||
+        'Unable to create your account.',
+      ref: authResult.code
+        ? `auth / ${authResult.code}`
+        : 'auth',
+    });
 
-        const authResult =
-          await createEmailAuthUser(
-            email.trim(),
-            password,
-            normalizedUsername
-          );
+    return;
+  }
 
-        if (
-          authResult.error ||
-          !authResult.user
-        ) {
-          setFormError({
-            message:
-              authResult.error ||
-              'Unable to create your account.',
-            ref: authResult.code
-              ? `auth / ${authResult.code}`
-              : 'auth',
-          });
+  createdAuthUser = authResult.user;
+  activeUser = authResult.user;
+}
 
-          return;
-        }
+// ----------------------------------------------------
+// 2. SAVE SIGNUP DETAILS BEFORE GOOGLE REDIRECT
+// ----------------------------------------------------
 
-        activeUser =
-          authResult.user;
+sessionStorage.setItem(
+  'shinzi_signup_draft',
+  JSON.stringify({
+    name,
+    username,
+    gender,
+    day,
+    month,
+    year,
+  })
+);
+
+// ----------------------------------------------------
+// 3. GOOGLE DRIVE PERMISSION
+// ----------------------------------------------------
+
+stage = 'drive';
+
+const driveToken = await connectDrive();
+
+if (!driveToken) {
+  // connectDrive redirects the browser to Google.
+  // Do not reset the busy state during that redirect.
+  redirecting = true;
+  return;
+}
+
+if (!activeUser) {
+  throw new Error(
+    'You are not signed in. Please try again.'
+  );
+}
 
         // ----------------------------------------------------
         // 3. USERNAME AVAILABILITY
