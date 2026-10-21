@@ -343,15 +343,14 @@ export default function SignUp({
     let redirecting = false;
 
       try {
-       
+      
 
-      // ----------------------------------------------------
 // 1. FIREBASE AUTH USER
 // ----------------------------------------------------
 
 stage = 'auth';
 
-createdAuthUser = authResult.user;
+activeUser = auth.currentUser;
 
 if (!activeUser) {
   const authResult = await createEmailAuthUser(
@@ -375,6 +374,12 @@ if (!activeUser) {
 
   createdAuthUser = authResult.user;
   activeUser = authResult.user;
+}
+
+if (!activeUser) {
+  throw new Error(
+    'You are not signed in. Please try again.'
+  );
 }
 
 // ----------------------------------------------------
@@ -402,13 +407,11 @@ stage = 'drive';
 const driveToken = await connectDrive();
 
 if (!driveToken) {
-  // connectDrive redirects the browser to Google.
-  // Do not reset the busy state during that redirect.
   redirecting = true;
   return;
-}
+} 
 
-if (!activeUser) {
+       {
   throw new Error(
     'You are not signed in. Please try again.'
   );
