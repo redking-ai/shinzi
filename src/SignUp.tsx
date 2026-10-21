@@ -5,7 +5,8 @@ import {
   type ChangeEvent,
 } from 'react';
 
-import type { User } from 'firebase/auth';
+import { onAuthStateChanged, type User } from 'firebase/auth';
+import { auth } from './firebaseConfig';
 
 import {
   createEmailAuthUser,
@@ -655,6 +656,28 @@ export default function SignUp({
         onBusyChange(false);
       }
     };
+
+// Back from Google: restore the text fields, and if the
+// account already exists, go straight to step 2.
+useEffect(() => {
+  try {
+    const raw = sessionStorage.getItem('shinzi_signup_draft');
+    if (raw) {
+      const d = JSON.parse(raw);
+      setName(d.name ?? '');
+      setUsername(d.username ?? '');
+      setGender(d.gender ?? '');
+      setDay(d.day ?? '');
+      setMonth(d.month ?? '');
+      setYear(d.year ?? '');
+      sessionStorage.removeItem('shinzi_signup_draft');
+    }
+  } catch {}
+
+  return onAuthStateChanged(auth, (u) => {
+    if (u) setStep(2);
+  });
+}, []);
 
   // ----------------------------------------------------------
   // CLEAN OBJECT URL
