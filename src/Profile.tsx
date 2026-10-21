@@ -65,6 +65,17 @@ export default function Profile() {
   const [assetLoading, setAssetLoading] = useState(false);
 const [assetError, setAssetError] = useState('');
 const [retryAssets, setRetryAssets] = useState(0);
+ const [showAssetError, setShowAssetError] = useState(false);
+
+// only reveal the error if it is still there after 10 seconds
+useEffect(() => {
+  if (!assetError) {
+    setShowAssetError(false);
+    return;
+  }
+  const t = setTimeout(() => setShowAssetError(true), 10000);
+  return () => clearTimeout(t);
+}, [assetError]);
   const [profileImageUri, setProfileImageUri] = useState('');
   const [bannerImageUri, setBannerImageUri] = useState('');
   const [activeTab, setActiveTab] = useState<ProfileTab>('Personal');
