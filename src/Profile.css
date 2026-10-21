@@ -738,66 +738,56 @@ body {
   color: var(--sh-muted);
 }
 
-/* Profile status thought bubble — below avatar, above Edit Profile */
+
+/* ===== Thought bubble: top-right of avatar (like image 2) ===== */
 .sh-profile-bubble {
-  order: 3;
-  align-self: flex-start;
-  position: relative;
-  z-index: 5;
+  position: absolute;
+  order: 0;
+  z-index: 6;
+  margin: 0;
+  /* desktop: banner 210 - avatar overlap 52 = avatar top at 158 */
+  top: 124px;
+  left: 168px;
   width: fit-content;
-  max-width: calc(100% - 78px);
-  margin: -6px 26px 0 52px;
-  padding: 8px 16px;
-  border: 1px solid var(--sh-line-strong);
-  border-radius: 18px;
-  background: var(--sh-surface-2);
-  color: var(--sh-text);
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-  box-shadow:
-    0 6px 16px rgba(0, 0, 0, 0.38),
-    0 0 12px rgba(118, 43, 255, 0.14);
+  max-width: calc(100% - 190px);
+  padding: 7px 15px;
+  white-space: pre-wrap;
 }
 
-/* Smallest thought dot near the avatar's lower curve */
+/* dots go from the bubble down-left toward the avatar */
 .sh-profile-bubble::before {
-  content: "";
-  position: absolute;
-  left: -18px;
-  top: -7px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--sh-surface-2);
-  border: 1px solid var(--sh-line-strong);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  left: -22px;
+  top: auto;
+  bottom: -9px;
+  width: 6px;
+  height: 6px;
 }
 
-/* Medium thought dot leading into the bubble */
 .sh-profile-bubble::after {
-  content: "";
-  position: absolute;
-  left: -10px;
-  top: 2px;
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background: var(--sh-surface-2);
-  border: 1px solid var(--sh-line-strong);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  left: -12px;
+  top: auto;
+  bottom: -4px;
+  width: 10px;
+  height: 10px;
 }
 
 @media (max-width: 600px) {
-  .sh-profile-edit-action {
-    padding: 16px 15px 0;
+  .sh-profile-bubble {
+    /* mobile: banner 160 - overlap 43 = avatar top at 117 */
+    top: 84px;
+    left: 118px;
+    max-width: calc(100% - 135px);
+    padding: 6px 13px;
+    font-size: 13px;
   }
 
-  .sh-profile-bubble {
-   margin: -6px 15px 0 38px;
-    max-width: calc(100% - 53px);
-    padding: 7px 14px;
-    font-size: 13.5px;
+  .sh-profile-bubble::before {
+    left: -19px;
+    bottom: -8px;
+  }
+
+  .sh-profile-bubble::after {
+    left: -10px;
+    bottom: -4px;
   }
 }
