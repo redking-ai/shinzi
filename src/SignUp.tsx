@@ -339,6 +339,7 @@ export default function SignUp({
       let createdAuthUser: User | null = null;
       let createdAssetId: string | null = null;
       let uploadedDriveFileId: string | null = null;
+    let redirecting = false;
 
       try {
         // ----------------------------------------------------
@@ -468,8 +469,8 @@ export default function SignUp({
           await createAssetRecord({
             assetId: profileAssetId,
 
-            ownerUid:
-              createdAuthUser.uid,
+            ownerUid: activeUser.uid,
+              
 
             type:
               ASSET_TYPES.PROFILE_PHOTO,
@@ -519,8 +520,9 @@ export default function SignUp({
         stage = 'profile';
 
         const profileResult =
-          await createUserProfile(
-            createdAuthUser,
+        await createUserProfile(
+  activeUser,  
+            
             {
               displayName:
                 name.trim(),
@@ -548,8 +550,8 @@ export default function SignUp({
         stage = 'done';
 
         void sendVerificationEmailSafe(
-          createdAuthUser
-        );
+  activeUser
+);
 
         setSuccessName(
           name.trim()
