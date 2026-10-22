@@ -5,7 +5,7 @@ import {
   serverTimestamp,
   writeBatch,
 } from 'firebase/firestore';
-import { Pencil } from 'lucide-react';
+import { Pencil, Plus } from 'lucide-react';
 import { auth, db } from './firebaseConfig';
 import { useDriveStore } from './driveStore';
 import './Profile.css';
