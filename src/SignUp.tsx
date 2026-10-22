@@ -867,24 +867,24 @@ useEffect(() => {
 
   setStep(2);
 
+  
   const shouldResume =
     sessionStorage.getItem('shinzi_signup_resume') === 'true';
 
   if (!shouldResume) return;
 
-  // Wait until the saved profile photo and fields are restored.
+  // Restore the saved form before attempting signup.
   await restoreDraft();
 
   if (cancelled) return;
 
-  sessionStorage.removeItem('shinzi_signup_resume');
-
-  // Resume after React has restored the form state.
+  // Keep the resume flag until signup actually succeeds.
   window.setTimeout(() => {
     if (!cancelled) {
       void executeSignUp();
     }
-  }, 300);
+  }, 500);
+
 });
 
   return () => {
