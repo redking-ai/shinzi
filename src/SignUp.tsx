@@ -411,11 +411,8 @@ if (!driveToken) {
   return;
 } 
 
-       {
-  throw new Error(
-    'You are not signed in. Please try again.'
-  );
-}
+       
+ 
 
         // ----------------------------------------------------
         // 3. USERNAME AVAILABILITY
