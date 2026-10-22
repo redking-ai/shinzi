@@ -706,6 +706,7 @@ const uploadResult =
 
  await clearSignupImage();
 sessionStorage.removeItem('shinzi_signup_draft');
+sessionStorage.removeItem('shinzi_signup_resume');
 
         void sendVerificationEmailSafe(
   activeUser
