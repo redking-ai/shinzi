@@ -592,9 +592,11 @@ useEffect(() => {
             <p className="sh-username">
               @{userData.username || 'username'}
             </p>
-            <p className="sh-pronouns">
-              {pronouns(String(userData.gender ?? ''))}
-            </p>
+                        {userData.pronouns && (
+              <p className="sh-pronouns">
+                {String(userData.pronouns)}
+              </p>
+            )}
           </div>
         </div>
 
