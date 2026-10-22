@@ -703,19 +703,18 @@ useEffect(() => {
               />
             </label>
 
-            <label>
-              Profile bubble
+                        <label>
+              Pronouns
               <input
-                maxLength={100}
-                value={editForm.bubleText}
+                maxLength={20}
+                placeholder="Add your pronouns"
+                value={editForm.pronouns}
                 onChange={(e) =>
-                  setEditForm((v) => ({
-                    ...v,
-                    bubleText: e.target.value,
-                  }))
+                  setEditForm((v) => ({ ...v, pronouns: e.target.value }))
                 }
               />
             </label>
+              
 
             <div className="sh-edit-actions">
               <button
