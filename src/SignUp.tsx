@@ -503,6 +503,10 @@ sessionStorage.setItem(
     year,
   })
 );
+sessionStorage.setItem(
+  'shinzi_signup_resume',
+  'true'
+);
 
 // ----------------------------------------------------
 // 3. GOOGLE DRIVE PERMISSION
