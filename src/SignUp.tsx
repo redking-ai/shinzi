@@ -353,11 +353,7 @@ setProfileImage({
   size: file.size,
 });
       
-      
-      mimeType: file.type || 'image/jpeg',
-      name: file.name,
-      size: file.size,
-    });
+     
 
     event.target.value = '';
   };
