@@ -82,6 +82,7 @@ useEffect(() => {
     username: '',
     bio: '',
     bubleText: '',
+     pronouns: '',
   });
 
   const resetEditForm = useCallback((data: AnyRecord) => {
@@ -90,6 +91,7 @@ useEffect(() => {
       username: String(data.username ?? ''),
       bio: String(data.bio ?? ''),
       bubleText: String(data.bubleText ?? ''),
+      pronouns: String(data.pronouns ?? ''),
     });
   }, []);
 
