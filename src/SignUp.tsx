@@ -852,9 +852,7 @@ useEffect(() => {
         });
       }
 
-      if (raw) {
-        sessionStorage.removeItem('shinzi_signup_draft');
-      }
+    
     } catch (error) {
       console.error('[SIGNUP] Could not restore draft:', error);
     }
