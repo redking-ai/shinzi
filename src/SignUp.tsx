@@ -814,25 +814,63 @@ const uploadResult =
 
 // Back from Google: restore the text fields, and if the
 // account already exists, go straight to step 2.
-useEffect(() => {
-  try {
-    const raw = sessionStorage.getItem('shinzi_signup_draft');
-    if (raw) {
-      const d = JSON.parse(raw);
-      setName(d.name ?? '');
-      setUsername(d.username ?? '');
-      setGender(d.gender ?? '');
-      setDay(d.day ?? '');
-      setMonth(d.month ?? '');
-      setYear(d.year ?? '');
-      sessionStorage.removeItem('shinzi_signup_draft');
-    }
-  } catch {}
 
-  return onAuthStateChanged(auth, (u) => {
+useEffect(() => {
+  let cancelled = false;
+
+  const restoreDraft = async () => {
+    try {
+      const raw = sessionStorage.getItem('shinzi_signup_draft');
+
+      if (raw) {
+        const d = JSON.parse(raw);
+
+        if (cancelled) return;
+
+        setName(d.name ?? '');
+        setUsername(d.username ?? '');
+        setGender(d.gender ?? '');
+        setDay(d.day ?? '');
+        setMonth(d.month ?? '');
+        setYear(d.year ?? '');
+      }
+
+      const savedFile = await restoreSignupImage();
+
+      if (cancelled) return;
+
+      if (savedFile) {
+        setProfileImage({
+          file: savedFile,
+          uri: URL.createObjectURL(savedFile),
+          mimeType: savedFile.type || 'image/jpeg',
+          name: savedFile.name,
+          size: savedFile.size,
+        });
+      }
+
+      if (raw) {
+        sessionStorage.removeItem('shinzi_signup_draft');
+      }
+    } catch (error) {
+      console.error('[SIGNUP] Could not restore draft:', error);
+    }
+  };
+
+  void restoreDraft();
+
+  const unsubscribe = onAuthStateChanged(auth, (u) => {
     if (u) setStep(2);
   });
+
+  return () => {
+    cancelled = true;
+    unsubscribe();
+  };
 }, []);
+
+  
+ 
 
   // ----------------------------------------------------------
   // CLEAN OBJECT URL
