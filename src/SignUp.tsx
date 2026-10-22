@@ -470,13 +470,7 @@ const {
 
         stage = 'upload';
 
-       const imageToUpload = profileImage;
-
-if (!imageToUpload) {
-  throw new Error(
-    'Your profile photo is missing. Please select it again.'
-  );
-}
+    
 
 const uploadResult =
   await uploadFile({
