@@ -510,6 +510,12 @@ const uploadResult =
         // ----------------------------------------------------
 
         stage = 'assetRecord';
+ 
+   if (!activeUser) {
+  throw new Error(
+    'You are not signed in. Please try again.'
+  );
+}
 
         const asset =
           await createAssetRecord({
