@@ -346,7 +346,8 @@ useEffect(() => {
       const updates: AnyRecord = {
         displayName,
         bio: editForm.bio.trim().slice(0, 300),
-        bubleText: editForm.bubleText.trim().slice(0, 100),
+                bubleText: editForm.bubleText.trim().slice(0, 100),
+        pronouns: editForm.pronouns.trim().slice(0, 20),
         updatedAt: serverTimestamp(),
       };
 
