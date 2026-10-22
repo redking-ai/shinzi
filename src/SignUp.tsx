@@ -853,6 +853,7 @@ useEffect(() => {
           size: savedFile.size,
         });
       }
+ setDraftRestored(true);
 
     
     } catch (error) {
