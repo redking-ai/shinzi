@@ -702,6 +702,9 @@ const uploadResult =
 
         stage = 'done';
 
+ await clearSignupImage();
+sessionStorage.removeItem('shinzi_signup_draft');
+
         void sendVerificationEmailSafe(
   activeUser
 );
