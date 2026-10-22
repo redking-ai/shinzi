@@ -937,3 +937,41 @@ body {
     left: -10px;
   }
 }
+/* "+ Add thought" bubble (view) and inline input (edit) */
+.sh-profile-bubble.sh-bubble-add,
+.sh-profile-bubble.sh-bubble-editing {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+}
+
+.sh-bubble-add {
+  cursor: pointer;
+  color: var(--sh-muted);
+}
+
+.sh-bubble-add:hover {
+  color: var(--sh-text);
+  border-color: var(--sh-accent);
+}
+
+.sh-bubble-editing {
+  color: var(--sh-muted);
+}
+
+.sh-bubble-input {
+  width: 150px;
+  max-width: 100%;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--sh-text);
+  font: inherit;
+}
+
+.sh-bubble-input::placeholder {
+  color: var(--sh-muted);
+  font-style: italic;
+}
