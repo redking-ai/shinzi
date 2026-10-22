@@ -862,9 +862,30 @@ useEffect(() => {
 
   void restoreDraft();
 
-  const unsubscribe = onAuthStateChanged(auth, (u) => {
-    if (u) setStep(2);
-  });
+  const unsubscribe = onAuthStateChanged(auth, async (u) => {
+  if (!u || cancelled) return;
+
+  setStep(2);
+
+  const shouldResume =
+    sessionStorage.getItem('shinzi_signup_resume') === 'true';
+
+  if (!shouldResume) return;
+
+  // Wait until the saved profile photo and fields are restored.
+  await restoreDraft();
+
+  if (cancelled) return;
+
+  sessionStorage.removeItem('shinzi_signup_resume');
+
+  // Resume after React has restored the form state.
+  window.setTimeout(() => {
+    if (!cancelled) {
+      void executeSignUp();
+    }
+  }, 300);
+});
 
   return () => {
     cancelled = true;
