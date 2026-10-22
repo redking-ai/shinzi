@@ -44,12 +44,6 @@ function dateLabel(value: any): string {
     : 'A Shinzi member';
 }
 
-function pronouns(gender: string): string {
-  if (gender?.toLowerCase() === 'male') return 'He/Him';
-  if (gender?.toLowerCase() === 'female') return 'She/Her';
-  return '';
-}
-
 function messageOf(error: unknown): string {
   return error instanceof Error
     ? error.message
