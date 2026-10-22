@@ -877,6 +877,42 @@ useEffect(() => {
   };
 }, []);
 
+
+useEffect(() => {
+  if (!draftRestored || !isDriveReady || !profileImage) {
+    return;
+  }
+
+  if (sessionStorage.getItem('shinzi_signup_resume') !== 'true') {
+    return;
+  }
+
+  if (resumeStartedRef.current) return;
+
+  if (
+    !name.trim() ||
+    !/^[a-z0-9_]{3,15}$/.test(username.trim().toLowerCase()) ||
+    !isValidDate(day, month, year) ||
+    !gender
+  ) {
+    return;
+  }
+
+  resumeStartedRef.current = true;
+  void executeSignUp();
+}, [
+  draftRestored,
+  isDriveReady,
+  profileImage,
+  name,
+  username,
+  day,
+  month,
+  year,
+  gender,
+]);
+
+
   
  
 
