@@ -616,11 +616,38 @@ useEffect(() => {
           </div>
         )}
 
-        {userData.bubleText && (
+                {isEditing ? (
+          <div className="sh-profile-bubble sh-bubble-editing">
+            <Plus size={16} aria-hidden="true" />
+            <input
+              className="sh-bubble-input"
+              aria-label="Thought"
+              placeholder="Add thought"
+              maxLength={100}
+              value={editForm.bubleText}
+              onChange={(e) =>
+                setEditForm((v) => ({ ...v, bubleText: e.target.value }))
+              }
+            />
+          </div>
+        ) : userData.bubleText ? (
           <div className="sh-profile-bubble">
             {String(userData.bubleText)}
           </div>
+        ) : (
+          <button
+            type="button"
+            className="sh-profile-bubble sh-bubble-add"
+            onClick={() => {
+              setError('');
+              setIsEditing(true);
+            }}
+          >
+            <Plus size={16} aria-hidden="true" />
+            <span>Add thought</span>
+          </button>
         )}
+     
 
         {isEditing ? (
           <section className="sh-edit-panel">
