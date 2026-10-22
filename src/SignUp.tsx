@@ -45,6 +45,101 @@ interface ProfileImage {
   size: number;
 }
 
+
+const SIGNUP_IMAGE_DB = 'shinzi-signup-storage';
+const SIGNUP_IMAGE_STORE = 'drafts';
+const SIGNUP_IMAGE_KEY = 'profile-photo';
+
+function openSignupImageDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(SIGNUP_IMAGE_DB, 1);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+
+      if (!db.objectStoreNames.contains(SIGNUP_IMAGE_STORE)) {
+        db.createObjectStore(SIGNUP_IMAGE_STORE);
+      }
+    };
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function saveSignupImage(file: File): Promise<void> {
+  const db = await openSignupImageDB();
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction(
+        SIGNUP_IMAGE_STORE,
+        'readwrite'
+      );
+
+      transaction.objectStore(SIGNUP_IMAGE_STORE).put(
+        file,
+        SIGNUP_IMAGE_KEY
+      );
+
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+  } finally {
+    db.close();
+  }
+}
+
+async function restoreSignupImage(): Promise<File | null> {
+  const db = await openSignupImageDB();
+
+  try {
+    return await new Promise<File | null>((resolve, reject) => {
+      const transaction = db.transaction(
+        SIGNUP_IMAGE_STORE,
+        'readonly'
+      );
+
+      const request = transaction
+        .objectStore(SIGNUP_IMAGE_STORE)
+        .get(SIGNUP_IMAGE_KEY);
+
+      request.onsuccess = () => {
+        resolve(request.result instanceof File ? request.result : null);
+      };
+
+      request.onerror = () => reject(request.error);
+    });
+  } finally {
+    db.close();
+  }
+}
+
+async function clearSignupImage(): Promise<void> {
+  const db = await openSignupImageDB();
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction(
+        SIGNUP_IMAGE_STORE,
+        'readwrite'
+      );
+
+      transaction.objectStore(SIGNUP_IMAGE_STORE).delete(
+        SIGNUP_IMAGE_KEY
+      );
+
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+  } finally {
+    db.close();
+  }
+}
+
+
 interface FormError {
   message: string;
   ref?: string;
