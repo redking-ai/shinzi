@@ -463,14 +463,24 @@ if (!driveToken) {
 
         stage = 'upload';
 
-        const uploadResult =
-          await uploadFile({
-            file: profileImage.file,
-            localUri: profileImage.uri,
-            fileName,
-            mimeType,
-            folderType: 'profiles',
-          });
+       const imageToUpload = profileImage;
+
+if (!imageToUpload) {
+  throw new Error(
+    'Your profile photo is missing. Please select it again.'
+  );
+}
+
+const uploadResult =
+  await uploadFile({
+    file: imageToUpload.file,
+    localUri: imageToUpload.uri,
+    fileName,
+    mimeType,
+    folderType: 'profiles',
+  });
+         
+         
 
         if (
           !uploadResult ||
