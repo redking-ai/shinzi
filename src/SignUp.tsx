@@ -867,24 +867,7 @@ useEffect(() => {
   if (!u || cancelled) return;
 
   setStep(2);
-
-  
-  const shouldResume =
-    sessionStorage.getItem('shinzi_signup_resume') === 'true';
-
-  if (!shouldResume) return;
-
-  // Restore the saved form before attempting signup.
-  await restoreDraft();
-
-  if (cancelled) return;
-
-  // Keep the resume flag until signup actually succeeds.
-  window.setTimeout(() => {
-    if (!cancelled) {
-      void executeSignUp();
-    }
-  }, 500);
+    
 
 });
 
