@@ -166,6 +166,8 @@ export default function SignUp({
 
   // Guards against a double tap before state has updated.
   const submittingRef = useRef(false);
+  const resumeStartedRef = useRef(false);
+const [draftRestored, setDraftRestored] = useState(false);
 
   const {
     isReady: isDriveReady,
