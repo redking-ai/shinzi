@@ -448,14 +448,24 @@ if (!driveToken) {
         createdAssetId =
           profileAssetId;
 
-        const {
-          fileName,
-          mimeType,
-        } =
-          getImageUploadInfo(
-            profileImage,
-            profileAssetId
-          );
+          const imageToUpload = profileImage;
+
+if (!imageToUpload) {
+  throw new Error(
+    'Your profile photo is missing. Please select it again.'
+  );
+}
+
+const {
+  fileName,
+  mimeType,
+} = getImageUploadInfo(
+  imageToUpload,
+  profileAssetId
+);
+          
+         
+       
 
         // ----------------------------------------------------
         // 5. UPLOAD PROFILE PHOTO
