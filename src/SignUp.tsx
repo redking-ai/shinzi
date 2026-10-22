@@ -336,9 +336,24 @@ export default function SignUp({
 
     setFormError(null);
 
-    setProfileImage({
-      file,
-      uri: URL.createObjectURL(file),
+    void saveSignupImage(file).catch((error) => {
+  console.error('[SIGNUP] Could not save photo draft:', error);
+
+  setFormError({
+    message:
+      'Could not preserve your photo for Google sign-in. Please try a smaller image or select it again.',
+  });
+});
+
+setProfileImage({
+  file,
+  uri: URL.createObjectURL(file),
+  mimeType: file.type || 'image/jpeg',
+  name: file.name,
+  size: file.size,
+});
+      
+      
       mimeType: file.type || 'image/jpeg',
       name: file.name,
       size: file.size,
