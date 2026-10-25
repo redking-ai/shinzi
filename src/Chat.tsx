@@ -271,7 +271,7 @@ export default function Chat({ onNavigate }: ChatProps) {
   const [activeTab, setActiveTab] = useState<Tab>('All');
   const [selected, setSelected] = useState<Rec | null>(null);
 
-  const [chatFilter, setChatFilter] = useState('');
+  const [chatFilter ] = useState('');
   const [userQuery, setUserQuery] = useState('');
   const [searchResult, setSearchResult] = useState<Rec | null>(null);
   const [searching, setSearching] = useState(false);
