@@ -975,3 +975,66 @@ body {
   color: var(--sh-muted);
   font-style: italic;
 }
+
+/* Other profile: Discord-inspired action row */
+.sh-other-profile-actions {
+  order: 4;
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  width: 100%;
+  padding: 20px 26px 0;
+}
+
+.sh-other-profile-actions button {
+  min-height: 50px;
+  border-radius: 12px;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.sh-other-add-friend {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid #762bff;
+  background: linear-gradient(90deg, #3020a0, #762bff);
+  color: #fff;
+}
+
+.sh-other-action-button {
+  flex: 0 0 54px;
+  border: 1px solid #39265d;
+  background: #17102a;
+  color: #fff;
+}
+
+.sh-other-action-label {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .sh-other-profile-actions {
+    padding: 18px 15px 0;
+    gap: 8px;
+  }
+
+  .sh-other-profile-actions:has(.sh-other-add-friend)
+    .sh-other-action-button {
+    flex: 0 0 50px;
+  }
+
+  .sh-other-profile-actions:not(:has(.sh-other-add-friend))
+    .sh-other-action-button {
+    flex: 1;
+  }
+
+  .sh-other-profile-actions:not(:has(.sh-other-add-friend))
+    .sh-other-action-label {
+    display: inline;
+  }
+}
