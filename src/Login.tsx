@@ -105,10 +105,6 @@ export default function Login({
        * App.tsx automatically changes the screen.
        */
 
-      window.alert(
-        `Success\n\nWelcome back, ${user.email}!`
-      );
-
 // Start Google Drive authorization after login.
       // Force Google account selection and permission consent.
       await connectDrive(true);
