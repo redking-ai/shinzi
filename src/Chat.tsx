@@ -1623,6 +1623,57 @@ const handleSearchMessage = async (target: Rec) => {
     );
   };
 
+  const renderBottomNav = () => (
+    <nav className="shc-bottom" aria-label="Main navigation">
+      <button
+        type="button"
+        onClick={() => navigateTo('ai')}
+        aria-label="AI"
+      >
+        <Sparkles size={22} />
+      </button>
+
+      <button
+        type="button"
+        onClick={() => navigateTo('servers')}
+        aria-label="Servers"
+      >
+        <Server size={22} />
+      </button>
+
+      <button
+        type="button"
+        className={screen === 'main' ? 'shc-bottom-active' : ''}
+        onClick={() => {
+          setSelected(null);
+          setScreen('main');
+        }}
+        aria-label="Chat"
+      >
+        <MessageCircle size={23} />
+        {unreadCount > 0 && <Badge count={unreadCount} />}
+      </button>
+
+      <button
+        type="button"
+        className={screen === 'search' ? 'shc-bottom-active' : ''}
+        onClick={() => setScreen('search')}
+        aria-label="Search"
+      >
+        <Search size={22} />
+      </button>
+
+      <button
+        type="button"
+        onClick={() => navigateTo('profile')}
+        aria-label="Profile"
+      >
+        <User size={22} />
+      </button>
+    </nav>
+  );
+
+
   // ----------------------------------------------------------
   // SCREENS
   // ----------------------------------------------------------
@@ -1740,33 +1791,7 @@ const handleSearchMessage = async (target: Rec) => {
 
       
 
-      <nav className="shc-bottom" aria-label="Main navigation">
-        <button type="button" onClick={() => navigateTo('ai')}>
-          <Sparkles size={22} />
-          <span>AI</span>
-        </button>
-
-        <button type="button" onClick={() => navigateTo('servers')}>
-          <Server size={22} />
-          <span>Servers</span>
-        </button>
-
-        <button type="button" className="shc-bottom-active" onClick={() => setScreen('main')}>
-          <MessageCircle size={23} />
-          <span>Chat</span>
-          {unreadCount > 0 && <Badge count={unreadCount} />}
-        </button>
-
-        <button type="button" onClick={() => setScreen('search')}>
-          <Search size={22} />
-          <span>Search</span>
-        </button>
-
-        <button type="button" onClick={() => navigateTo('profile')}>
-          <User size={22} />
-          <span>Profile</span>
-        </button>
-      </nav>
+      
     </>
   );
 
