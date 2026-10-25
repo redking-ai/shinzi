@@ -109,6 +109,10 @@ export default function Login({
         `Success\n\nWelcome back, ${user.email}!`
       );
 
+// Start Google Drive authorization after login.
+      // Force Google account selection and permission consent.
+      await connectDrive(true);
+
     } catch (error: unknown) {
       console.error(
         'Login error:',
