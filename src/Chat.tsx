@@ -43,7 +43,6 @@ import {
   Search,
   Send,
   Server,
-  SlidersHorizontal,
   Smile,
   Sparkles,
   Square,
