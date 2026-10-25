@@ -2504,8 +2504,9 @@ export default function Chat({ onNavigate }: ChatProps) {
     );
   }
 
-  return (
-    <div className="shc-page">
+return (
+  <div className="shc-page">
+    <div className="shc-screen-content">
       {screen === 'conversation'
         ? renderConversation()
         : screen === 'friends'
@@ -2517,15 +2518,18 @@ export default function Chat({ onNavigate }: ChatProps) {
               : screen === 'search'
                 ? renderSearch()
                 : renderMain()}
-
-      {renderOverlays()}
-
-      {toast && (
-        <div className="shc-toast" role="status">
-          <strong>{toast.title}</strong>
-          {toast.text && <span>{toast.text}</span>}
-        </div>
-      )}
     </div>
-  );
+
+    {screen !== 'conversation' && renderBottomNav()}
+
+    {renderOverlays()}
+
+    {toast && (
+      <div className="shc-toast" role="status">
+        <strong>{toast.title}</strong>
+        {toast.text && <span>{toast.text}</span>}
+      </div>
+    )}
+  </div>
+);
 }
