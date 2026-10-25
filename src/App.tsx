@@ -21,6 +21,7 @@ import Privacy from './Privacy';
 import Terms from './Terms';
 import SignUp from './SignUp';
 import Login from './Login';
+import Chat from './Chat';
 
 import background from './assets/background.png';
 import logo from './assets/logo.png';
@@ -141,6 +142,14 @@ if (window.location.pathname === '/terms') {
 
 if (window.location.pathname === '/privacy') {
   return <Privacy />;
+}
+
+// ==========================================================
+// SHINZI CHAT
+// ==========================================================
+
+if (window.location.pathname.toLowerCase() === '/chat') {
+  return <Chat />;
 }
   // ==========================================================
   // AUTH LOADING
