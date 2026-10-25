@@ -45,7 +45,13 @@ export default {
       );
       googleUrl.searchParams.set("access_type", "offline");
       googleUrl.searchParams.set("include_granted_scopes", "true");
-      googleUrl.searchParams.set("prompt", "consent");
+            const body = await request.json().catch(() => ({}));
+      const switchAccount = body?.switchAccount === true;
+
+      googleUrl.searchParams.set(
+        "prompt",
+        switchAccount ? "select_account consent" : "consent"
+      );
       googleUrl.searchParams.set("state", state);
 
       return Response.json({ url: googleUrl.toString() });
