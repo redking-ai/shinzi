@@ -16,6 +16,7 @@ interface LoginProps {
 export default function Login({
   onBack,
 }: LoginProps) {
+  const { connectDrive } = useDriveStore();
   const [identity, setIdentity] = useState('');
   const [password, setPassword] = useState('');
 
