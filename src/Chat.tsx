@@ -699,6 +699,31 @@ export default function Chat({ onNavigate }: ChatProps) {
       notify('Unable to open chat', messageOf(error));
     }
   };
+const handleSearchMessage = async (target: Rec) => {
+  if (!uid || !target?.id || target.id === uid) return;
+
+  const existingConversation = conversations.find(
+    (conversation) =>
+      conversation.type !== 'group' &&
+      conversation.memberIds?.includes(uid) &&
+      conversation.memberIds?.includes(target.id),
+  );
+
+  if (existingConversation) {
+    await openConversation(existingConversation);
+    return;
+  }
+
+  const isFriend = friends.some((friend) => friend.id === target.id);
+
+  if (isFriend) {
+    await openDirectConversation(target);
+    return;
+  }
+
+  await sendRequest('dmRequests', target);
+};
+
 
   const publishTyping = async (typing: boolean) => {
     if (!uid || !selected?.id) return;
