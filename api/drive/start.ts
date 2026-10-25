@@ -43,10 +43,15 @@ export default {
         "scope",
         "openid email https://www.googleapis.com/auth/drive.file"
       );
-      googleUrl.searchParams.set("access_type", "offline");
+            googleUrl.searchParams.set("access_type", "offline");
       googleUrl.searchParams.set("include_granted_scopes", "true");
-            const body = await request.json().catch(() => ({}));
-      const switchAccount = body?.switchAccount === true;
+
+      const body: { switchAccount?: boolean } =
+        await request.json().catch(
+          (): { switchAccount?: boolean } => ({})
+        );
+
+      const switchAccount = body.switchAccount === true;
 
       googleUrl.searchParams.set(
         "prompt",
