@@ -65,7 +65,7 @@ export default function OtherProfile({
   const [banner, setBanner] = useState('');
   const [tab, setTab] = useState<ProfileTab>('Social');
   const [menuOpen, setMenuOpen] = useState(false);
-const [isFriend, setIsFriend] = useState(false);
+const [isFriend ] = useState(false);
 
   const [relationship, setRelationship] = useState({
     favourite: false,
