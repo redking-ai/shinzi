@@ -1605,84 +1605,41 @@ export default function Chat({ onNavigate }: ChatProps) {
 
   const renderMain = () => (
     <>
-      <header className="shc-header">
-        <div>
-          <h1>Chats</h1>
-          <p>{profile?.displayName || profile?.username || 'Shinzi'}</p>
-        </div>
+     <header className="shc-header">
+  <h1>Chats</h1>
 
-        <div className="shc-header-actions">
-          <button
-            type="button"
-            className="shc-icon-btn"
-            onClick={() => setShowModes(true)}
-            aria-label="Modes"
-          >
-            <SlidersHorizontal size={21} />
-          </button>
+  <div className="shc-header-actions">
+    <button
+      type="button"
+      className="shc-icon-btn"
+      onClick={() => setScreen('dmRequests')}
+      aria-label="DM requests"
+    >
+      <Mail size={21} />
+      {dmRequests.length > 0 && <Badge count={dmRequests.length} />}
+    </button>
 
-          <button
-            type="button"
-            className="shc-icon-btn"
-            onClick={() => setScreen('dmRequests')}
-            aria-label="DM requests"
-          >
-            <Mail size={21} />
-            {dmRequests.length > 0 && <Badge count={dmRequests.length} />}
-          </button>
+    <button
+      type="button"
+      className="shc-icon-btn"
+      onClick={() => setScreen('friendRequests')}
+      aria-label="Friend requests"
+    >
+      <UserPlus size={21} />
+      {friendRequests.length > 0 && <Badge count={friendRequests.length} />}
+    </button>
 
-          <button
-            type="button"
-            className="shc-icon-btn"
-            onClick={() => setScreen('friendRequests')}
-            aria-label="Friend requests"
-          >
-            <UserPlus size={21} />
-            {friendRequests.length > 0 && <Badge count={friendRequests.length} />}
-          </button>
-
-          <button
-            type="button"
-            className="shc-icon-btn"
-            onClick={() => setShowGroup(true)}
-            aria-label="Create group"
-          >
-            <Users size={21} />
-          </button>
-        </div>
-      </header>
-
-      <div className="shc-searchrow">
-        <label className="shc-searchbox">
-          <Search size={18} />
-          <input
-            placeholder="Search chats"
-            value={chatFilter}
-            onChange={(e) => setChatFilter(e.target.value)}
-            autoCapitalize="none"
-            autoCorrect="off"
-          />
-          {chatFilter && (
-            <button
-              type="button"
-              className="shc-clear"
-              onClick={() => setChatFilter('')}
-              aria-label="Clear search"
-            >
-              <XCircle size={18} />
-            </button>
-          )}
-        </label>
-
-        <button
-          type="button"
-          className="shc-square-btn"
-          onClick={() => setScreen('search')}
-          aria-label="Find users"
-        >
-          <User size={20} />
-        </button>
-      </div>
+    <button
+      type="button"
+      className="shc-icon-btn"
+      onClick={() => setShowGroup(true)}
+      aria-label="Create group"
+    >
+      <Users size={21} />
+    </button>
+  </div>
+</header>
+      
 
       <nav className="shc-tabs" aria-label="Chat filters">
         {TABS.map((tab) => (
@@ -1757,21 +1714,7 @@ export default function Chat({ onNavigate }: ChatProps) {
         )}
       </div>
 
-      <div className="shc-quick">
-        <button type="button" onClick={() => setScreen('friends')}>
-          <Users size={19} /> Friends
-        </button>
-
-        <button type="button" onClick={() => setScreen('friendRequests')}>
-          <UserPlus size={19} /> Requests
-          {friendRequests.length > 0 && <Badge count={friendRequests.length} />}
-        </button>
-
-        <button type="button" onClick={() => setScreen('dmRequests')}>
-          <Mail size={19} /> DM
-          {dmRequests.length > 0 && <Badge count={dmRequests.length} />}
-        </button>
-      </div>
+      
 
       <nav className="shc-bottom" aria-label="Main navigation">
         <button type="button" onClick={() => navigateTo('ai')}>
