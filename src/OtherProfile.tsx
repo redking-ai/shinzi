@@ -14,11 +14,7 @@ import './Profile.css';
 type AnyRecord = Record<string, any>;
 type ProfileTab = 'Personal' | 'Social';
 
-function pronouns(gender: string): string {
-  if (gender?.toLowerCase() === 'male') return 'He/Him';
-  if (gender?.toLowerCase() === 'female') return 'She/Her';
-  return '';
-}
+
 
 function dateLabel(value: any): string {
   if (!value) return 'A Shinzi member';
@@ -512,9 +508,11 @@ const [isFriend ] = useState(false);
               @{userData.username || 'username'}
             </p>
 
-            <p className="sh-pronouns">
-              {pronouns(String(userData.gender ?? ''))}
-            </p>
+            {userData.pronouns && (
+  <p className="sh-pronouns">
+    {String(userData.pronouns)}
+  </p>
+)}
           </div>
         </div>
 
