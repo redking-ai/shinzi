@@ -1900,31 +1900,48 @@ export default function Chat({ onNavigate }: ChatProps) {
             {searchResult.id !== uid && (
               <>
                 <button
-                  type="button"
-                  className="shc-circle"
-                  onClick={() => void sendRequest('friendRequests', searchResult)}
-                  aria-label="Send friend request"
-                >
-                  <UserPlus size={19} />
-                </button>
+  type="button"
+  className="shc-circle"
+  onClick={() => void sendRequest('friendRequests', searchResult)}
+  aria-label="Add friend"
+>
+  <UserPlus size={19} />
+</button>
 
-                <button
-                  type="button"
-                  className="shc-circle"
-                  onClick={() => void sendRequest('dmRequests', searchResult)}
-                  aria-label="Send DM request"
-                >
-                  <Mail size={19} />
-                </button>
+<button
+  type="button"
+  className="shc-circle"
+  onClick={() => {
+    setSelected({
+      id: directId(uid!, searchResult.id),
+      type: 'direct',
+      memberIds: [uid!, searchResult.id],
+      memberProfiles: {
+        [uid!]: {
+          displayName: profile?.displayName || profile?.username || 'User',
+          username: profile?.username || '',
+        },
+        [searchResult.id]: {
+          displayName: searchResult.displayName || searchResult.username || 'User',
+          username: searchResult.username || '',
+        },
+      },
+    });
+    startCallUI('voice');
+  }}
+  aria-label="Call"
+>
+  <Phone size={19} />
+</button>
 
-                <button
-                  type="button"
-                  className="shc-circle"
-                  onClick={() => void openDirectConversation(searchResult)}
-                  aria-label="Open chat"
-                >
-                  <MessageCircle size={19} />
-                </button>
+<button
+  type="button"
+  className="shc-circle"
+  onClick={() => void handleSearchMessage(searchResult)}
+  aria-label="Message"
+>
+  <MessageCircle size={19} />
+</button>
               </>
             )}
           </div>
