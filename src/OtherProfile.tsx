@@ -65,6 +65,7 @@ export default function OtherProfile({
   const [banner, setBanner] = useState('');
   const [tab, setTab] = useState<ProfileTab>('Social');
   const [menuOpen, setMenuOpen] = useState(false);
+const [isFriend, setIsFriend] = useState(false);
 
   const [relationship, setRelationship] = useState({
     favourite: false,
@@ -373,6 +374,43 @@ export default function OtherProfile({
           </button>
         </div>
       </header>
+   <div className="sh-other-profile-actions">
+  {!isFriend && (
+    <button
+      type="button"
+      className="sh-other-add-friend"
+      onClick={() => {
+        // Friend request system will be connected later.
+        setError('Friend requests are not connected yet.');
+      }}
+    >
+      <span aria-hidden="true"></span>
+      Add Friend
+    </button>
+  )}
+
+  <button
+    type="button"
+    className="sh-other-action-button"
+    onClick={() => {
+      setError('Chat will be connected when chat.tsx is ready.');
+    }}
+  >
+    <span aria-hidden="true"></span>
+    {!isFriend && <span className="sh-other-action-label">Message</span>}
+  </button>
+
+  <button
+    type="button"
+    className="sh-other-action-button"
+    onClick={() => {
+      setError('Calling is not connected yet.');
+    }}
+  >
+    <span aria-hidden="true"></span>
+    {!isFriend && <span className="sh-other-action-label">Call</span>}
+  </button>
+</div>
 
       {menuOpen && (
         <div className="sh-profile-menu" role="menu">
