@@ -1,12 +1,17 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
+  collection,
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
+  query,
   serverTimestamp,
   setDoc,
+  where,
 } from 'firebase/firestore';
+import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { auth, db } from './firebaseConfig';
 import { useDriveStore } from './driveStore';
 import './Profile.css';
@@ -48,7 +53,16 @@ export default function OtherProfile({
   onBack?: () => void;
 }) {
   const drive = useDriveStore();
-  const currentUser = auth.currentUser;
+  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(
+    () => auth.currentUser,
+  );
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setCurrentUser(u);
+    });
+    return unsubscribe;
+  }, []);
 
   const targetUid =
     targetUidProp ||
@@ -61,7 +75,79 @@ export default function OtherProfile({
   const [banner, setBanner] = useState('');
   const [tab, setTab] = useState<ProfileTab>('Social');
   const [menuOpen, setMenuOpen] = useState(false);
-const [isFriend ] = useState(false);
+  const [isFriend] = useState(false);
+
+  const [mutualFriendsCount, setMutualFriendsCount] = useState<number>(0);
+  const [mutualServersCount, setMutualServersCount] = useState<number>(0);
+  const [loadingMutuals, setLoadingMutuals] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (!currentUser || !targetUid) {
+      setMutualFriendsCount(0);
+      setMutualServersCount(0);
+      setLoadingMutuals(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function computeMutuals() {
+      setLoadingMutuals(true);
+      try {
+        const [myFriendsSnap, targetFriendsSnap] = await Promise.all([
+          getDocs(collection(db, 'users', currentUser!.uid, 'friends')).catch(
+            () => null,
+          ),
+          getDocs(collection(db, 'users', targetUid, 'friends')).catch(
+            () => null,
+          ),
+        ]);
+
+        if (cancelled) return;
+
+        let calculatedMutualFriends = 0;
+        if (myFriendsSnap && targetFriendsSnap) {
+          const myFriendIds = new Set(myFriendsSnap.docs.map((d) => d.id));
+          calculatedMutualFriends = targetFriendsSnap.docs.filter((d) =>
+            myFriendIds.has(d.id),
+          ).length;
+        }
+
+        let calculatedMutualServers = 0;
+        try {
+          const myServersSnap = await getDocs(
+            query(
+              collection(db, 'servers'),
+              where('memberIds', 'array-contains', currentUser!.uid),
+            ),
+          );
+          if (!cancelled && myServersSnap && !myServersSnap.empty) {
+            calculatedMutualServers = myServersSnap.docs.filter((docSnap) => {
+              const members = docSnap.data()?.memberIds;
+              return Array.isArray(members) && members.includes(targetUid);
+            }).length;
+          }
+        } catch {
+          calculatedMutualServers = 0;
+        }
+
+        if (!cancelled) {
+          setMutualFriendsCount(calculatedMutualFriends);
+          setMutualServersCount(calculatedMutualServers);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingMutuals(false);
+        }
+      }
+    }
+
+    void computeMutuals();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser, targetUid]);
 
   const [relationship, setRelationship] = useState({
     favourite: false,
@@ -615,21 +701,30 @@ const [isFriend ] = useState(false);
             <h3>Social stats</h3>
 
             <div className="sh-stats-grid">
-              {Object.entries({
-                Friends: stats.friendsCount ?? 0,
-                Followers: stats.followersCount ?? 0,
-                'Mutual friends': stats.mutualFriends ?? 0,
-                'Mutual servers': stats.mutualServers ?? 0,
-                'Servers joined': stats.serversJoined ?? 0,
-              }).map(([label, value]) => (
-                <div
-                  className="sh-stat-tile"
-                  key={label}
-                >
-                  <strong>{Number(value) || 0}</strong>
-                  <span>{label}</span>
-                </div>
-              ))}
+              <div className="sh-stat-tile">
+                <strong>{Number(stats.friendsCount) || 0}</strong>
+                <span>Friends</span>
+              </div>
+              <div className="sh-stat-tile">
+                <strong>{Number(stats.followersCount) || 0}</strong>
+                <span>Followers</span>
+              </div>
+              <div className="sh-stat-tile">
+                <strong>
+                  {loadingMutuals ? '…' : mutualFriendsCount}
+                </strong>
+                <span>Mutual friends</span>
+              </div>
+              <div className="sh-stat-tile">
+                <strong>
+                  {loadingMutuals ? '…' : mutualServersCount}
+                </strong>
+                <span>Mutual servers</span>
+              </div>
+              <div className="sh-stat-tile">
+                <strong>{Number(stats.serversJoined) || 0}</strong>
+                <span>Servers joined</span>
+              </div>
             </div>
           </div>
         )}
