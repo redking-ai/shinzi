@@ -1,11 +1,20 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   doc,
   getDoc,
   serverTimestamp,
   writeBatch,
 } from 'firebase/firestore';
-import { Pencil, Plus } from 'lucide-react';
+import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
+import {
+  MessageCircle,
+  Pencil,
+  Plus,
+  Search,
+  Server,
+  Sparkles,
+  User,
+} from 'lucide-react';
 import { auth, db } from './firebaseConfig';
 import { useDriveStore } from './driveStore';
 import './Profile.css';
@@ -52,7 +61,18 @@ function messageOf(error: unknown): string {
 
 export default function Profile() {
   const drive = useDriveStore();
-  const currentUser = auth.currentUser;
+  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(
+    () => auth.currentUser,
+  );
+  const [authLoading, setAuthLoading] = useState(() => !auth.currentUser);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setCurrentUser(u);
+      setAuthLoading(false);
+    });
+    return unsubscribe;
+  }, []);
 
   const [userData, setUserData] = useState<AnyRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -291,17 +311,6 @@ useEffect(() => {
       retryAssets,
   ]);
 
-  const stats = useMemo(
-    () => ({
-      friendsCount: Number(userData?.socialStats?.friendsCount ?? 0),
-      followersCount: Number(userData?.socialStats?.followersCount ?? 0),
-      mutualFriends: Number(userData?.socialStats?.mutualFriends ?? 0),
-      mutualServers: Number(userData?.socialStats?.mutualServers ?? 0),
-      serversJoined: Number(userData?.socialStats?.serversJoined ?? 0),
-    }),
-    [userData],
-  );
-
   const cancelEditing = () => {
     if (userData) {
       resetEditForm(userData);
@@ -419,9 +428,9 @@ useEffect(() => {
     }
   };
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
-      <main className="sh-profile-page">
+      <main className="sh-profile-page sh-profile-loading">
         <div className="sh-profile-state">Loading profile…</div>
       </main>
     );
@@ -457,94 +466,6 @@ useEffect(() => {
 
   return (
     <main className="sh-profile-page">
-      <header className="sh-profile-topbar">
-        <button
-          type="button"
-          className="sh-icon-button"
-          onClick={() => window.history.back()}
-          aria-label="Go back"
-        >
-          ←
-        </button>
-
-        <h1>Profile</h1>
-
-        <div className="sh-top-actions">
-          <button
-            type="button"
-            className="sh-icon-button"
-            title="Settings"
-            aria-label="Settings"
-            onClick={() =>
-              setError(
-                'Settings are not connected to this profile screen yet.',
-              )
-            }
-          >
-            ⚙
-          </button>
-        </div>
-      </header>
-
-      {error && (
-        <div className="sh-profile-alert" role="alert">
-          <span>{error}</span>
-          <button
-            type="button"
-            onClick={() => setError('')}
-            aria-label="Dismiss"
-          >
-            ×
-          </button>
-        </div>
-      )}
-      
-     
-{assetError && showAssetError && (
-  <div className="sh-profile-alert" role="alert">
-    <span>{assetError}</span>
-
-    <div className="sh-drive-recovery-actions">
-      <button
-        type="button"
-        className="sh-button sh-button-muted"
-        disabled={assetLoading}
-        onClick={() => setRetryAssets((value) => value + 1)}
-      >
-        {assetLoading ? 'Retrying…' : 'Retry images'}
-      </button>
-
-      <button
-        type="button"
-        className="sh-button"
-        disabled={!drive.isReady || drive.isConnecting}
-        onClick={async () => {
-          try {
-            const token = await drive.connectDrive(true);
-
-            if (token) {
-              setAssetError('');
-              setRetryAssets((value) => value + 1);
-            } else {
-              setAssetError(
-                'Google account selection was cancelled. Please try again.',
-              );
-            }
-          } catch (e) {
-            console.error('[PROFILE] Drive account switch failed:', e);
-            setAssetError(messageOf(e));
-          }
-        }}
-      >
-        {drive.isConnecting
-          ? 'Connecting…'
-          : 'Switch Google account'}
-      </button>
-    </div>
-  </div>
-)}
-
-
       <section className="sh-profile-card">
         <div
           className="sh-profile-banner"
@@ -560,9 +481,80 @@ useEffect(() => {
           {!bannerImageUri && <div className="sh-banner-glow" />}
 
           {(assetLoading || (assetError && !showAssetError)) && (
-  <span className="sh-asset-status">Loading images…</span>
-)}
+            <span className="sh-asset-status">Loading images…</span>
+          )}
+
+          <button
+            type="button"
+            className="sh-banner-settings-button"
+            title="Settings"
+            aria-label="Settings"
+            onClick={() =>
+              setError(
+                'Settings are not connected to this profile screen yet.',
+              )
+            }
+          >
+            ⚙
+          </button>
         </div>
+
+        {error && (
+          <div className="sh-profile-alert" role="alert">
+            <span>{error}</span>
+            <button
+              type="button"
+              onClick={() => setError('')}
+              aria-label="Dismiss"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
+        {assetError && showAssetError && (
+          <div className="sh-profile-alert" role="alert">
+            <span>{assetError}</span>
+
+            <div className="sh-drive-recovery-actions">
+              <button
+                type="button"
+                className="sh-button sh-button-muted"
+                disabled={assetLoading}
+                onClick={() => setRetryAssets((value) => value + 1)}
+              >
+                {assetLoading ? 'Retrying…' : 'Retry images'}
+              </button>
+
+              <button
+                type="button"
+                className="sh-button"
+                disabled={!drive.isReady || drive.isConnecting}
+                onClick={async () => {
+                  try {
+                    const token = await drive.connectDrive(true);
+
+                    if (token) {
+                      setAssetError('');
+                      setRetryAssets((value) => value + 1);
+                    } else {
+                      setAssetError(
+                        'Google account selection was cancelled. Please try again.',
+                      );
+                    }
+                  } catch (e) {
+                    console.error('[PROFILE] Drive account switch failed:', e);
+                    setAssetError(messageOf(e));
+                  }
+                }}
+              >
+                {drive.isConnecting
+                  ? 'Connecting…'
+                  : 'Switch Google account'}
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="sh-profile-identity">
           <div className="sh-avatar-wrap">
@@ -830,22 +822,11 @@ useEffect(() => {
               </div>
             ) : (
               <div className="sh-profile-content">
-                <h3>Social stats</h3>
-
-                <div className="sh-stats-grid">
-                  {Object.entries({
-                    Friends: stats.friendsCount,
-                    Followers: stats.followersCount,
-                    'Mutual friends': stats.mutualFriends,
-                    'Mutual servers': stats.mutualServers,
-                    'Servers joined': stats.serversJoined,
-                  }).map(([label, value]) => (
-                    <div className="sh-stat-tile" key={label}>
-                      <strong>{value}</strong>
-                      <span>{label}</span>
-                    </div>
-                  ))}
-                </div>
+                <section className="sh-info-section">
+                  <p className="sh-muted-note">
+                    No social statistics to display.
+                  </p>
+                </section>
               </div>
             )}
           </>
@@ -891,6 +872,52 @@ useEffect(() => {
           </button>
         </div>
       )}
+
+      <nav className="sh-profile-bottom-nav" aria-label="Main navigation">
+        <button
+          type="button"
+          onClick={() => setError('AI is not connected yet.')}
+          aria-label="AI"
+        >
+          <Sparkles size={22} />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setError('Servers are not connected yet.')}
+          aria-label="Servers"
+        >
+          <Server size={22} />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            window.location.assign('/chat');
+          }}
+          aria-label="Chat"
+        >
+          <MessageCircle size={23} />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            window.location.assign('/chat?screen=search');
+          }}
+          aria-label="Search"
+        >
+          <Search size={22} />
+        </button>
+
+        <button
+          type="button"
+          className="sh-bottom-active"
+          aria-label="Profile"
+        >
+          <User size={22} />
+        </button>
+      </nav>
     </main>
   );
 }
