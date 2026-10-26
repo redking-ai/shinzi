@@ -55,6 +55,7 @@ import {
   XCircle,
   Check,
 } from 'lucide-react';
+import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { auth, db } from './firebaseConfig';
 import './Chat.css';
 
@@ -194,16 +195,19 @@ function EmptyState({
   icon,
   title,
   text,
+  action,
 }: {
   icon: ReactNode;
   title: string;
   text: string;
+  action?: ReactNode;
 }) {
   return (
     <div className="shc-empty">
       {icon}
       <h3>{title}</h3>
       <p>{text}</p>
+      {action}
     </div>
   );
 }
@@ -254,8 +258,19 @@ function Sheet({
 // ============================================================
 
 export default function Chat({ onNavigate }: ChatProps) {
-  const user = auth.currentUser;
-  const uid = user?.uid ?? null;
+  const [authUser, setAuthUser] = useState<FirebaseUser | null>(() => auth.currentUser);
+  const [authLoading, setAuthLoading] = useState(() => !auth.currentUser);
+  const user = authUser;
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setAuthUser(firebaseUser);
+      setAuthLoading(false);
+    });
+    return unsubscribe;
+  }, []);
+
+  const uid = authUser?.uid ?? null;
   const me: string = uid ?? '';
 
   const [profile, setProfile] = useState<Rec | null>(null);
@@ -267,7 +282,13 @@ export default function Chat({ onNavigate }: ChatProps) {
   const [activity, setActivity] = useState<Record<string, Rec>>({});
   const [now, setNow] = useState(() => Date.now());
 
-  const [screen, setScreen] = useState<Screen>('main');
+  const [screen, setScreen] = useState<Screen>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('screen') === 'search') return 'search';
+    }
+    return 'main';
+  });
   const [activeTab, setActiveTab] = useState<Tab>('All');
   const [selected, setSelected] = useState<Rec | null>(null);
 
@@ -1910,7 +1931,11 @@ const handleSearchMessage = async (target: Rec) => {
 
   const renderSearch = () => (
     <>
-      {renderBackHeader('Search')}
+      <header className="shc-header">
+        <div>
+          <h1>Search</h1>
+        </div>
+      </header>
 
       <div className="shc-list shc-padded">
         <div className="shc-searchbox shc-searchbox-big">
@@ -2558,6 +2583,14 @@ const handleSearchMessage = async (target: Rec) => {
   // PAGE
   // ----------------------------------------------------------
 
+  if (authLoading) {
+    return (
+      <div className="shc-page shc-page-loading">
+        <span className="shc-spinner" />
+      </div>
+    );
+  }
+
   if (!uid) {
     return (
       <div className="shc-page">
@@ -2565,6 +2598,18 @@ const handleSearchMessage = async (target: Rec) => {
           icon={<User size={44} />}
           title="Sign in required"
           text="Please sign in to use Shinzi Chat."
+          action={
+            <button
+              type="button"
+              className="shc-btn"
+              style={{ marginTop: 16 }}
+              onClick={() => {
+                window.location.assign('/');
+              }}
+            >
+              Go to sign in
+            </button>
+          }
         />
       </div>
     );
