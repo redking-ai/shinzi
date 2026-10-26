@@ -2,13 +2,93 @@
   min-height: 100vh;
   background: #09090f;
   color: #f5f7ff;
-  padding: 0 16px 40px;
+  padding: 0 0 calc(76px + env(safe-area-inset-bottom, 0px));
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .sh-profile-page * {
   box-sizing: border-box;
+}
+
+.sh-profile-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  max-width: 900px;
+  margin: 0 auto;
+  background: #101018;
+  border: 1px solid #242437;
+  border-top: 0;
+  border-radius: 0 0 22px 22px;
+  overflow: hidden;
+  box-shadow: 0 18px 60px #0005;
+}
+
+.sh-profile-banner {
+  order: 1;
+  height: 210px;
+  position: relative;
+  background: linear-gradient(130deg, #19132f, #0b2639 55%, #24143b);
+  background-position: center;
+  background-size: cover;
+  overflow: hidden;
+}
+
+.sh-banner-glow {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 20% 10%, #a64dff45, transparent 42%),
+    radial-gradient(ellipse at 80% 80%, #00cfff36, transparent 45%);
+}
+
+.sh-banner-settings-button {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 5;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(9, 9, 15, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #f5f7ff;
+  font-size: 18px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.sh-banner-settings-button:hover {
+  background: rgba(28, 28, 42, 0.85);
+  border-color: rgba(255, 255, 255, 0.28);
+  transform: scale(1.04);
+}
+
+.sh-banner-settings-button:active {
+  transform: scale(0.96);
+}
+
+.sh-asset-status {
+  position: absolute;
+  right: 60px;
+  top: 17px;
+  background: #05050bbd;
+  padding: 6px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  color: #c8eaff;
+  z-index: 4;
+}
+
+.sh-profile-card .sh-profile-alert {
+  margin: 12px 20px 0;
 }
 
 .sh-profile-topbar {
@@ -18,6 +98,7 @@
   display: flex;
   align-items: center;
   gap: 14px;
+  padding: 0 16px;
   border-bottom: 1px solid #252535;
 }
 
@@ -59,48 +140,6 @@
 
 .sh-accent {
   color: #71d7ff;
-}
-
-.sh-profile-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  max-width: 900px;
-  margin: 24px auto 0;
-  background: #101018;
-  border: 1px solid #242437;
-  border-radius: 22px;
-  overflow: hidden;
-  box-shadow: 0 18px 60px #0005;
-}
-
-.sh-profile-banner {
-  order: 1;
-  height: 210px;
-  position: relative;
-  background: linear-gradient(130deg, #19132f, #0b2639 55%, #24143b);
-  background-position: center;
-  background-size: cover;
-  overflow: hidden;
-}
-
-.sh-banner-glow {
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(ellipse at 20% 10%, #a64dff45, transparent 42%),
-    radial-gradient(ellipse at 80% 80%, #00cfff36, transparent 45%);
-}
-
-.sh-asset-status {
-  position: absolute;
-  right: 14px;
-  top: 12px;
-  background: #05050bbd;
-  padding: 6px 10px;
-  border-radius: 20px;
-  font-size: 12px;
-  color: #c8eaff;
 }
 
 .sh-profile-identity {
@@ -1037,4 +1076,47 @@ body {
     .sh-other-action-label {
     display: inline;
   }
+}
+
+/* Profile bottom navigation bar */
+.sh-profile-bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 760px;
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 4px 8px env(safe-area-inset-bottom, 0px);
+  background: rgba(8, 6, 18, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-top: 1px solid #28223d;
+  z-index: 50;
+}
+
+.sh-profile-bottom-nav button {
+  width: 54px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #a6a2b5;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.sh-profile-bottom-nav button:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.sh-profile-bottom-nav button.sh-bottom-active {
+  color: #20d9ff;
 }
