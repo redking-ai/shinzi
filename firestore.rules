@@ -27,14 +27,6 @@ function isValidSocialStats(stats) {
     && stats.serversJoined is number;  
 }  
 
-function isConversationMember(convData) {
-  return request.auth != null
-    && convData != null
-    && 'memberIds' in convData
-    && convData.memberIds is list
-    && request.auth.uid in convData.memberIds;
-}
-
 // ==============================  
 // USER PROFILES  
 // ==============================  
@@ -273,38 +265,42 @@ match /dmRequests/{requestId} {
 match /conversations/{conversationId} {  
   allow get: if request.auth != null
     && (
-      (resource != null && isConversationMember(resource.data))
+      (resource != null && request.auth.uid in resource.data.memberIds)
       || (resource == null && (
            conversationId.matches('^dm_' + request.auth.uid + '_.*')
            || conversationId.matches('^dm_.*_' + request.auth.uid + '$')
          ))
     );
 
-  allow list: if isConversationMember(resource.data);  
-  allow create: if isConversationMember(request.resource.data);  
-  allow update: if isConversationMember(resource.data)  
-    && isConversationMember(request.resource.data);  
-  allow delete: if isConversationMember(resource.data);  
+  allow list: if request.auth != null && request.auth.uid in resource.data.memberIds;  
+  allow create: if request.auth != null && request.auth.uid in request.resource.data.memberIds;  
+  allow update: if request.auth != null
+    && request.auth.uid in resource.data.memberIds
+    && request.auth.uid in request.resource.data.memberIds;  
+  allow delete: if request.auth != null && request.auth.uid in resource.data.memberIds;  
 
   match /messages/{messageId} {  
-    allow read: if isConversationMember(get(/databases/$(database)/documents/conversations/$(conversationId)).data);  
+    allow read: if request.auth != null
+      && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.memberIds;  
 
     allow create: if request.auth != null  
       && request.resource.data.senderId == request.auth.uid  
-      && isConversationMember(get(/databases/$(database)/documents/conversations/$(conversationId)).data);  
+      && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.memberIds;  
 
-    allow update: if isConversationMember(get(/databases/$(database)/documents/conversations/$(conversationId)).data);  
+    allow update: if request.auth != null
+      && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.memberIds;  
 
     allow delete: if request.auth != null  
       && (resource.data.senderId == request.auth.uid  
-          || isConversationMember(get(/databases/$(database)/documents/conversations/$(conversationId)).data));  
+          || request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.memberIds);  
   }  
 
   match /activity/{activityUid} {  
-    allow read: if isConversationMember(get(/databases/$(database)/documents/conversations/$(conversationId)).data);  
+    allow read: if request.auth != null
+      && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.memberIds;  
     allow write: if request.auth != null  
       && request.auth.uid == activityUid  
-      && isConversationMember(get(/databases/$(database)/documents/conversations/$(conversationId)).data);  
+      && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.memberIds;  
   }  
 }  
 

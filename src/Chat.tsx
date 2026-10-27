@@ -28,7 +28,6 @@ import {
   ArrowLeft,
   BarChart3,
   Calendar,
-  CheckCheck,
   FileText,
   Gamepad2,
   Image as ImageIcon,
@@ -138,11 +137,17 @@ const dateLabel = (value: any) => {
   });
 };
 
-const mention = (text: string, username?: string) => {
-  if (!text || !username) return false;
-  const escaped = String(username).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`(^|\\s)@${escaped}(\\s|$|[.,!?])`, 'i').test(text);
+const isMentioned = (text: string, username?: string, displayName?: string) => {
+  if (!text) return false;
+  const candidates = [username, displayName].filter(Boolean) as string[];
+  return candidates.some((candidate) => {
+    const clean = candidate.replace(/^@+/, '').trim();
+    if (!clean || clean.length < 2) return false;
+    const escaped = clean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(^|[^a-zA-Z0-9_])@${escaped}(?![a-zA-Z0-9_])`, 'i').test(text);
+  });
 };
+
 
 const pollTotal = (poll: Rec): number =>
   Object.values(poll?.votes || {}).reduce(
@@ -299,6 +304,7 @@ export default function Chat({ onNavigate }: ChatProps) {
   const [searching, setSearching] = useState(false);
   const [sendingRequestId, setSendingRequestId] = useState<string | null>(null);
   const [sentRequestUids, setSentRequestUids] = useState<Set<string>>(() => new Set());
+  const [optimisticFavorites, setOptimisticFavorites] = useState<Record<string, boolean>>({});
 
   const [messageText, setMessageText] = useState('');
   const [sending, setSending] = useState(false);
@@ -408,6 +414,17 @@ export default function Chat({ onNavigate }: ChatProps) {
         );
 
         setConversations(rows);
+        setOptimisticFavorites((prev) => {
+          let changed = false;
+          const next = { ...prev };
+          rows.forEach((r) => {
+            if (r.id in next && r.favoriteBy?.[uid] === next[r.id]) {
+              delete next[r.id];
+              changed = true;
+            }
+          });
+          return changed ? next : prev;
+        });
         setLoadingChats(false);
       },
       (error) => {
@@ -458,6 +475,27 @@ export default function Chat({ onNavigate }: ChatProps) {
           snap.docs.map((item) => ({ id: item.id, ...item.data() })),
         ),
       (error) => console.error('Friend request listener error:', error),
+    );
+  }, [uid]);
+
+  useEffect(() => {
+    if (!uid) {
+      setSentRequestUids(new Set());
+      return undefined;
+    }
+
+    const q = query(
+      collection(db, 'friendRequests'),
+      where('fromUid', '==', uid),
+      where('status', '==', 'pending'),
+    );
+
+    return onSnapshot(
+      q,
+      (snap) => {
+        setSentRequestUids(new Set(snap.docs.map((docItem) => docItem.data().toUid)));
+      },
+      (error) => console.error('Outgoing friend request listener error:', error),
     );
   }, [uid]);
 
@@ -597,8 +635,13 @@ export default function Chat({ onNavigate }: ChatProps) {
     );
   };
 
-  const isFavorite = (conversation: Rec | null | undefined) =>
-    Boolean(conversation?.favoriteBy?.[me]);
+  const isFavorite = (conversation: Rec | null | undefined) => {
+    if (!conversation?.id || !me) return false;
+    if (conversation.id in optimisticFavorites) {
+      return optimisticFavorites[conversation.id];
+    }
+    return Boolean(conversation?.favoriteBy?.[me]);
+  };
 
   const isUrgent = (conversation: Rec | null | undefined) =>
     Boolean(conversation?.urgentFor?.[me]);
@@ -607,7 +650,7 @@ export default function Chat({ onNavigate }: ChatProps) {
     let rows = [...conversations];
 
     if (activeTab === 'Recent') {
-      rows = rows.filter((item) => millis(item.lastMessageAt));
+      rows = rows.filter((item) => millis(item.lastMessageAt) > 0);
     }
     if (activeTab === 'Urgent') rows = rows.filter(isUrgent);
     if (activeTab === 'Favorite') rows = rows.filter(isFavorite);
@@ -627,8 +670,10 @@ export default function Chat({ onNavigate }: ChatProps) {
     }
 
     rows.sort((a, b) => {
-      const fav = Number(isFavorite(b)) - Number(isFavorite(a));
-      if (fav !== 0 && activeTab !== 'Favorite') return fav;
+      if (activeTab !== 'Recent' && activeTab !== 'Favorite') {
+        const fav = Number(isFavorite(b)) - Number(isFavorite(a));
+        if (fav !== 0) return fav;
+      }
       return (
         millis(b.lastMessageAt || b.updatedAt) -
         millis(a.lastMessageAt || a.updatedAt)
@@ -637,7 +682,7 @@ export default function Chat({ onNavigate }: ChatProps) {
 
     return rows;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversations, activeTab, chatFilter, uid]);
+  }, [conversations, activeTab, chatFilter, uid, optimisticFavorites]);
 
   // ----------------------------------------------------------
   // CONVERSATION ACTIONS
@@ -833,10 +878,12 @@ const handleSearchMessage = async (target: Rec) => {
       };
 
       // Mark only the mentioned people as urgent; leave everyone else alone.
-      (selected.memberIds || []).forEach((memberId: string) => {
+      const activeConv = selectedConversation || selected;
+      (activeConv?.memberIds || []).forEach((memberId: string) => {
+        const memberProfile = activeConv?.memberProfiles?.[memberId];
         if (
           memberId !== uid &&
-          mention(text, selected.memberProfiles?.[memberId]?.username)
+          isMentioned(text, memberProfile?.username, memberProfile?.displayName)
         ) {
           updates[`urgentFor.${memberId}`] = true;
         }
@@ -869,13 +916,22 @@ const handleSearchMessage = async (target: Rec) => {
 
   const toggleFavorite = async (conversation: Rec | null) => {
     if (!uid || !conversation?.id) return;
+    const convId = conversation.id;
+    const nextVal = !isFavorite(conversation);
+
+    setOptimisticFavorites((prev) => ({ ...prev, [convId]: nextVal }));
 
     try {
-      await updateDoc(doc(db, 'conversations', conversation.id), {
-        [`favoriteBy.${uid}`]: !isFavorite(conversation),
+      await updateDoc(doc(db, 'conversations', convId), {
+        [`favoriteBy.${uid}`]: nextVal,
         updatedAt: serverTimestamp(),
       });
     } catch (error) {
+      setOptimisticFavorites((prev) => {
+        const copy = { ...prev };
+        delete copy[convId];
+        return copy;
+      });
       console.error('Favorite update error:', error);
       notify('Unable to update favorite', messageOf(error));
     }
@@ -1152,6 +1208,12 @@ const handleSearchMessage = async (target: Rec) => {
           const reqSnap = await getDoc(doc(db, 'friendRequests', `${uid}_${targetUid}`));
           if (reqSnap.exists() && reqSnap.data()?.status === 'pending') {
             setSentRequestUids((prev) => new Set(prev).add(targetUid));
+          } else {
+            setSentRequestUids((prev) => {
+              const next = new Set(prev);
+              next.delete(targetUid);
+              return next;
+            });
           }
         } catch {}
       }
@@ -1667,7 +1729,6 @@ const handleSearchMessage = async (target: Rec) => {
 
           <span className="shc-meta">
             {formatTime(item.createdAt)}
-            {own && <CheckCheck size={14} />}
           </span>
         </div>
       );
@@ -2007,78 +2068,68 @@ const handleSearchMessage = async (target: Rec) => {
               <span>@{searchResult.username || 'user'}</span>
             </span>
 
-            {searchResult.id !== uid && (
-              <>
-                <button
-                  type="button"
-                  className="shc-circle"
-                  onClick={() => void sendRequest('friendRequests', searchResult)}
-                  disabled={
-                    sendingRequestId === searchResult.id ||
-                    sentRequestUids.has(searchResult.id) ||
-                    friends.some((f) => f.id === searchResult.id)
-                  }
-                  title={
-                    friends.some((f) => f.id === searchResult.id)
-                      ? 'Friends'
-                      : sentRequestUids.has(searchResult.id)
-                        ? 'Request sent'
-                        : 'Add friend'
-                  }
-                  aria-label={
-                    friends.some((f) => f.id === searchResult.id)
-                      ? 'Friends'
-                      : sentRequestUids.has(searchResult.id)
-                        ? 'Request sent'
-                        : 'Add friend'
-                  }
-                >
-                  {sendingRequestId === searchResult.id ? (
-                    <span className="shc-spinner shc-spinner-sm" />
-                  ) : friends.some((f) => f.id === searchResult.id) ||
-                    sentRequestUids.has(searchResult.id) ? (
-                    <Check size={19} />
-                  ) : (
-                    <UserPlus size={19} />
+            {searchResult.id !== uid && (() => {
+              const isFriend = friends.some((f) => f.id === searchResult.id || f.uid === searchResult.id);
+              const isPending = sentRequestUids.has(searchResult.id);
+
+              return (
+                <>
+                  {!isFriend && (
+                    <button
+                      type="button"
+                      className="shc-circle"
+                      onClick={() => void sendRequest('friendRequests', searchResult)}
+                      disabled={sendingRequestId === searchResult.id || isPending}
+                      title={isPending ? 'Request sent' : 'Add friend'}
+                      aria-label={isPending ? 'Request sent' : 'Add friend'}
+                    >
+                      {sendingRequestId === searchResult.id ? (
+                        <span className="shc-spinner shc-spinner-sm" />
+                      ) : isPending ? (
+                        <Check size={19} />
+                      ) : (
+                        <UserPlus size={19} />
+                      )}
+                    </button>
                   )}
-                </button>
 
-                <button
-                  type="button"
-                  className="shc-circle"
-                  onClick={() => {
-                    setSelected({
-                      id: directId(uid!, searchResult.id),
-                      type: 'direct',
-                      memberIds: [uid!, searchResult.id],
-                      memberProfiles: {
-                        [uid!]: {
-                          displayName: profile?.displayName || profile?.username || 'User',
-                          username: profile?.username || '',
+                  <button
+                    type="button"
+                    className="shc-circle"
+                    onClick={() => {
+                      setSelected({
+                        id: directId(uid!, searchResult.id),
+                        type: 'direct',
+                        memberIds: [uid!, searchResult.id],
+                        memberProfiles: {
+                          [uid!]: {
+                            displayName: profile?.displayName || profile?.username || 'User',
+                            username: profile?.username || '',
+                          },
+                          [searchResult.id]: {
+                            displayName: searchResult.displayName || searchResult.username || 'User',
+                            username: searchResult.username || '',
+                          },
                         },
-                        [searchResult.id]: {
-                          displayName: searchResult.displayName || searchResult.username || 'User',
-                          username: searchResult.username || '',
-                        },
-                      },
-                    });
-                    startCallUI('voice');
-                  }}
-                  aria-label="Call"
-                >
-                  <Phone size={19} />
-                </button>
+                      });
+                      startCallUI('voice');
+                    }}
+                    aria-label="Call"
+                  >
+                    <Phone size={19} />
+                  </button>
 
-                <button
-                  type="button"
-                  className="shc-circle"
-                  onClick={() => void handleSearchMessage(searchResult)}
-                  aria-label="Message"
-                >
-                  <MessageCircle size={19} />
-                </button>
-              </>
-            )}
+                  <button
+                    type="button"
+                    className="shc-circle"
+                    onClick={() => void handleSearchMessage(searchResult)}
+                    aria-label="Message"
+                  >
+                    <MessageCircle size={19} />
+                  </button>
+                </>
+              );
+            })()}
           </div>
         ) : (
           <EmptyState
