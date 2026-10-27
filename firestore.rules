@@ -203,7 +203,16 @@ match /users/{userId} {
 // ==============================  
 
 match /friendRequests/{requestId} {  
-  allow read: if request.auth != null  
+  allow get: if request.auth != null  
+    && (
+      (resource != null && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid))
+      || (resource == null && (
+           requestId.matches('^' + request.auth.uid + '_.*')
+           || requestId.matches('^.*_' + request.auth.uid + '$')
+         ))
+    );
+
+  allow list: if request.auth != null  
     && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid);  
 
   allow create: if request.auth != null  
@@ -228,7 +237,16 @@ match /friendRequests/{requestId} {
 // ==============================  
 
 match /dmRequests/{requestId} {  
-  allow read: if request.auth != null  
+  allow get: if request.auth != null  
+    && (
+      (resource != null && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid))
+      || (resource == null && (
+           requestId.matches('^' + request.auth.uid + '_.*')
+           || requestId.matches('^.*_' + request.auth.uid + '$')
+         ))
+    );
+
+  allow list: if request.auth != null  
     && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid);  
 
   allow create: if request.auth != null  
@@ -253,7 +271,16 @@ match /dmRequests/{requestId} {
 // ==============================  
 
 match /conversations/{conversationId} {  
-  allow read: if isConversationMember(resource.data);  
+  allow get: if request.auth != null
+    && (
+      (resource != null && isConversationMember(resource.data))
+      || (resource == null && (
+           conversationId.matches('^dm_' + request.auth.uid + '_.*')
+           || conversationId.matches('^dm_.*_' + request.auth.uid + '$')
+         ))
+    );
+
+  allow list: if isConversationMember(resource.data);  
   allow create: if isConversationMember(request.resource.data);  
   allow update: if isConversationMember(resource.data)  
     && isConversationMember(request.resource.data);  

@@ -910,9 +910,18 @@ const handleSearchMessage = async (target: Rec) => {
 
     try {
       const requestRef = doc(db, kind, `${uid}_${target.id}`);
-      const existing = await getDoc(requestRef);
+      let isAlreadyPending = false;
 
-      if (existing.exists() && existing.data()?.status === 'pending') {
+      try {
+        const existing = await getDoc(requestRef);
+        if (existing.exists() && existing.data()?.status === 'pending') {
+          isAlreadyPending = true;
+        }
+      } catch {
+        // Preflight check error should not prevent write attempt
+      }
+
+      if (isAlreadyPending) {
         notify('Already sent', `A ${label} is already pending.`);
         setSentRequestUids((prev) => new Set(prev).add(target.id));
         return;
