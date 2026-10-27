@@ -297,6 +297,8 @@ export default function Chat({ onNavigate }: ChatProps) {
   const [userQuery, setUserQuery] = useState('');
   const [searchResult, setSearchResult] = useState<Rec | null>(null);
   const [searching, setSearching] = useState(false);
+  const [sendingRequestId, setSendingRequestId] = useState<string | null>(null);
+  const [sentRequestUids, setSentRequestUids] = useState<Set<string>>(() => new Set());
 
   const [messageText, setMessageText] = useState('');
   const [sending, setSending] = useState(false);
@@ -896,12 +898,23 @@ const handleSearchMessage = async (target: Rec) => {
       return;
     }
 
+    if (kind === 'friendRequests') {
+      const isAlreadyFriend = friends.some((friend) => friend.id === target.id);
+      if (isAlreadyFriend) {
+        notify('Already friends', `You and @${target.username || 'user'} are already friends.`);
+        return;
+      }
+    }
+
+    setSendingRequestId(target.id);
+
     try {
       const requestRef = doc(db, kind, `${uid}_${target.id}`);
       const existing = await getDoc(requestRef);
 
       if (existing.exists() && existing.data()?.status === 'pending') {
         notify('Already sent', `A ${label} is already pending.`);
+        setSentRequestUids((prev) => new Set(prev).add(target.id));
         return;
       }
 
@@ -921,10 +934,13 @@ const handleSearchMessage = async (target: Rec) => {
         updatedAt: serverTimestamp(),
       });
 
+      setSentRequestUids((prev) => new Set(prev).add(target.id));
       notify('Request sent', `Your ${label} was sent.`);
     } catch (error) {
       console.error('Request error:', error);
       notify('Unable to send request', messageOf(error));
+    } finally {
+      setSendingRequestId(null);
     }
   };
 
@@ -1121,6 +1137,15 @@ const handleSearchMessage = async (target: Rec) => {
       }
 
       setSearchResult({ id: userSnap.id, ...userSnap.data() });
+
+      if (uid && targetUid) {
+        try {
+          const reqSnap = await getDoc(doc(db, 'friendRequests', `${uid}_${targetUid}`));
+          if (reqSnap.exists() && reqSnap.data()?.status === 'pending') {
+            setSentRequestUids((prev) => new Set(prev).add(targetUid));
+          }
+        } catch {}
+      }
     } catch (error) {
       console.error('User search error:', error);
       notify('Search failed', messageOf(error, 'Unable to search right now.'));
@@ -1946,7 +1971,11 @@ const handleSearchMessage = async (target: Rec) => {
 
       <div className="shc-list shc-padded">
         <div className="shc-searchbox shc-searchbox-big">
-          <Search size={20} />
+          {searching ? (
+            <span className="shc-spinner shc-spinner-sm" aria-hidden="true" />
+          ) : (
+            <Search size={20} aria-hidden="true" />
+          )}
           <input
             placeholder="Username"
             value={userQuery}
@@ -1958,15 +1987,6 @@ const handleSearchMessage = async (target: Rec) => {
             autoCorrect="off"
             enterKeyHint="search"
           />
-          <button
-            type="button"
-            className="shc-go"
-            onClick={() => void searchUser()}
-            disabled={searching}
-            aria-label="Search"
-          >
-            {searching ? <span className="shc-spinner shc-spinner-sm" /> : <Send size={20} />}
-          </button>
         </div>
 
         {searchResult ? (
@@ -1981,48 +2001,73 @@ const handleSearchMessage = async (target: Rec) => {
             {searchResult.id !== uid && (
               <>
                 <button
-  type="button"
-  className="shc-circle"
-  onClick={() => void sendRequest('friendRequests', searchResult)}
-  aria-label="Add friend"
->
-  <UserPlus size={19} />
-</button>
+                  type="button"
+                  className="shc-circle"
+                  onClick={() => void sendRequest('friendRequests', searchResult)}
+                  disabled={
+                    sendingRequestId === searchResult.id ||
+                    sentRequestUids.has(searchResult.id) ||
+                    friends.some((f) => f.id === searchResult.id)
+                  }
+                  title={
+                    friends.some((f) => f.id === searchResult.id)
+                      ? 'Friends'
+                      : sentRequestUids.has(searchResult.id)
+                        ? 'Request sent'
+                        : 'Add friend'
+                  }
+                  aria-label={
+                    friends.some((f) => f.id === searchResult.id)
+                      ? 'Friends'
+                      : sentRequestUids.has(searchResult.id)
+                        ? 'Request sent'
+                        : 'Add friend'
+                  }
+                >
+                  {sendingRequestId === searchResult.id ? (
+                    <span className="shc-spinner shc-spinner-sm" />
+                  ) : friends.some((f) => f.id === searchResult.id) ||
+                    sentRequestUids.has(searchResult.id) ? (
+                    <Check size={19} />
+                  ) : (
+                    <UserPlus size={19} />
+                  )}
+                </button>
 
-<button
-  type="button"
-  className="shc-circle"
-  onClick={() => {
-    setSelected({
-      id: directId(uid!, searchResult.id),
-      type: 'direct',
-      memberIds: [uid!, searchResult.id],
-      memberProfiles: {
-        [uid!]: {
-          displayName: profile?.displayName || profile?.username || 'User',
-          username: profile?.username || '',
-        },
-        [searchResult.id]: {
-          displayName: searchResult.displayName || searchResult.username || 'User',
-          username: searchResult.username || '',
-        },
-      },
-    });
-    startCallUI('voice');
-  }}
-  aria-label="Call"
->
-  <Phone size={19} />
-</button>
+                <button
+                  type="button"
+                  className="shc-circle"
+                  onClick={() => {
+                    setSelected({
+                      id: directId(uid!, searchResult.id),
+                      type: 'direct',
+                      memberIds: [uid!, searchResult.id],
+                      memberProfiles: {
+                        [uid!]: {
+                          displayName: profile?.displayName || profile?.username || 'User',
+                          username: profile?.username || '',
+                        },
+                        [searchResult.id]: {
+                          displayName: searchResult.displayName || searchResult.username || 'User',
+                          username: searchResult.username || '',
+                        },
+                      },
+                    });
+                    startCallUI('voice');
+                  }}
+                  aria-label="Call"
+                >
+                  <Phone size={19} />
+                </button>
 
-<button
-  type="button"
-  className="shc-circle"
-  onClick={() => void handleSearchMessage(searchResult)}
-  aria-label="Message"
->
-  <MessageCircle size={19} />
-</button>
+                <button
+                  type="button"
+                  className="shc-circle"
+                  onClick={() => void handleSearchMessage(searchResult)}
+                  aria-label="Message"
+                >
+                  <MessageCircle size={19} />
+                </button>
               </>
             )}
           </div>

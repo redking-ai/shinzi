@@ -1,0 +1,431 @@
+rules_version = '2';
+
+service cloud.firestore {
+match /databases/{database}/documents {
+
+// ==============================  
+// VALIDATORS  
+// ==============================  
+
+function isValidUsername(username) {  
+  return username.matches('^[a-z0-9_]{3,15}$');  
+}  
+
+function isValidSocialStats(stats) {  
+  return stats is map  
+    && stats.keys().hasAll([  
+      'friendsCount',  
+      'followersCount',  
+      'mutualFriends',  
+      'mutualServers',  
+      'serversJoined'  
+    ])  
+    && stats.friendsCount is number  
+    && stats.followersCount is number  
+    && stats.mutualFriends is number  
+    && stats.mutualServers is number  
+    && stats.serversJoined is number;  
+}  
+
+function isConversationMember(convData) {
+  return request.auth != null
+    && convData != null
+    && 'memberIds' in convData
+    && convData.memberIds is list
+    && request.auth.uid in convData.memberIds;
+}
+
+// ==============================  
+// USER PROFILES  
+// ==============================  
+
+match /users/{userId} {  
+
+  // Signed-in users can read profiles.  
+  allow read: if request.auth != null;  
+
+  // ==============================  
+  // SIGNUP / ACCOUNT CREATION  
+  // ==============================  
+
+  allow create: if request.auth != null  
+    && request.auth.uid == userId  
+
+    && request.resource.data.keys().hasAll([  
+      'displayName',  
+      'username',  
+      'gender',  
+      'createdAt',  
+      'usernameLastChanged',  
+      'socialStats'  
+    ])  
+
+    && request.resource.data.displayName is string  
+    && request.resource.data.displayName.size() >= 1  
+    && request.resource.data.displayName.size() <= 50  
+
+    && isValidUsername(request.resource.data.username)  
+
+    && request.resource.data.gender in [  
+      'Male',  
+      'Female',  
+      'Others'  
+    ]  
+
+    && isValidSocialStats(  
+      request.resource.data.socialStats  
+    )  
+
+    && request.resource.data.usernameLastChanged == null  
+
+    && existsAfter(  
+      /databases/$(database)/documents/usernames/$(request.resource.data.username)  
+    )  
+
+    && getAfter(  
+      /databases/$(database)/documents/usernames/$(request.resource.data.username)  
+    ).data.uid == userId;  
+
+  // ==============================  
+  // PROFILE EDITING  
+  // ==============================  
+
+  allow update: if request.auth != null  
+    && request.auth.uid == userId  
+
+    && request.resource.data  
+      .diff(resource.data)  
+      .affectedKeys()  
+      .hasOnly([  
+        'displayName',  
+        'bio',  
+        'bubleText',  
+        'pronouns',
+        'username',  
+        'usernameLastChanged',  
+        'updatedAt'  
+      ])  
+
+    && request.resource.data.displayName is string  
+    && request.resource.data.displayName.size() >= 1  
+    && request.resource.data.displayName.size() <= 50  
+
+    // Profile.tsx writes updatedAt using serverTimestamp().  
+    && request.resource.data.updatedAt == request.time  
+
+    && (  
+
+      // Username is unchanged.  
+      (  
+        !(  
+          'username'  
+          in request.resource.data.diff(resource.data).affectedKeys()  
+        )  
+
+        && request.resource.data.usernameLastChanged  
+          == resource.data.usernameLastChanged  
+      )  
+
+      ||  
+
+      // Username is changing.  
+      (  
+        'username'  
+        in request.resource.data.diff(resource.data).affectedKeys()  
+
+        && isValidUsername(  
+          request.resource.data.username  
+        )  
+
+        && request.resource.data.usernameLastChanged is timestamp  
+
+        && request.resource.data.usernameLastChanged  
+          == request.time  
+
+        && (  
+          !('usernameLastChanged' in resource.data)  
+          || resource.data.usernameLastChanged == null  
+          || request.time  
+            > resource.data.usernameLastChanged  
+              + duration.value(30, 'd')  
+        )  
+
+        && existsAfter(  
+          /databases/$(database)/documents/usernames/$(request.resource.data.username)  
+        )  
+
+        && getAfter(  
+          /databases/$(database)/documents/usernames/$(request.resource.data.username)  
+        ).data.uid == userId  
+      )  
+    );  
+
+  // ==============================  
+  // BLOCKED USERS  
+  // ==============================  
+
+  match /blocked/{targetId} {  
+    allow read, write: if request.auth != null  
+      && request.auth.uid == userId;  
+  }  
+
+  // ==============================  
+  // MUTED USERS  
+  // ==============================  
+
+  match /muted/{targetId} {  
+    allow read, write: if request.auth != null  
+      && request.auth.uid == userId;  
+  }  
+
+  // ==============================  
+  // FAVOURITE USERS  
+  // ==============================  
+
+  match /favourites/{targetId} {  
+    allow read, write: if request.auth != null  
+      && request.auth.uid == userId;  
+  }  
+
+  // ==============================  
+  // FRIENDS SUBCOLLECTION  
+  // ==============================  
+
+  match /friends/{friendId} {  
+    allow read: if request.auth != null;  
+    allow write: if request.auth != null  
+      && (request.auth.uid == userId || request.auth.uid == friendId);  
+  }  
+}  
+
+// ==============================  
+// FRIEND REQUESTS  
+// ==============================  
+
+match /friendRequests/{requestId} {  
+  allow read: if request.auth != null  
+    && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid);  
+
+  allow create: if request.auth != null  
+    && request.resource.data.fromUid == request.auth.uid  
+    && request.resource.data.toUid != request.auth.uid  
+    && request.resource.data.status == 'pending'  
+    && request.resource.data.fromUid is string  
+    && request.resource.data.toUid is string;  
+
+  allow update: if request.auth != null  
+    && (resource.data.toUid == request.auth.uid || resource.data.fromUid == request.auth.uid)  
+    && request.resource.data.fromUid == resource.data.fromUid  
+    && request.resource.data.toUid == resource.data.toUid  
+    && request.resource.data.status in ['pending', 'accepted', 'rejected'];  
+
+  allow delete: if request.auth != null  
+    && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid);  
+}  
+
+// ==============================  
+// DM REQUESTS  
+// ==============================  
+
+match /dmRequests/{requestId} {  
+  allow read: if request.auth != null  
+    && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid);  
+
+  allow create: if request.auth != null  
+    && request.resource.data.fromUid == request.auth.uid  
+    && request.resource.data.toUid != request.auth.uid  
+    && request.resource.data.status == 'pending'  
+    && request.resource.data.fromUid is string  
+    && request.resource.data.toUid is string;  
+
+  allow update: if request.auth != null  
+    && (resource.data.toUid == request.auth.uid || resource.data.fromUid == request.auth.uid)  
+    && request.resource.data.fromUid == resource.data.fromUid  
+    && request.resource.data.toUid == resource.data.toUid  
+    && request.resource.data.status in ['pending', 'accepted', 'rejected'];  
+
+  allow delete: if request.auth != null  
+    && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid);  
+}  
+
+// ==============================  
+// CONVERSATIONS & MESSAGES  
+// ==============================  
+
+match /conversations/{conversationId} {  
+  allow read: if isConversationMember(resource.data);  
+  allow create: if isConversationMember(request.resource.data);  
+  allow update: if isConversationMember(resource.data)  
+    && isConversationMember(request.resource.data);  
+  allow delete: if isConversationMember(resource.data);  
+
+  match /messages/{messageId} {  
+    allow read: if isConversationMember(get(/databases/$(database)/documents/conversations/$(conversationId)).data);  
+
+    allow create: if request.auth != null  
+      && request.resource.data.senderId == request.auth.uid  
+      && isConversationMember(get(/databases/$(database)/documents/conversations/$(conversationId)).data);  
+
+    allow update: if isConversationMember(get(/databases/$(database)/documents/conversations/$(conversationId)).data);  
+
+    allow delete: if request.auth != null  
+      && (resource.data.senderId == request.auth.uid  
+          || isConversationMember(get(/databases/$(database)/documents/conversations/$(conversationId)).data));  
+  }  
+
+  match /activity/{activityUid} {  
+    allow read: if isConversationMember(get(/databases/$(database)/documents/conversations/$(conversationId)).data);  
+    allow write: if request.auth != null  
+      && request.auth.uid == activityUid  
+      && isConversationMember(get(/databases/$(database)/documents/conversations/$(conversationId)).data);  
+  }  
+}  
+
+// ==============================  
+// SERVERS  
+// ==============================  
+
+match /servers/{serverId} {  
+  allow read: if request.auth != null  
+    && (('memberIds' in resource.data && request.auth.uid in resource.data.memberIds)  
+        || ('visibility' in resource.data && resource.data.visibility == 'public'));  
+
+  allow write: if request.auth != null  
+    && 'memberIds' in request.resource.data  
+    && request.auth.uid in request.resource.data.memberIds;  
+}  
+
+// ==============================  
+// USERNAME RESERVATIONS  
+// ==============================  
+
+match /usernames/{username} {  
+
+  allow read: if request.auth != null;  
+
+  // Create a new username reservation.  
+  allow create: if request.auth != null  
+
+    && !exists(  
+      /databases/$(database)/documents/usernames/$(username)  
+    )  
+
+    && isValidUsername(username)  
+
+    && request.resource.data.uid == request.auth.uid  
+
+    && existsAfter(  
+      /databases/$(database)/documents/users/$(request.auth.uid)  
+    )  
+
+    && getAfter(  
+      /databases/$(database)/documents/users/$(request.auth.uid)  
+    ).data.username == username;  
+
+  // Reservations cannot be updated in place.  
+  allow update: if false;  
+
+  // Delete an old reservation only when it belongs  
+  // to the signed-in user and their profile changed.  
+  allow delete: if request.auth != null  
+
+    && resource.data.uid == request.auth.uid  
+
+    && existsAfter(  
+      /databases/$(database)/documents/users/$(request.auth.uid)  
+    )  
+
+    && getAfter(  
+      /databases/$(database)/documents/users/$(request.auth.uid)  
+    ).data.username != username;  
+}  
+
+// ==============================  
+// SHINZI ASSETS  
+// ==============================  
+
+match /assets/{assetId} {  
+
+  // Signed-in users can read asset metadata.  
+  // Google Drive file access is handled separately.  
+  allow read: if request.auth != null;  
+
+  // Only the owner can create an asset record.  
+  allow create: if request.auth != null  
+    && request.resource.data.ownerUid == request.auth.uid  
+
+    && request.resource.data.keys().hasAll([  
+      'ownerUid',  
+      'type',  
+      'visibility',  
+      'provider',  
+      'providerFileId',  
+      'driveFolderId',  
+      'fileName',  
+      'mimeType',  
+      'sizeBytes',  
+      'version',  
+      'status',  
+      'createdAt',  
+      'updatedAt'  
+    ])  
+
+    && request.resource.data.type in [  
+      'profile_photo',  
+      'banner',  
+      'text_holder',  
+      'sent_photo',  
+      'sent_video',  
+      'sent_file'  
+    ]  
+
+    && request.resource.data.visibility in [  
+      'public',  
+      'private'  
+    ]  
+
+    && request.resource.data.provider == 'google_drive'  
+
+    && request.resource.data.providerFileId is string  
+    && request.resource.data.providerFileId.size() > 0  
+
+    && request.resource.data.driveFolderId is string  
+    && request.resource.data.driveFolderId.size() > 0  
+
+    && request.resource.data.fileName is string  
+    && request.resource.data.fileName.size() > 0  
+    && request.resource.data.fileName.size() <= 255  
+
+    && request.resource.data.mimeType is string  
+    && request.resource.data.mimeType.size() > 0  
+    && request.resource.data.mimeType.size() <= 100  
+
+    && request.resource.data.sizeBytes is number  
+    && request.resource.data.sizeBytes >= 0  
+
+    && request.resource.data.version is number  
+    && request.resource.data.version == 1  
+
+    && request.resource.data.status in [  
+      'uploading',  
+      'active',  
+      'deleted',  
+      'failed'  
+    ];  
+
+  // Only the owner can update an asset record.  
+  allow update: if request.auth != null  
+    && resource.data.ownerUid == request.auth.uid  
+    && request.resource.data.ownerUid == resource.data.ownerUid;  
+
+  // Only the owner can delete an asset record.  
+  allow delete: if request.auth != null  
+    && resource.data.ownerUid == request.auth.uid;  
+}  
+
+match /privateDriveTokens/{userId} {  
+  allow read, write: if false;  
+}  
+
+}  
+}  

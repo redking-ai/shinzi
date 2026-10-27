@@ -245,11 +245,18 @@
   flex: 1;
   min-width: 0;
   border: 0;
-  outline: 0;
+  outline: none;
   background: transparent;
   color: var(--text);
   font: inherit;
   font-size: 16px;
+}
+
+.shc-searchbox input:focus,
+.shc-searchbox input:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  border: none !important;
 }
 
 .shc-searchbox input::placeholder {
@@ -1462,6 +1469,7 @@
   width: 100%;
   min-width: 0;
   flex: 1;
+  outline: none !important;
 }
 
 .shc-list.shc-padded {
