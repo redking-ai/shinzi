@@ -24,6 +24,9 @@ type ProfileTab = 'Personal' | 'Social';
 
 const usernamePattern = /^[a-z0-9_]{3,15}$/;
 
+// Cache asset document metadata to avoid redundant Firestore reads
+const assetMetadataCache = new Map<string, AnyRecord>();
+
 function dateValue(value: any): Date | null {
   if (!value) return null;
 
@@ -165,13 +168,16 @@ useEffect(() => {
       const fallbackAvatar = String(userData.photoURL ?? '');
       const fallbackBanner = String(userData.bannerUrl ?? '');
 
-      setProfileImageUri(fallbackAvatar);
-      setBannerImageUri(fallbackBanner);
+      // Keep previously loaded image to prevent UI flicker while fetching
+      setProfileImageUri((prev) => prev || fallbackAvatar);
+      setBannerImageUri((prev) => prev || fallbackBanner);
 
       const profileAssetId = userData.profileAssetId;
       const bannerAssetId = userData.bannerAssetId;
 
       if (!profileAssetId && !bannerAssetId) {
+        setProfileImageUri(fallbackAvatar);
+        setBannerImageUri(fallbackBanner);
         setAssetLoading(false);
         return;
       }
@@ -195,18 +201,25 @@ useEffect(() => {
           return '';
         }
 
+        const trimmedAssetId = assetId.trim();
+
         try {
-          const snap = await getDoc(doc(db, 'assets', assetId));
+          let asset = assetMetadataCache.get(trimmedAssetId);
 
-          if (!snap.exists()) {
-            console.error(
-              `[PROFILE IMAGE] ${kind} asset document not found:`,
-              assetId,
-            );
-            return '';
+          if (!asset) {
+            const snap = await getDoc(doc(db, 'assets', trimmedAssetId));
+
+            if (!snap.exists()) {
+              console.error(
+                `[PROFILE IMAGE] ${kind} asset document not found:`,
+                trimmedAssetId,
+              );
+              return '';
+            }
+
+            asset = snap.data() as AnyRecord;
+            assetMetadataCache.set(trimmedAssetId, asset);
           }
-
-          const asset = snap.data() as AnyRecord;
 
           console.info(`[PROFILE IMAGE] ${kind} asset metadata:`, {
             assetId,
@@ -305,10 +318,13 @@ useEffect(() => {
       cancelled = true;
     };
   }, [
-    userData,
+    userData?.profileAssetId,
+    userData?.bannerAssetId,
+    userData?.photoURL,
+    userData?.bannerUrl,
     drive.hasActiveSession,
     drive.getFileDataUri,
-      retryAssets,
+    retryAssets,
   ]);
 
   const cancelEditing = () => {
@@ -563,6 +579,8 @@ useEffect(() => {
                 className="sh-avatar"
                 src={profileImageUri}
                 alt="Profile"
+                loading="eager"
+                decoding="async"
                 onError={() => {
                   console.error(
                     '[PROFILE IMAGE] Browser could not render the profile image.',
@@ -832,46 +850,6 @@ useEffect(() => {
           </>
         )}
       </section>
-
-      {!drive.hasActiveSession && (
-        <div className="sh-drive-note">
-          <div>
-            <strong>Private profile images</strong>
-            <p>
-              Connect Google Drive to load profile/banner images
-              stored in your Drive.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            className="sh-button"
-            disabled={!drive.isReady || drive.isConnecting}
-            onClick={async () => {
-              try {
-                const token = await drive.connectDrive();
-
-                if (token) {
-                  setError('');
-                } else {
-                  setError(
-                    'Google Drive connection was cancelled or could not be completed.',
-                  );
-                }
-              } catch (e) {
-                console.error('[PROFILE] Drive connection failed:', e);
-                setError(messageOf(e));
-              }
-            }}
-          >
-            {drive.isConnecting
-              ? 'Connecting…'
-              : drive.isReady
-                ? 'Connect Drive'
-                : 'Loading Google…'}
-          </button>
-        </div>
-      )}
 
       <nav className="sh-profile-bottom-nav" aria-label="Main navigation">
         <button
