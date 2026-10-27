@@ -22,6 +22,7 @@ import Terms from './Terms';
 import SignUp from './SignUp';
 import Login from './Login';
 import Chat from './Chat';
+import { getCachedProfile, setCachedProfile, navigateTo } from './profileCache';
 
 import background from './assets/background.png';
 import logo from './assets/logo.png';
@@ -37,6 +38,22 @@ export default function App() {
 
   const [isDesktop, setIsDesktop] =
     useState(false);
+
+  const [currentPath, setCurrentPath] = useState(() =>
+    typeof window !== 'undefined' ? window.location.pathname.toLowerCase() : '/'
+  );
+  const [currentSearch, setCurrentSearch] = useState(() =>
+    typeof window !== 'undefined' ? window.location.search : ''
+  );
+
+  useEffect(() => {
+    const handleLocationChange = () => {
+      setCurrentPath(window.location.pathname.toLowerCase());
+      setCurrentSearch(window.location.search);
+    };
+    window.addEventListener('popstate', handleLocationChange);
+    return () => window.removeEventListener('popstate', handleLocationChange);
+  }, []);
 
   // ==========================================================
   // SIGNUP BUSY FLAG
@@ -59,7 +76,11 @@ export default function App() {
     useState(false);
 
 const [profileExists, setProfileExists] =
-  useState<boolean | null>(null);
+  useState<boolean | null>(() => {
+    const user = auth.currentUser;
+    if (user && getCachedProfile(user.uid)) return true;
+    return null;
+  });
 
   // ==========================================================
   // FIREBASE AUTH
@@ -87,12 +108,24 @@ useEffect(() => {
   // SignUp is running, so leave it alone until it finishes.
   if (signupBusy) return;
 
+  const cached = getCachedProfile(user.uid);
+  if (cached) {
+    setProfileExists(true);
+    return;
+  }
+
   let cancelled = false;
   setProfileExists(null);
 
   getDoc(doc(db, 'users', user.uid))
     .then((snap) => {
-      if (!cancelled) setProfileExists(snap.exists());
+      if (!cancelled) {
+        const exists = snap.exists();
+        setProfileExists(exists);
+        if (exists) {
+          setCachedProfile(user.uid, snap.data());
+        }
+      }
     })
     .catch(() => {
       // On error, let Profile show its own error and retry button.
@@ -135,12 +168,12 @@ useEffect(() => {
 // TERMS OF SERVICE
 // ==========================================================
 
-if (window.location.pathname === '/terms') {
+if (currentPath === '/terms') {
   return <Terms />;
 }
 
 
-if (window.location.pathname === '/privacy') {
+if (currentPath === '/privacy') {
   return <Privacy />;
 }
 
@@ -148,7 +181,7 @@ if (window.location.pathname === '/privacy') {
 // SHINZI CHAT
 // ==========================================================
 
-if (window.location.pathname.toLowerCase() === '/chat') {
+if (currentPath === '/chat') {
   return <Chat />;
 }
   // ==========================================================
@@ -176,13 +209,12 @@ if (window.location.pathname.toLowerCase() === '/chat') {
   // ==========================================================
 
   if (user && !signupBusy && profileExists) {
-    const pathname = window.location.pathname;
-    const params = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(currentSearch);
     const targetUid = params.get('uid');
 
     // Another user's profile
     if (
-      pathname.toLowerCase() === '/profile' &&
+      currentPath === '/profile' &&
       targetUid &&
       targetUid !== user.uid
     ) {
@@ -190,7 +222,7 @@ if (window.location.pathname.toLowerCase() === '/chat') {
     }
 
     // Your own profile
-    if (pathname.toLowerCase() === '/profile') {
+    if (currentPath === '/profile') {
       return <Profile />;
     }
 
@@ -209,7 +241,7 @@ if (window.location.pathname.toLowerCase() === '/chat') {
           type="button"
           style={styles.backButton}
           onClick={() => {
-            window.location.href = '/profile';
+            navigateTo('/profile');
           }}
         >
           Open my profile

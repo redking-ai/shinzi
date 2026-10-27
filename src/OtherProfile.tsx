@@ -14,12 +14,17 @@ import {
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { auth, db } from './firebaseConfig';
 import { useDriveStore } from './driveStore';
+import {
+  getCachedProfile,
+  setCachedProfile,
+  getCachedAssetMeta,
+  setCachedAssetMeta,
+  navigateTo,
+} from './profileCache';
 import './Profile.css';
 
 type AnyRecord = Record<string, any>;
 type ProfileTab = 'Personal' | 'Social';
-
-const otherAssetMetadataCache = new Map<string, AnyRecord>();
 
 
 
@@ -71,10 +76,34 @@ export default function OtherProfile({
     new URLSearchParams(window.location.search).get('uid') ||
     '';
 
-  const [userData, setUserData] = useState<AnyRecord | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [avatar, setAvatar] = useState('');
-  const [banner, setBanner] = useState('');
+  const [userData, setUserData] = useState<AnyRecord | null>(() => {
+    return targetUid ? getCachedProfile(targetUid) : null;
+  });
+  const [loading, setLoading] = useState<boolean>(() => {
+    return targetUid ? !getCachedProfile(targetUid) : true;
+  });
+  const [avatar, setAvatar] = useState<string>(() => {
+    const cached = targetUid ? getCachedProfile(targetUid) : null;
+    if (cached?.profileAssetId) {
+      const meta = getCachedAssetMeta(cached.profileAssetId);
+      if (meta?.providerFileId && typeof window !== 'undefined' && window.sessionStorage) {
+        const stored = window.sessionStorage.getItem(`shinzi_drive_${meta.providerFileId}`);
+        if (stored) return stored;
+      }
+    }
+    return String(cached?.photoURL ?? '');
+  });
+  const [banner, setBanner] = useState<string>(() => {
+    const cached = targetUid ? getCachedProfile(targetUid) : null;
+    if (cached?.bannerAssetId) {
+      const meta = getCachedAssetMeta(cached.bannerAssetId);
+      if (meta?.providerFileId && typeof window !== 'undefined' && window.sessionStorage) {
+        const stored = window.sessionStorage.getItem(`shinzi_drive_${meta.providerFileId}`);
+        if (stored) return stored;
+      }
+    }
+    return String(cached?.bannerUrl ?? '');
+  });
   const [tab, setTab] = useState<ProfileTab>('Social');
   const [menuOpen, setMenuOpen] = useState(false);
   const [isFriend] = useState(false);
@@ -170,11 +199,11 @@ export default function OtherProfile({
     }
 
     if (currentUser && targetUid === currentUser.uid) {
-      window.location.replace('/profile');
+      navigateTo('/profile');
       return;
     }
 
-    setLoading(true);
+    setLoading((prev) => (getCachedProfile(targetUid) ? false : prev));
     setError('');
 
     try {
@@ -187,14 +216,17 @@ export default function OtherProfile({
         setError(
           'This profile does not exist or is not available.'
         );
+        setLoading(false);
         return;
       }
 
       const data = snap.data() as AnyRecord;
 
       setUserData(data);
-      setAvatar(String(data.photoURL ?? ''));
-      setBanner(String(data.bannerUrl ?? ''));
+      setCachedProfile(targetUid, data);
+      setAvatar((prev) => prev || String(data.photoURL ?? ''));
+      setBanner((prev) => prev || String(data.bannerUrl ?? ''));
+      setLoading(false); // Reveal profile immediately
 
       if (currentUser) {
         const [fav, block, mute] = await Promise.all([
@@ -241,7 +273,6 @@ export default function OtherProfile({
       }
     } catch (e) {
       setError(errorText(e));
-    } finally {
       setLoading(false);
     }
   }, [targetUid, currentUser]);
@@ -259,18 +290,14 @@ export default function OtherProfile({
       const loadAsset = async (
         id: unknown
       ): Promise<string> => {
-        if (
-          typeof id !== 'string' ||
-          !id ||
-          !drive.hasActiveSession
-        ) {
+        if (typeof id !== 'string' || !id.trim()) {
           return '';
         }
 
         const trimmedId = id.trim();
 
         try {
-          let data = otherAssetMetadataCache.get(trimmedId);
+          let data = getCachedAssetMeta(trimmedId);
 
           if (!data) {
             const snap = await getDoc(
@@ -279,7 +306,7 @@ export default function OtherProfile({
 
             if (!snap.exists()) return '';
             data = snap.data() as AnyRecord;
-            otherAssetMetadataCache.set(trimmedId, data);
+            setCachedAssetMeta(trimmedId, data);
           }
 
           if (
@@ -325,7 +352,6 @@ export default function OtherProfile({
   }, [
     userData?.profileAssetId,
     userData?.bannerAssetId,
-    drive.hasActiveSession,
     drive.getFileDataUri,
   ]);
 
@@ -395,7 +421,7 @@ export default function OtherProfile({
     } else if (window.history.length > 1) {
       window.history.back();
     } else {
-      window.location.assign('/profile');
+      navigateTo('/profile');
     }
   };
 

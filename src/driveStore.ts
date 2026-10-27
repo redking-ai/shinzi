@@ -253,6 +253,61 @@ const blobToDataUri = (
 const driveDataUriCache = new Map<string, string>();
 const inFlightDriveRequests = new Map<string, Promise<string>>();
 
+let sharedDriveToken: string | null = null;
+let sharedDriveExpiresAt = 0;
+
+function getStoredDriveToken(): { token: string; expiresAt: number } | null {
+  if (
+    sharedDriveToken &&
+    Date.now() < sharedDriveExpiresAt - TOKEN_EXPIRY_MARGIN_MS
+  ) {
+    return { token: sharedDriveToken, expiresAt: sharedDriveExpiresAt };
+  }
+
+  if (typeof window !== 'undefined' && window.sessionStorage) {
+    try {
+      const stored = window.sessionStorage.getItem('shinzi_drive_token_data');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (
+          parsed?.token &&
+          typeof parsed.expiresAt === 'number' &&
+          Date.now() < parsed.expiresAt - TOKEN_EXPIRY_MARGIN_MS
+        ) {
+          sharedDriveToken = parsed.token;
+          sharedDriveExpiresAt = parsed.expiresAt;
+          return { token: parsed.token, expiresAt: parsed.expiresAt };
+        }
+      }
+    } catch {}
+  }
+
+  return null;
+}
+
+function storeDriveToken(token: string, expiresAt: number) {
+  sharedDriveToken = token;
+  sharedDriveExpiresAt = expiresAt;
+  if (typeof window !== 'undefined' && window.sessionStorage) {
+    try {
+      window.sessionStorage.setItem(
+        'shinzi_drive_token_data',
+        JSON.stringify({ token, expiresAt }),
+      );
+    } catch {}
+  }
+}
+
+function clearStoredDriveToken() {
+  sharedDriveToken = null;
+  sharedDriveExpiresAt = 0;
+  if (typeof window !== 'undefined' && window.sessionStorage) {
+    try {
+      window.sessionStorage.removeItem('shinzi_drive_token_data');
+    } catch {}
+  }
+}
+
 // ------------------------------------------------------------
 // ONE-REQUEST UPLOAD
 // ------------------------------------------------------------
@@ -352,11 +407,12 @@ const uploadMultipart = async (
 
 
 export const useDriveStore = (): DriveStore => {
-  const tokenRef = useRef<string | null>(null);
-  const expiresAtRef = useRef(0);
+  const initialTokenData = getStoredDriveToken();
+  const tokenRef = useRef<string | null>(initialTokenData?.token ?? null);
+  const expiresAtRef = useRef<number>(initialTokenData?.expiresAt ?? 0);
 
   const [hasActiveSession, setHasActiveSession] =
-    useState(false);
+    useState<boolean>(Boolean(initialTokenData));
 
   const [isConnecting, setIsConnecting] =
     useState(false);
@@ -372,9 +428,10 @@ export const useDriveStore = (): DriveStore => {
 
   const applyToken = useCallback(
     (token: string, expiresIn: number) => {
+      const expiresAt = Date.now() + Math.max(60, expiresIn) * 1000;
       tokenRef.current = token;
-      expiresAtRef.current =
-        Date.now() + Math.max(60, expiresIn) * 1000;
+      expiresAtRef.current = expiresAt;
+      storeDriveToken(token, expiresAt);
       setHasActiveSession(true);
     },
     [],
@@ -383,15 +440,28 @@ export const useDriveStore = (): DriveStore => {
   const clearAuth = useCallback(async (): Promise<void> => {
     tokenRef.current = null;
     expiresAtRef.current = 0;
+    clearStoredDriveToken();
     setHasActiveSession(false);
   }, []);
 
   const hasValidToken = useCallback((): boolean => {
-    return Boolean(
+    if (
       tokenRef.current &&
       Date.now() <
-        expiresAtRef.current - TOKEN_EXPIRY_MARGIN_MS,
-    );
+        expiresAtRef.current - TOKEN_EXPIRY_MARGIN_MS
+    ) {
+      return true;
+    }
+
+    const stored = getStoredDriveToken();
+    if (stored) {
+      tokenRef.current = stored.token;
+      expiresAtRef.current = stored.expiresAt;
+      setHasActiveSession(true);
+      return true;
+    }
+
+    return false;
   }, []);
 
   const refreshAccessToken = useCallback(
@@ -486,6 +556,10 @@ export const useDriveStore = (): DriveStore => {
 
         if (!user) {
           await clearAuth();
+          return;
+        }
+
+        if (hasValidToken()) {
           return;
         }
 

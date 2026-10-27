@@ -57,6 +57,7 @@ import {
 } from 'lucide-react';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { auth, db } from './firebaseConfig';
+import { navigateTo as navigateToUrl, setCachedProfile } from './profileCache';
 import './Chat.css';
 
 // ============================================================
@@ -364,7 +365,13 @@ export default function Chat({ onNavigate }: ChatProps) {
     return onSnapshot(
       doc(db, 'users', uid),
       (snap) => {
-        setProfile(snap.exists() ? { id: snap.id, ...snap.data() } : null);
+        if (snap.exists()) {
+          const data = snap.data();
+          setProfile({ id: snap.id, ...data });
+          setCachedProfile(uid, data);
+        } else {
+          setProfile(null);
+        }
       },
       (error) => console.error('Profile listener error:', error),
     );
@@ -1476,7 +1483,7 @@ const handleSearchMessage = async (target: Rec) => {
     if (onNavigate) {
       onNavigate(target);
     } else if (target === 'profile') {
-      window.location.href = '/profile';
+      navigateToUrl('/profile');
     } else {
       notify(target === 'ai' ? 'AI' : 'Servers', 'This screen is not connected yet.');
     }
@@ -2604,7 +2611,7 @@ const handleSearchMessage = async (target: Rec) => {
               className="shc-btn"
               style={{ marginTop: 16 }}
               onClick={() => {
-                window.location.assign('/');
+                navigateToUrl('/');
               }}
             >
               Go to sign in

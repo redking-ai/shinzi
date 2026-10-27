@@ -17,15 +17,19 @@ import {
 } from 'lucide-react';
 import { auth, db } from './firebaseConfig';
 import { useDriveStore } from './driveStore';
+import {
+  getCachedProfile,
+  setCachedProfile,
+  getCachedAssetMeta,
+  setCachedAssetMeta,
+  navigateTo,
+} from './profileCache';
 import './Profile.css';
 
 type AnyRecord = Record<string, any>;
 type ProfileTab = 'Personal' | 'Social';
 
 const usernamePattern = /^[a-z0-9_]{3,15}$/;
-
-// Cache asset document metadata to avoid redundant Firestore reads
-const assetMetadataCache = new Map<string, AnyRecord>();
 
 function dateValue(value: any): Date | null {
   if (!value) return null;
@@ -77,8 +81,14 @@ export default function Profile() {
     return unsubscribe;
   }, []);
 
-  const [userData, setUserData] = useState<AnyRecord | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [userData, setUserData] = useState<AnyRecord | null>(() => {
+    const user = auth.currentUser;
+    return user ? getCachedProfile(user.uid) : null;
+  });
+  const [loading, setLoading] = useState<boolean>(() => {
+    const user = auth.currentUser;
+    return user ? !getCachedProfile(user.uid) : true;
+  });
   const [assetLoading, setAssetLoading] = useState(false);
 const [assetError, setAssetError] = useState('');
 const [retryAssets, setRetryAssets] = useState(0);
@@ -93,8 +103,30 @@ useEffect(() => {
   const t = setTimeout(() => setShowAssetError(true), 10000);
   return () => clearTimeout(t);
 }, [assetError]);
-  const [profileImageUri, setProfileImageUri] = useState('');
-  const [bannerImageUri, setBannerImageUri] = useState('');
+  const [profileImageUri, setProfileImageUri] = useState<string>(() => {
+    const user = auth.currentUser;
+    const cached = user ? getCachedProfile(user.uid) : null;
+    if (cached?.profileAssetId) {
+      const meta = getCachedAssetMeta(cached.profileAssetId);
+      if (meta?.providerFileId && typeof window !== 'undefined' && window.sessionStorage) {
+        const stored = window.sessionStorage.getItem(`shinzi_drive_${meta.providerFileId}`);
+        if (stored) return stored;
+      }
+    }
+    return String(cached?.photoURL ?? '');
+  });
+  const [bannerImageUri, setBannerImageUri] = useState<string>(() => {
+    const user = auth.currentUser;
+    const cached = user ? getCachedProfile(user.uid) : null;
+    if (cached?.bannerAssetId) {
+      const meta = getCachedAssetMeta(cached.bannerAssetId);
+      if (meta?.providerFileId && typeof window !== 'undefined' && window.sessionStorage) {
+        const stored = window.sessionStorage.getItem(`shinzi_drive_${meta.providerFileId}`);
+        if (stored) return stored;
+      }
+    }
+    return String(cached?.bannerUrl ?? '');
+  });
   const [activeTab, setActiveTab] = useState<ProfileTab>('Personal');
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -125,7 +157,11 @@ useEffect(() => {
       return;
     }
 
-    setLoading(true);
+    // Only show full blocking loading state if no cached data is present
+    setLoading((prevLoading) => {
+      const cached = getCachedProfile(currentUser.uid);
+      return cached ? false : prevLoading;
+    });
     setError('');
 
     try {
@@ -138,6 +174,7 @@ useEffect(() => {
 
       const data = snap.data() as AnyRecord;
       setUserData(data);
+      setCachedProfile(currentUser.uid, data);
       resetEditForm(data);
     } catch (e) {
       console.error('[PROFILE] Failed to load user document:', e);
@@ -182,14 +219,6 @@ useEffect(() => {
         return;
       }
 
-      if (!drive.hasActiveSession) {
-        setAssetError(
-          'Google Drive is not connected. Reconnect the Google account you used during signup to load your profile images.',
-        );
-        setAssetLoading(false);
-        return;
-      }
-
       setAssetLoading(true);
 
       const loadAsset = async (
@@ -204,7 +233,7 @@ useEffect(() => {
         const trimmedAssetId = assetId.trim();
 
         try {
-          let asset = assetMetadataCache.get(trimmedAssetId);
+          let asset = getCachedAssetMeta(trimmedAssetId);
 
           if (!asset) {
             const snap = await getDoc(doc(db, 'assets', trimmedAssetId));
@@ -218,7 +247,7 @@ useEffect(() => {
             }
 
             asset = snap.data() as AnyRecord;
-            assetMetadataCache.set(trimmedAssetId, asset);
+            setCachedAssetMeta(trimmedAssetId, asset);
           }
 
           console.info(`[PROFILE IMAGE] ${kind} asset metadata:`, {
@@ -871,7 +900,7 @@ useEffect(() => {
         <button
           type="button"
           onClick={() => {
-            window.location.assign('/chat');
+            navigateTo('/chat');
           }}
           aria-label="Chat"
         >
@@ -881,7 +910,7 @@ useEffect(() => {
         <button
           type="button"
           onClick={() => {
-            window.location.assign('/chat?screen=search');
+            navigateTo('/chat?screen=search');
           }}
           aria-label="Search"
         >
