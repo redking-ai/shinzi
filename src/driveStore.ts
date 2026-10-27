@@ -247,6 +247,12 @@ const blobToDataUri = (
     reader.readAsDataURL(blob);
   });
 
+// ============================================================
+// IMAGE CACHING & REQUEST DEDUPLICATION
+// ============================================================
+const driveDataUriCache = new Map<string, string>();
+const inFlightDriveRequests = new Map<string, Promise<string>>();
+
 // ------------------------------------------------------------
 // ONE-REQUEST UPLOAD
 // ------------------------------------------------------------
@@ -985,58 +991,105 @@ export const useDriveStore = (): DriveStore => {
             );
           }
 
-         return withToken(async (token) => {
-  const controller = new AbortController();
+          const trimmedId = fileId.trim();
 
-  const timeoutId = window.setTimeout(
-    () => controller.abort(),
-    15000
-  );
+          // 1. Check in-memory cache
+          const inMemory = driveDataUriCache.get(trimmedId);
+          if (inMemory) {
+            return inMemory;
+          }
 
-  let response: Response;
-
-  try {
-    response = await fetch(
-      `${DRIVE_API}/files/${encodeURIComponent(
-        fileId
-      )}?alt=media`,
-      {
-        headers: getAuthHeader(token),
-        signal: controller.signal,
-      }
-    );
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      error.name === 'AbortError'
-    ) {
-      throw new Error(
-        'Google Drive took too long to load this image. Please retry.'
-      );
-    }
-
-    throw new Error(
-      'Unable to reach Google Drive. Check your connection and retry.'
-    );
-  } finally {
-    window.clearTimeout(timeoutId);
-  }
-
-            await throwDriveError(
-              response,
-              'Unable to download Google Drive file.'
-            );
-
-            const blob = await response.blob();
-
-            if (!blob) {
-              throw new Error(
-                'Google Drive returned empty file data.'
-              );
+          // 2. Check browser session storage cache
+          if (typeof window !== 'undefined' && window.sessionStorage) {
+            try {
+              const sessionItem = window.sessionStorage.getItem(`shinzi_drive_${trimmedId}`);
+              if (sessionItem) {
+                driveDataUriCache.set(trimmedId, sessionItem);
+                return sessionItem;
+              }
+            } catch {
+              // Ignore session storage errors
             }
+          }
 
-            return blobToDataUri(blob);
-          });
+          // 3. Request deduplication (reuse active in-flight download)
+          const inFlight = inFlightDriveRequests.get(trimmedId);
+          if (inFlight) {
+            return inFlight;
+          }
+
+          const fetchPromise = (async () => {
+            try {
+              return await withToken(async (token) => {
+                const controller = new AbortController();
+
+                const timeoutId = window.setTimeout(
+                  () => controller.abort(),
+                  15000
+                );
+
+                let response: Response;
+
+                try {
+                  response = await fetch(
+                    `${DRIVE_API}/files/${encodeURIComponent(
+                      trimmedId
+                    )}?alt=media`,
+                    {
+                      headers: getAuthHeader(token),
+                      signal: controller.signal,
+                    }
+                  );
+                } catch (error) {
+                  if (
+                    error instanceof Error &&
+                    error.name === 'AbortError'
+                  ) {
+                    throw new Error(
+                      'Google Drive took too long to load this image. Please retry.'
+                    );
+                  }
+
+                  throw new Error(
+                    'Unable to reach Google Drive. Check your connection and retry.'
+                  );
+                } finally {
+                  window.clearTimeout(timeoutId);
+                }
+
+                await throwDriveError(
+                  response,
+                  'Unable to download Google Drive file.'
+                );
+
+                const blob = await response.blob();
+
+                if (!blob) {
+                  throw new Error(
+                    'Google Drive returned empty file data.'
+                  );
+                }
+
+                const dataUri = await blobToDataUri(blob);
+                driveDataUriCache.set(trimmedId, dataUri);
+
+                if (typeof window !== 'undefined' && window.sessionStorage) {
+                  try {
+                    window.sessionStorage.setItem(`shinzi_drive_${trimmedId}`, dataUri);
+                  } catch {
+                    // Ignore storage quota limits
+                  }
+                }
+
+                return dataUri;
+              });
+            } finally {
+              inFlightDriveRequests.delete(trimmedId);
+            }
+          })();
+
+          inFlightDriveRequests.set(trimmedId, fetchPromise);
+          return fetchPromise;
         },
         [withToken]
       );
@@ -1076,6 +1129,10 @@ export const useDriveStore = (): DriveStore => {
             );
 
             if (response.status === 404) {
+              driveDataUriCache.delete(fileId.trim());
+              try {
+                window.sessionStorage?.removeItem(`shinzi_drive_${fileId.trim()}`);
+              } catch {}
               return true;
             }
 
@@ -1083,6 +1140,11 @@ export const useDriveStore = (): DriveStore => {
               response,
               'Unable to delete Google Drive file.'
             );
+
+            driveDataUriCache.delete(fileId.trim());
+            try {
+              window.sessionStorage?.removeItem(`shinzi_drive_${fileId.trim()}`);
+            } catch {}
 
             return true;
           });
