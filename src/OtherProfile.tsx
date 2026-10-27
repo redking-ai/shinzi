@@ -19,6 +19,8 @@ import './Profile.css';
 type AnyRecord = Record<string, any>;
 type ProfileTab = 'Personal' | 'Social';
 
+const otherAssetMetadataCache = new Map<string, AnyRecord>();
+
 
 
 function dateLabel(value: any): string {
@@ -265,14 +267,20 @@ export default function OtherProfile({
           return '';
         }
 
+        const trimmedId = id.trim();
+
         try {
-          const snap = await getDoc(
-            doc(db, 'assets', id)
-          );
+          let data = otherAssetMetadataCache.get(trimmedId);
 
-          if (!snap.exists()) return '';
+          if (!data) {
+            const snap = await getDoc(
+              doc(db, 'assets', trimmedId)
+            );
 
-          const data = snap.data() as AnyRecord;
+            if (!snap.exists()) return '';
+            data = snap.data() as AnyRecord;
+            otherAssetMetadataCache.set(trimmedId, data);
+          }
 
           if (
             data.status !== 'active' ||
@@ -315,7 +323,8 @@ export default function OtherProfile({
       cancelled = true;
     };
   }, [
-    userData,
+    userData?.profileAssetId,
+    userData?.bannerAssetId,
     drive.hasActiveSession,
     drive.getFileDataUri,
   ]);
@@ -570,6 +579,8 @@ export default function OtherProfile({
                 className="sh-avatar"
                 src={avatar}
                 alt={`${userData.displayName || 'User'} profile`}
+                loading="eager"
+                decoding="async"
               />
             ) : (
               <div className="sh-avatar sh-avatar-fallback">
@@ -755,41 +766,6 @@ export default function OtherProfile({
           </span>
         </div>
       </section>
-
-      {!drive.hasActiveSession && (
-        <div className="sh-drive-note">
-          <div>
-            <strong>Private profile images</strong>
-
-            <p>
-              Connect Google Drive to load images stored in
-              your private Drive.
-            </p>
-          </div>
-
-          <button
-            className="sh-button"
-            disabled={!drive.isReady || drive.isConnecting}
-            onClick={async () => {
-              const token = await drive.connectDrive();
-
-              if (token) {
-                await loadProfile();
-              } else {
-                setError(
-                  'Google Drive connection was cancelled or could not be completed.'
-                );
-              }
-            }}
-          >
-            {drive.isConnecting
-              ? 'Connecting…'
-              : drive.isReady
-                ? 'Connect Drive'
-                : 'Loading Google…'}
-          </button>
-        </div>
-      )}
     </main>
   );
 }
