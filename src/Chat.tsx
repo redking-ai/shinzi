@@ -39,6 +39,7 @@ import {
   Phone,
   PhoneOff,
   Plus,
+  Reply,
   Search,
   Send,
   Server,
@@ -146,6 +147,15 @@ const isMentioned = (text: string, username?: string, displayName?: string) => {
     const escaped = clean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return new RegExp(`(^|[^a-zA-Z0-9_])@${escaped}(?![a-zA-Z0-9_])`, 'i').test(text);
   });
+};
+
+const getReplyExcerpt = (msg: Rec | null | undefined): string => {
+  if (!msg) return '';
+  if (msg.deleted) return 'This message was deleted';
+  if (msg.type === 'poll') return `Poll: ${msg.question || ''}`;
+  if (msg.type === 'event') return `Event: ${msg.name || ''}`;
+  if (msg.type === 'voice') return 'Voice message';
+  return String(msg.text || '').slice(0, 100);
 };
 
 
@@ -307,7 +317,9 @@ export default function Chat({ onNavigate }: ChatProps) {
   const [optimisticFavorites, setOptimisticFavorites] = useState<Record<string, boolean>>({});
 
   const [messageText, setMessageText] = useState('');
+  const [replyTarget, setReplyTarget] = useState<Rec | null>(null);
   const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
   const [loadingChats, setLoadingChats] = useState(true);
   const [loadingFriends, setLoadingFriends] = useState(true);
 
@@ -722,6 +734,7 @@ export default function Chat({ onNavigate }: ChatProps) {
     setSelected(conversation);
     setScreen('conversation');
     setMessageText('');
+    setReplyTarget(null);
     await markRead(conversation);
   };
 
@@ -846,27 +859,75 @@ const handleSearchMessage = async (target: Rec) => {
     }, 5000);
   };
 
+  const startReply = (msg: Rec) => {
+    if (!msg || msg.deleted) return;
+    setReplyTarget(msg);
+    if (inputRef.current && screen === 'conversation' && selected?.id) {
+      inputRef.current.focus({ preventScroll: true });
+    }
+  };
+
+  const scrollToMessage = (targetMessageId?: string) => {
+    if (!targetMessageId) {
+      notify('Unavailable', 'Original message unavailable.');
+      return;
+    }
+    const el = document.getElementById(`shc-msg-${targetMessageId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.remove('shc-msg-highlight');
+      void el.offsetWidth;
+      el.classList.add('shc-msg-highlight');
+      window.setTimeout(() => {
+        el.classList.remove('shc-msg-highlight');
+      }, 1500);
+    } else {
+      notify('Unavailable', 'Original message unavailable.');
+    }
+  };
+
   const sendMessage = async () => {
-    if (!uid || !selected?.id || sending) return;
+    if (!uid || !selected?.id || sendingRef.current) return;
 
     const text = messageText.trim();
     if (!text) return;
 
+    sendingRef.current = true;
     setSending(true);
 
     try {
+      const activeConv = selectedConversation || selected;
+      const targetReply =
+        replyTarget && messages.some((m) => m.id === replyTarget.id)
+          ? replyTarget
+          : null;
+
+      const messageData: Rec = {
+        type: 'text',
+        text,
+        senderId: uid,
+        senderName: profile?.displayName || profile?.username || 'User',
+        senderUsername: profile?.username || '',
+        createdAt: serverTimestamp(),
+        editedAt: null,
+        deleted: false,
+      };
+
+      if (targetReply) {
+        messageData.replyToMessageId = targetReply.id;
+        messageData.replyTo = {
+          id: targetReply.id,
+          senderId: targetReply.senderId || '',
+          senderName:
+            targetReply.senderName || targetReply.senderUsername || 'User',
+          senderUsername: targetReply.senderUsername || '',
+          text: getReplyExcerpt(targetReply),
+        };
+      }
+
       const messageRef = await addDoc(
         collection(db, 'conversations', selected.id, 'messages'),
-        {
-          type: 'text',
-          text,
-          senderId: uid,
-          senderName: profile?.displayName || profile?.username || 'User',
-          senderUsername: profile?.username || '',
-          createdAt: serverTimestamp(),
-          editedAt: null,
-          deleted: false,
-        },
+        messageData,
       );
 
       const updates: Rec = {
@@ -878,7 +939,6 @@ const handleSearchMessage = async (target: Rec) => {
       };
 
       // Mark only the mentioned people as urgent; leave everyone else alone.
-      const activeConv = selectedConversation || selected;
       (activeConv?.memberIds || []).forEach((memberId: string) => {
         const memberProfile = activeConv?.memberProfiles?.[memberId];
         if (
@@ -892,12 +952,19 @@ const handleSearchMessage = async (target: Rec) => {
       await updateDoc(doc(db, 'conversations', selected.id), updates);
 
       setMessageText('');
-      if (inputRef.current) inputRef.current.style.height = 'auto';
+      setReplyTarget(null);
+      if (inputRef.current) {
+        inputRef.current.style.height = 'auto';
+        if (screen === 'conversation' && selected?.id) {
+          inputRef.current.focus({ preventScroll: true });
+        }
+      }
       void publishTyping(false);
     } catch (error) {
       console.error('Send message error:', error);
       notify('Message not sent', messageOf(error, 'Unable to send this message.'));
     } finally {
+      sendingRef.current = false;
       setSending(false);
     }
   };
@@ -1591,6 +1658,7 @@ const handleSearchMessage = async (target: Rec) => {
       setSelected(null);
       setScreen('main');
       setMessageText('');
+      setReplyTarget(null);
       setPanel(null);
       setShowAttach(false);
       return;
@@ -1717,13 +1785,78 @@ const handleSearchMessage = async (target: Rec) => {
         </div>
       );
     } else {
+      const replyId = item.replyToMessageId || item.replyTo?.id;
+      const original = replyId ? messages.find((m) => m.id === replyId) : null;
+
       body = (
-        <div className={own ? 'shc-bubble shc-bubble-own' : 'shc-bubble'}>
+        <div
+          className={own ? 'shc-bubble shc-bubble-own' : 'shc-bubble'}
+          onDoubleClick={() => !item.deleted && startReply(item)}
+        >
           {!own && selected?.type === 'group' && (
             <span className="shc-sender">
               {item.senderName || item.senderUsername || 'User'}
             </span>
           )}
+
+          {replyId && (() => {
+            let quotedSender = 'User';
+            let quotedText = 'Original message unavailable';
+
+            if (original) {
+              if (original.deleted) {
+                quotedSender =
+                  original.senderId === uid
+                    ? 'You'
+                    : original.senderName ||
+                      original.senderUsername ||
+                      'User';
+                quotedText = 'Original message was deleted';
+              } else {
+                quotedSender =
+                  original.senderId === uid
+                    ? 'You'
+                    : original.senderName ||
+                      original.senderUsername ||
+                      'User';
+                quotedText = getReplyExcerpt(original);
+              }
+            } else if (item.replyTo) {
+              quotedSender =
+                item.replyTo.senderId === uid
+                  ? 'You'
+                  : item.replyTo.senderName ||
+                    item.replyTo.senderUsername ||
+                    'User';
+              quotedText = item.replyTo.text || 'Original message unavailable';
+            }
+
+            return (
+              <div
+                role="button"
+                tabIndex={0}
+                className={own ? 'shc-quote shc-quote-own' : 'shc-quote'}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  scrollToMessage(replyId);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    scrollToMessage(replyId);
+                  }
+                }}
+                title="Jump to original message"
+                aria-label="Jump to original message"
+              >
+                <div className="shc-quote-bar" />
+                <div className="shc-quote-content">
+                  <span className="shc-quote-sender">{quotedSender}</span>
+                  <span className="shc-quote-text">{quotedText}</span>
+                </div>
+              </div>
+            );
+          })()}
 
           <span className="shc-text">{item.text}</span>
 
@@ -1735,12 +1868,36 @@ const handleSearchMessage = async (target: Rec) => {
     }
 
     return (
-      <div key={item.id}>
+      <div key={item.id} id={`shc-msg-${item.id}`}>
         {showDay && <div className="shc-day">{dateLabel(item.createdAt)}</div>}
 
         <div className={own ? 'shc-msg-row shc-msg-own' : 'shc-msg-row'}>
+          {own && !item.deleted && (
+            <button
+              type="button"
+              className="shc-msg-reply-btn"
+              onClick={() => startReply(item)}
+              title="Reply"
+              aria-label="Reply"
+            >
+              <Reply size={15} />
+            </button>
+          )}
+
           {!own && <Avatar name={item.senderName} small />}
           {body}
+
+          {!own && !item.deleted && (
+            <button
+              type="button"
+              className="shc-msg-reply-btn"
+              onClick={() => startReply(item)}
+              title="Reply"
+              aria-label="Reply"
+            >
+              <Reply size={15} />
+            </button>
+          )}
         </div>
       </div>
     );
@@ -2238,6 +2395,36 @@ const handleSearchMessage = async (target: Rec) => {
           </div>
         )}
 
+        {replyTarget && (
+          <div className="shc-reply-bar">
+            <div className="shc-reply-bar-left">
+              <Reply size={16} className="shc-reply-bar-icon" />
+              <div className="shc-reply-bar-content">
+                <span className="shc-reply-bar-sender">
+                  Replying to{' '}
+                  {replyTarget.senderId === uid
+                    ? 'yourself'
+                    : replyTarget.senderName ||
+                      replyTarget.senderUsername ||
+                      'User'}
+                </span>
+                <span className="shc-reply-bar-text">
+                  {getReplyExcerpt(replyTarget)}
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="shc-reply-bar-close"
+              onClick={() => setReplyTarget(null)}
+              title="Cancel reply"
+              aria-label="Cancel reply"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
+
         <div className="shc-composer">
           <button
             type="button"
@@ -2271,6 +2458,15 @@ const handleSearchMessage = async (target: Rec) => {
             type="button"
             className="shc-send"
             disabled={!messageText.trim() || sending}
+            onPointerDown={(e) => {
+              // Crucial for mobile virtual keyboards:
+              // Calling preventDefault on pointerdown stops the button tap from blurring the textarea,
+              // keeping the mobile keyboard open.
+              e.preventDefault();
+            }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+            }}
             onClick={() => void sendMessage()}
             aria-label="Send"
           >

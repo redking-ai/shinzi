@@ -738,6 +738,136 @@
   color: var(--accent);
 }
 
+/* Reply action on message */
+.shc-msg-reply-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: var(--surface);
+  color: var(--muted);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
+  flex-shrink: 0;
+  margin-bottom: 6px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.shc-msg-reply-btn:hover {
+  color: var(--accent);
+  background: var(--surface-2);
+}
+
+.shc-msg-row:hover .shc-msg-reply-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (hover: none) {
+  .shc-msg-reply-btn {
+    opacity: 0.65;
+    pointer-events: auto;
+  }
+  .shc-msg-reply-btn:active {
+    opacity: 1;
+    color: var(--accent);
+  }
+}
+
+/* Quoted message inside bubble */
+.shc-quote {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  text-align: left;
+  border: none;
+  width: 100%;
+  user-select: none;
+  transition: background 0.15s ease;
+}
+
+.shc-quote:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.shc-quote-own {
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.shc-quote-own:hover {
+  background: rgba(0, 0, 0, 0.32);
+}
+
+.shc-quote-bar {
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+.shc-quote-own .shc-quote-bar {
+  background: #a78bfa;
+}
+
+.shc-quote-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  flex: 1;
+}
+
+.shc-quote-sender {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shc-quote-own .shc-quote-sender {
+  color: #c9bdf5;
+}
+
+.shc-quote-text {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.shc-quote-own .shc-quote-text {
+  color: #ddd6fe;
+}
+
+/* Scroll target highlight */
+.shc-msg-highlight {
+  animation: shc-msg-flash 1.5s ease-out;
+}
+
+@keyframes shc-msg-flash {
+  0% {
+    background: rgba(32, 217, 255, 0.22);
+    border-radius: 12px;
+  }
+  100% {
+    background: transparent;
+  }
+}
+
 .shc-voice {
   display: flex;
   align-items: center;
@@ -953,6 +1083,90 @@
 
 .shc-rec-on {
   color: var(--danger);
+}
+
+/* Reply preview bar above composer */
+.shc-reply-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  margin: 0;
+  animation: shc-slide-up 0.15s ease-out;
+}
+
+@keyframes shc-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.shc-reply-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.shc-reply-bar-icon {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.shc-reply-bar-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.shc-reply-bar-sender {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shc-reply-bar-text {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shc-reply-bar-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 50%;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 0.15s ease, background 0.15s ease;
+  padding: 0;
+}
+
+.shc-reply-bar-close:hover {
+  color: var(--text);
+  background: var(--surface-2);
 }
 
 .shc-composer {
