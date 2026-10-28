@@ -1036,6 +1036,19 @@ export default function Chat({ onNavigate }: ChatProps) {
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages.length, screen, typingNames.length]);
 
+  // Clear mention suggestions whenever switching conversations, screens, or when text is empty
+  useEffect(() => {
+    setMentionQuery(null);
+    setMentionSelectedIndex(0);
+  }, [screen, selected?.id]);
+
+  useEffect(() => {
+    if (!messageText) {
+      setMentionQuery(null);
+      setMentionSelectedIndex(0);
+    }
+  }, [messageText]);
+
   const openConversation = async (conversation: Rec) => {
     if (!conversation?.id) return;
 
@@ -1043,6 +1056,8 @@ export default function Chat({ onNavigate }: ChatProps) {
     setScreen('conversation');
     setMessageText('');
     setReplyTarget(null);
+    setMentionQuery(null);
+    setMentionSelectedIndex(0);
     await markRead(conversation);
   };
 
@@ -2042,6 +2057,8 @@ const handleSearchMessage = async (target: Rec) => {
       setScreen('main');
       setMessageText('');
       setReplyTarget(null);
+      setMentionQuery(null);
+      setMentionSelectedIndex(0);
       setPanel(null);
       setShowAttach(false);
       return;
@@ -2818,7 +2835,6 @@ const handleSearchMessage = async (target: Rec) => {
               role="listbox"
               aria-label="Mention suggestions"
             >
-              <div className="shc-mention-panel-title">Mention Members</div>
               {filteredMentionSuggestions.map((item, idx) => (
                 <button
                   key={item.id}
@@ -2842,7 +2858,9 @@ const handleSearchMessage = async (target: Rec) => {
                   </span>
                   <div className="shc-mention-item-details">
                     <span className="shc-mention-item-handle">@{item.handle}</span>
-                    <span className="shc-mention-item-desc">{item.name}</span>
+                    {item.isHere && item.name && (
+                      <span className="shc-mention-item-desc">{item.name}</span>
+                    )}
                   </div>
                 </button>
               ))}
