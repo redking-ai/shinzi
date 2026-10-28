@@ -770,13 +770,53 @@
 
 @media (hover: none) {
   .shc-msg-reply-btn {
-    opacity: 0.65;
-    pointer-events: auto;
+    display: none !important;
   }
-  .shc-msg-reply-btn:active {
-    opacity: 1;
-    color: var(--accent);
-  }
+}
+
+/* Swipe-to-reply container and indicators */
+.shc-msg-swipe-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  max-width: 100%;
+}
+
+.shc-msg-bubble-wrap {
+  position: relative;
+  z-index: 1;
+  max-width: 100%;
+  will-change: transform;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.shc-msg-swipe-indicator {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%) scale(0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--accent);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.shc-msg-swipe-left {
+  left: 6px;
+}
+
+.shc-msg-swipe-right {
+  right: 6px;
 }
 
 /* Quoted message inside bubble */

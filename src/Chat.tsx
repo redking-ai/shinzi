@@ -270,6 +270,197 @@ function Sheet({
 }
 
 // ============================================================
+// SWIPE-TO-REPLY COMPONENT
+// ============================================================
+
+interface SwipeableMessageProps {
+  item: Rec;
+  own: boolean;
+  onReply: (item: Rec) => void;
+  children: ReactNode;
+}
+
+function SwipeableMessage({
+  item,
+  own,
+  onReply,
+  children,
+}: SwipeableMessageProps) {
+  const bubbleWrapRef = useRef<HTMLDivElement | null>(null);
+  const leftIndicatorRef = useRef<HTMLDivElement | null>(null);
+  const rightIndicatorRef = useRef<HTMLDivElement | null>(null);
+
+  const startX = useRef(0);
+  const startY = useRef(0);
+  const isSwiping = useRef(false);
+  const isVertical = useRef(false);
+  const currentDrag = useRef(0);
+
+  const onTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (item.deleted || e.touches.length !== 1) return;
+    startX.current = e.touches[0].clientX;
+    startY.current = e.touches[0].clientY;
+    isSwiping.current = false;
+    isVertical.current = false;
+    currentDrag.current = 0;
+
+    if (bubbleWrapRef.current) {
+      bubbleWrapRef.current.style.transition = 'none';
+    }
+    if (leftIndicatorRef.current) {
+      leftIndicatorRef.current.style.transition = 'none';
+    }
+    if (rightIndicatorRef.current) {
+      rightIndicatorRef.current.style.transition = 'none';
+    }
+  };
+
+  const onTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (item.deleted || isVertical.current || e.touches.length !== 1) return;
+
+    const touchX = e.touches[0].clientX;
+    const touchY = e.touches[0].clientY;
+    const diffX = touchX - startX.current;
+    const diffY = touchY - startY.current;
+
+    if (!isSwiping.current && !isVertical.current) {
+      // Determine if vertical scrolling or horizontal swiping
+      if (Math.abs(diffY) > 8 && Math.abs(diffY) > Math.abs(diffX)) {
+        isVertical.current = true;
+        return;
+      }
+      if (Math.abs(diffX) > 8 && Math.abs(diffX) > Math.abs(diffY)) {
+        isSwiping.current = true;
+      }
+    }
+
+    if (!isSwiping.current) return;
+
+    // Prevent vertical scrolling or navigation once horizontal swipe starts
+    if (e.cancelable) e.preventDefault();
+
+    let moveX = 0;
+    const threshold = 40;
+
+    if (!own) {
+      // Incoming message: swipe right
+      if (diffX > 0) {
+        moveX = diffX > threshold ? threshold + (diffX - threshold) * 0.35 : diffX;
+        moveX = Math.min(moveX, 65);
+      }
+    } else {
+      // Outgoing message: swipe left or right toward center
+      const absDiff = Math.abs(diffX);
+      const damped = absDiff > threshold ? threshold + (absDiff - threshold) * 0.35 : absDiff;
+      const clamped = Math.min(damped, 65);
+      moveX = diffX < 0 ? -clamped : clamped;
+    }
+
+    currentDrag.current = moveX;
+
+    if (bubbleWrapRef.current) {
+      bubbleWrapRef.current.style.transform = `translateX(${moveX}px)`;
+    }
+
+    const progress = Math.min(1, Math.abs(moveX) / threshold);
+
+    if (moveX > 0 && leftIndicatorRef.current) {
+      leftIndicatorRef.current.style.opacity = `${progress}`;
+      leftIndicatorRef.current.style.transform = `translateY(-50%) scale(${0.5 + 0.5 * progress})`;
+      if (rightIndicatorRef.current) rightIndicatorRef.current.style.opacity = '0';
+    } else if (moveX < 0 && rightIndicatorRef.current) {
+      rightIndicatorRef.current.style.opacity = `${progress}`;
+      rightIndicatorRef.current.style.transform = `translateY(-50%) scale(${0.5 + 0.5 * progress})`;
+      if (leftIndicatorRef.current) leftIndicatorRef.current.style.opacity = '0';
+    } else {
+      if (leftIndicatorRef.current) leftIndicatorRef.current.style.opacity = '0';
+      if (rightIndicatorRef.current) rightIndicatorRef.current.style.opacity = '0';
+    }
+  };
+
+  const onTouchEnd = () => {
+    if (!isSwiping.current) return;
+
+    const drag = currentDrag.current;
+    const threshold = 40;
+    const shouldReply = Math.abs(drag) >= threshold;
+
+    if (bubbleWrapRef.current) {
+      bubbleWrapRef.current.style.transition = 'transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1)';
+      bubbleWrapRef.current.style.transform = 'translateX(0px)';
+    }
+
+    if (leftIndicatorRef.current) {
+      leftIndicatorRef.current.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+      leftIndicatorRef.current.style.opacity = '0';
+      leftIndicatorRef.current.style.transform = 'translateY(-50%) scale(0.5)';
+    }
+    if (rightIndicatorRef.current) {
+      rightIndicatorRef.current.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+      rightIndicatorRef.current.style.opacity = '0';
+      rightIndicatorRef.current.style.transform = 'translateY(-50%) scale(0.5)';
+    }
+
+    if (shouldReply && !item.deleted) {
+      try {
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          navigator.vibrate(15);
+        }
+      } catch {}
+      onReply(item);
+    }
+
+    setTimeout(() => {
+      if (bubbleWrapRef.current) {
+        bubbleWrapRef.current.style.transition = '';
+        bubbleWrapRef.current.style.transform = '';
+      }
+      if (leftIndicatorRef.current) {
+        leftIndicatorRef.current.style.transition = '';
+        leftIndicatorRef.current.style.transform = '';
+      }
+      if (rightIndicatorRef.current) {
+        rightIndicatorRef.current.style.transition = '';
+        rightIndicatorRef.current.style.transform = '';
+      }
+    }, 250);
+
+    isSwiping.current = false;
+    isVertical.current = false;
+    currentDrag.current = 0;
+  };
+
+  return (
+    <div className="shc-msg-swipe-container">
+      <div
+        className="shc-msg-swipe-indicator shc-msg-swipe-left"
+        ref={leftIndicatorRef}
+      >
+        <Reply size={15} />
+      </div>
+
+      <div
+        className="shc-msg-bubble-wrap"
+        ref={bubbleWrapRef}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={onTouchEnd}
+      >
+        {children}
+      </div>
+
+      <div
+        className="shc-msg-swipe-indicator shc-msg-swipe-right"
+        ref={rightIndicatorRef}
+      >
+        <Reply size={15} style={{ transform: 'scaleX(-1)' }} />
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // CHAT
 // ============================================================
 
@@ -307,6 +498,8 @@ export default function Chat({ onNavigate }: ChatProps) {
   });
   const [activeTab, setActiveTab] = useState<Tab>('All');
   const [selected, setSelected] = useState<Rec | null>(null);
+  const [visualHeight, setVisualHeight] = useState<number | null>(null);
+  const [visualTop, setVisualTop] = useState<number>(0);
 
   const [chatFilter ] = useState('');
   const [userQuery, setUserQuery] = useState('');
@@ -587,6 +780,33 @@ export default function Chat({ onNavigate }: ChatProps) {
       if (toastTimer.current) window.clearTimeout(toastTimer.current);
     };
   }, []);
+
+  // Synchronize mobile keyboard visual viewport immediately
+  useEffect(() => {
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    if (!vv) return undefined;
+
+    const onViewportChange = () => {
+      setVisualHeight(vv.height);
+      setVisualTop(vv.offsetTop);
+
+      if (screen === 'conversation' && scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
+    };
+
+    vv.addEventListener('resize', onViewportChange);
+    vv.addEventListener('scroll', onViewportChange);
+    window.addEventListener('resize', onViewportChange);
+
+    onViewportChange();
+
+    return () => {
+      vv.removeEventListener('resize', onViewportChange);
+      vv.removeEventListener('scroll', onViewportChange);
+      window.removeEventListener('resize', onViewportChange);
+    };
+  }, [screen]);
 
   // ----------------------------------------------------------
   // DERIVED DATA
@@ -1885,7 +2105,10 @@ const handleSearchMessage = async (target: Rec) => {
           )}
 
           {!own && <Avatar name={item.senderName} small />}
-          {body}
+
+          <SwipeableMessage item={item} own={own} onReply={startReply}>
+            {body}
+          </SwipeableMessage>
 
           {!own && !item.deleted && (
             <button
@@ -2443,6 +2666,13 @@ const handleSearchMessage = async (target: Rec) => {
             maxLength={MAX_MESSAGE_LENGTH}
             onChange={(e) => handleMessageChange(e.target.value, e.target)}
             onKeyDown={onComposerKey}
+            onFocus={() => {
+              window.requestAnimationFrame(() => {
+                if (scrollRef.current) {
+                  scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+                }
+              });
+            }}
           />
 
           <button
@@ -2901,7 +3131,13 @@ const handleSearchMessage = async (target: Rec) => {
 
   if (!uid) {
     return (
-      <div className="shc-page">
+      <div
+        className="shc-page"
+        style={{
+          ...(visualHeight ? { height: `${visualHeight}px` } : {}),
+          ...(visualTop ? { top: `${visualTop}px` } : {}),
+        }}
+      >
         <EmptyState
           icon={<User size={44} />}
           title="Sign in required"
@@ -2924,7 +3160,13 @@ const handleSearchMessage = async (target: Rec) => {
   }
 
 return (
-  <div className="shc-page">
+  <div
+    className="shc-page"
+    style={{
+      ...(visualHeight ? { height: `${visualHeight}px` } : {}),
+      ...(visualTop ? { top: `${visualTop}px` } : {}),
+    }}
+  >
     <div className="shc-screen-content">
       {screen === 'conversation'
         ? renderConversation()
