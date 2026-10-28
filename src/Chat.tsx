@@ -54,6 +54,8 @@ import {
   X,
   XCircle,
   Check,
+  AtSign,
+  Megaphone,
 } from 'lucide-react';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { auth, db } from './firebaseConfig';
@@ -146,6 +148,24 @@ const isMentioned = (text: string, username?: string, displayName?: string) => {
     if (!clean || clean.length < 2) return false;
     const escaped = clean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return new RegExp(`(^|[^a-zA-Z0-9_])@${escaped}(?![a-zA-Z0-9_])`, 'i').test(text);
+  });
+};
+
+const renderFormattedText = (text: string) => {
+  if (!text) return null;
+  const parts = text.split(/((?:^|\s)@[a-zA-Z0-9_]+(?![a-zA-Z0-9_]))/g);
+  return parts.map((part, i) => {
+    const match = part.match(/^(\s*)(@[a-zA-Z0-9_]+)$/);
+    if (match) {
+      const [, space, mention] = match;
+      return (
+        <span key={i}>
+          {space}
+          <span className="shc-mention">{mention}</span>
+        </span>
+      );
+    }
+    return <span key={i}>{part}</span>;
   });
 };
 
@@ -518,6 +538,8 @@ export default function Chat({ onNavigate }: ChatProps) {
 
   const [messageText, setMessageText] = useState('');
   const [replyTarget, setReplyTarget] = useState<Rec | null>(null);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionSelectedIndex, setMentionSelectedIndex] = useState(0);
   const [sending, setSending] = useState(false);
   const sendingRef = useRef(false);
   const [loadingChats, setLoadingChats] = useState(true);
@@ -874,6 +896,65 @@ export default function Chat({ onNavigate }: ChatProps) {
     );
   };
 
+  const isKeyboardOpen = Boolean(
+    visualHeight &&
+      typeof window !== 'undefined' &&
+      visualHeight < window.innerHeight - 80,
+  );
+
+  const mentionSuggestions = useMemo(() => {
+    if (!selectedConversation) return [];
+    const list: { id: string; handle: string; name: string; isHere?: boolean }[] = [];
+
+    if (selectedConversation.type === 'group') {
+      const ids: string[] = selectedConversation.memberIds || [];
+      ids.forEach((memberId) => {
+        if (memberId === uid) return;
+        const prof = selectedConversation.memberProfiles?.[memberId];
+        const handle =
+          prof?.username ||
+          prof?.displayName?.toLowerCase().replace(/\s+/g, '_') ||
+          'user';
+        const name = prof?.displayName || prof?.username || 'User';
+        list.push({ id: memberId, handle, name });
+      });
+    } else {
+      const otherId = otherMemberId(selectedConversation);
+      const otherProf = selectedConversation.memberProfiles?.[otherId];
+      const handle =
+        otherProf?.username ||
+        otherProf?.displayName?.toLowerCase().replace(/\s+/g, '_') ||
+        'user';
+      const name = otherProf?.displayName || otherProf?.username || 'User';
+      list.push({ id: otherId || 'other', handle, name });
+    }
+
+    list.push({
+      id: 'here',
+      handle: 'here',
+      name: 'Notify all members in this conversation',
+      isHere: true,
+    });
+
+    return list;
+  }, [selectedConversation, uid]);
+
+  const filteredMentionSuggestions = useMemo(() => {
+    if (mentionQuery === null) return [];
+    const q = mentionQuery.toLowerCase();
+    return mentionSuggestions.filter(
+      (s) =>
+        s.handle.toLowerCase().includes(q) ||
+        s.name.toLowerCase().includes(q),
+    );
+  }, [mentionQuery, mentionSuggestions]);
+
+  const activeComposerMentions = useMemo(() => {
+    if (!messageText) return [];
+    const matches = messageText.match(/(?:^|\s)@[a-zA-Z0-9_]+(?![a-zA-Z0-9_])/g) || [];
+    return Array.from(new Set(matches.map((m) => m.trim())));
+  }, [messageText]);
+
   const isFavorite = (conversation: Rec | null | undefined) => {
     if (!conversation?.id || !me) return false;
     if (conversation.id in optimisticFavorites) {
@@ -1060,6 +1141,47 @@ const handleSearchMessage = async (target: Rec) => {
     }
   };
 
+  const checkMentionToken = (text: string, textarea?: HTMLTextAreaElement | null) => {
+    const el = textarea || inputRef.current;
+    const cursor = el ? el.selectionStart : text.length;
+    const textBefore = text.slice(0, cursor);
+    const match = textBefore.match(/(?:^|\s)@([a-zA-Z0-9_]*)$/);
+
+    if (match) {
+      setMentionQuery(match[1]);
+      setMentionSelectedIndex(0);
+    } else {
+      setMentionQuery(null);
+    }
+  };
+
+  const insertMention = (handle: string) => {
+    const el = inputRef.current;
+    const cursor = el ? el.selectionStart : messageText.length;
+    const textBefore = messageText.slice(0, cursor);
+    const textAfter = messageText.slice(cursor);
+
+    const match = textBefore.match(/(?:^|\s)@([a-zA-Z0-9_]*)$/);
+    if (!match) {
+      setMentionQuery(null);
+      return;
+    }
+
+    const atIndex = match.index! + match[0].lastIndexOf('@');
+    const inserted = `@${handle} `;
+    const nextText = textBefore.slice(0, atIndex) + inserted + textAfter;
+    const newCursor = atIndex + inserted.length;
+
+    setMessageText(nextText);
+    setMentionQuery(null);
+
+    if (el) {
+      el.value = nextText;
+      el.setSelectionRange(newCursor, newCursor);
+      el.focus({ preventScroll: true });
+    }
+  };
+
   const handleMessageChange = (text: string, el?: HTMLTextAreaElement) => {
     if (text.length > MAX_MESSAGE_LENGTH) {
       notify(
@@ -1070,6 +1192,7 @@ const handleSearchMessage = async (target: Rec) => {
     }
 
     setMessageText(text);
+    checkMentionToken(text, el);
 
     if (el) {
       el.style.height = 'auto';
@@ -1165,11 +1288,14 @@ const handleSearchMessage = async (target: Rec) => {
         updatedAt: serverTimestamp(),
       };
 
-      // Mark only the mentioned people as urgent; leave everyone else alone.
+      // Mark mentioned users (and all participants if @here is present) as urgent; leave everyone else alone.
+      const hasHere = /(^|[^a-zA-Z0-9_])@here(?![a-zA-Z0-9_])/i.test(text);
+
       (activeConv?.memberIds || []).forEach((memberId: string) => {
+        if (memberId === uid) return;
         const memberProfile = activeConv?.memberProfiles?.[memberId];
         if (
-          memberId !== uid &&
+          hasHere ||
           isMentioned(text, memberProfile?.username, memberProfile?.displayName)
         ) {
           updates[`urgentFor.${memberId}`] = true;
@@ -1180,6 +1306,7 @@ const handleSearchMessage = async (target: Rec) => {
 
       setMessageText('');
       setReplyTarget(null);
+      setMentionQuery(null);
       if (inputRef.current) {
         inputRef.current.style.height = 'auto';
         if (screen === 'conversation' && selected?.id) {
@@ -1197,6 +1324,35 @@ const handleSearchMessage = async (target: Rec) => {
   };
 
   const onComposerKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mentionQuery !== null && filteredMentionSuggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionSelectedIndex(
+          (prev) => (prev + 1) % filteredMentionSuggestions.length,
+        );
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionSelectedIndex(
+          (prev) =>
+            (prev - 1 + filteredMentionSuggestions.length) %
+            filteredMentionSuggestions.length,
+        );
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        insertMention(filteredMentionSuggestions[mentionSelectedIndex].handle);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setMentionQuery(null);
+        return;
+      }
+    }
+
     // Enter sends on desktop; on touch screens it adds a new line.
     if (
       e.key === 'Enter' &&
@@ -2085,7 +2241,7 @@ const handleSearchMessage = async (target: Rec) => {
             );
           })()}
 
-          <span className="shc-text">{item.text}</span>
+          <span className="shc-text">{renderFormattedText(item.text)}</span>
 
           <span className="shc-meta">
             {formatTime(item.createdAt)}
@@ -2655,64 +2811,122 @@ const handleSearchMessage = async (target: Rec) => {
           </div>
         )}
 
-        <div className="shc-composer">
-          <button
-            type="button"
-            className="shc-icon-btn shc-accent-btn"
-            onClick={() => setShowAttach(true)}
-            aria-label="Attach"
+        <div className="shc-composer-wrap">
+          {mentionQuery !== null && filteredMentionSuggestions.length > 0 && (
+            <div
+              className="shc-mention-panel"
+              role="listbox"
+              aria-label="Mention suggestions"
+            >
+              <div className="shc-mention-panel-title">Mention Members</div>
+              {filteredMentionSuggestions.map((item, idx) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="option"
+                  aria-selected={idx === mentionSelectedIndex}
+                  className={`shc-mention-item ${
+                    idx === mentionSelectedIndex ? 'shc-mention-item-active' : ''
+                  }`}
+                  onPointerDown={(e) => {
+                    // Prevent blur so mobile keyboard stays open!
+                    e.preventDefault();
+                  }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                  }}
+                  onClick={() => insertMention(item.handle)}
+                >
+                  <span className="shc-mention-item-badge">
+                    {item.isHere ? <Megaphone size={14} /> : <AtSign size={14} />}
+                  </span>
+                  <div className="shc-mention-item-details">
+                    <span className="shc-mention-item-handle">@{item.handle}</span>
+                    <span className="shc-mention-item-desc">{item.name}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {activeComposerMentions.length > 0 && (
+            <div className="shc-composer-mentions">
+              <span className="shc-composer-mentions-label">Mentioning:</span>
+              {activeComposerMentions.map((mention) => (
+                <span key={mention} className="shc-mention">
+                  {mention}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div
+            className={
+              isKeyboardOpen ? 'shc-composer shc-composer-kb' : 'shc-composer'
+            }
           >
-            <Plus size={26} />
-          </button>
+            <button
+              type="button"
+              className="shc-icon-btn shc-accent-btn"
+              onClick={() => setShowAttach(true)}
+              aria-label="Attach"
+            >
+              <Plus size={26} />
+            </button>
 
-          <textarea
-            ref={inputRef}
-            rows={1}
-            placeholder="Message"
-            value={messageText}
-            maxLength={MAX_MESSAGE_LENGTH}
-            onChange={(e) => handleMessageChange(e.target.value, e.target)}
-            onKeyDown={onComposerKey}
-            onFocus={() => {
-              window.requestAnimationFrame(() => {
-                if (scrollRef.current) {
-                  scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-                }
-              });
-            }}
-          />
+            <textarea
+              ref={inputRef}
+              rows={1}
+              placeholder="Message"
+              value={messageText}
+              maxLength={MAX_MESSAGE_LENGTH}
+              onChange={(e) => handleMessageChange(e.target.value, e.target)}
+              onKeyDown={onComposerKey}
+              onClick={(e) => checkMentionToken(messageText, e.currentTarget)}
+              onKeyUp={(e) => checkMentionToken(messageText, e.currentTarget)}
+              onFocus={() => {
+                window.requestAnimationFrame(() => {
+                  if (scrollRef.current) {
+                    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+                  }
+                });
+              }}
+            />
 
-          <button
-            type="button"
-            className={recording ? 'shc-icon-btn shc-rec-on' : 'shc-icon-btn'}
-            onClick={toggleRecordingUI}
-            aria-label={recording ? 'Stop recording' : 'Record voice message'}
-          >
-            {recording ? <Square size={22} /> : <Mic size={23} />}
-          </button>
+            <button
+              type="button"
+              className={recording ? 'shc-icon-btn shc-rec-on' : 'shc-icon-btn'}
+              onClick={toggleRecordingUI}
+              aria-label={recording ? 'Stop recording' : 'Record voice message'}
+            >
+              {recording ? <Square size={22} /> : <Mic size={23} />}
+            </button>
 
-          <button
-            type="button"
-            className="shc-send"
-            disabled={!messageText.trim() || sending}
-            onPointerDown={(e) => {
-              // Crucial for mobile virtual keyboards:
-              // Calling preventDefault on pointerdown stops the button tap from blurring the textarea,
-              // keeping the mobile keyboard open.
-              e.preventDefault();
-            }}
-            onMouseDown={(e) => {
-              e.preventDefault();
-            }}
-            onClick={() => void sendMessage()}
-            aria-label="Send"
-          >
-            {sending ? <span className="shc-spinner shc-spinner-sm" /> : <Send size={19} />}
-          </button>
-        </div>
+            <button
+              type="button"
+              className="shc-send"
+              disabled={!messageText.trim() || sending}
+              onPointerDown={(e) => {
+                // Crucial for mobile virtual keyboards:
+                // Calling preventDefault on pointerdown stops the button tap from blurring the textarea,
+                // keeping the mobile keyboard open.
+                e.preventDefault();
+              }}
+              onMouseDown={(e) => {
+                e.preventDefault();
+              }}
+              onClick={() => void sendMessage()}
+              aria-label="Send"
+            >
+              {sending ? <span className="shc-spinner shc-spinner-sm" /> : <Send size={19} />}
+            </button>
+          </div>
 
-        <div className="shc-counter">
-          {messageText.length}/{MAX_MESSAGE_LENGTH}
+          {messageText.length > MAX_MESSAGE_LENGTH * 0.85 && (
+            <div className="shc-counter">
+              {messageText.length}/{MAX_MESSAGE_LENGTH}
+            </div>
+          )}
         </div>
 
         <input

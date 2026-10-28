@@ -517,19 +517,33 @@
 /* ===== Sub screens ===== */
 
 .shc-subheader {
+  position: relative;
   flex-shrink: 0;
   height: 58px;
   display: flex;
   align-items: center;
-  gap: 6px;
   padding: 0 8px;
   border-bottom: 1px solid var(--line);
 }
 
+.shc-subheader .shc-icon-btn {
+  position: relative;
+  z-index: 2;
+}
+
 .shc-subheader h1 {
+  position: absolute;
+  left: 0;
+  right: 0;
   margin: 0;
+  padding: 0 54px;
+  text-align: center;
   font-size: 19px;
   font-weight: 800;
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .shc-person,
@@ -1076,9 +1090,10 @@
 }
 
 .shc-join-on {
-  background: var(--green);
-  border-color: var(--green);
-  color: #07110b;
+  background: linear-gradient(90deg, #3020a0, #762bff);
+  border-color: var(--violet);
+  color: #fff;
+  box-shadow: 0 0 10px rgba(118, 43, 255, 0.35);
 }
 
 /* Typing, recording, composer */
@@ -1244,14 +1259,26 @@
   background: var(--surface-2);
 }
 
+.shc-composer-wrap {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+}
+
 .shc-composer {
   flex-shrink: 0;
   display: flex;
   align-items: flex-end;
   gap: 4px;
-  padding: 7px 8px 2px;
-  border-top: 1px solid var(--line);
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
   background: var(--bg);
+}
+
+.shc-composer.shc-composer-kb {
+  padding-bottom: 8px;
 }
 
 .shc-composer textarea {
@@ -1294,11 +1321,126 @@
 
 .shc-counter {
   flex-shrink: 0;
-  padding: 0 14px calc(4px + env(safe-area-inset-bottom, 0px));
+  padding: 0 14px 4px;
   background: var(--bg);
   color: var(--muted);
   font-size: 9px;
   text-align: right;
+}
+
+/* Mention chip badge */
+.shc-mention {
+  display: inline-block;
+  padding: 1px 6px;
+  margin: 0 1px;
+  border-radius: 6px;
+  background: rgba(118, 43, 255, 0.28);
+  border: 1px solid rgba(118, 43, 255, 0.45);
+  color: var(--accent);
+  font-weight: 600;
+  vertical-align: baseline;
+}
+
+.shc-bubble-own .shc-mention {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.35);
+  color: #fff;
+}
+
+.shc-composer-mentions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.shc-composer-mentions-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Mention suggestion popup panel */
+.shc-mention-panel {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 8px;
+  right: 8px;
+  max-height: 190px;
+  overflow-y: auto;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+  z-index: 40;
+  animation: shc-fade 0.15s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.shc-mention-panel-title {
+  padding: 8px 12px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.shc-mention-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+  width: 100%;
+}
+
+.shc-mention-item:hover,
+.shc-mention-item-active {
+  background: var(--surface-2);
+}
+
+.shc-mention-item-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(118, 43, 255, 0.22);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.shc-mention-item-details {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.shc-mention-item-handle {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.shc-mention-item-desc {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ===== Sheets + forms ===== */
@@ -1334,16 +1476,32 @@
 }
 
 .shc-sheet-head {
+  position: relative;
   flex-shrink: 0;
+  min-height: 44px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
 }
 
 .shc-sheet-head h2 {
+  position: absolute;
+  left: 0;
+  right: 0;
   margin: 0;
+  padding: 0 48px;
+  text-align: center;
   font-size: 19px;
   font-weight: 800;
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shc-sheet-head .shc-icon-btn {
+  position: relative;
+  z-index: 2;
 }
 
 @keyframes shc-fade {

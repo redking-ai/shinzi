@@ -641,7 +641,7 @@ export default function OtherProfile({
 
         {userData.bubleText && (
           <div className="sh-profile-bubble">
-            {String(userData.bubleText)}
+            {String(userData.bubleText).replace(/^\+\s*/, '')}
           </div>
         )}
 

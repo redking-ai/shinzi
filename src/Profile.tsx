@@ -400,7 +400,7 @@ useEffect(() => {
       const updates: AnyRecord = {
         displayName,
         bio: editForm.bio.trim().slice(0, 300),
-                bubleText: editForm.bubleText.trim().slice(0, 100),
+        bubleText: editForm.bubleText.trim().replace(/^\+\s*/, '').slice(0, 100),
         pronouns: editForm.pronouns.trim().slice(0, 20),
         updatedAt: serverTimestamp(),
       };
@@ -657,7 +657,7 @@ useEffect(() => {
 
                 {isEditing ? (
           <div className="sh-profile-bubble sh-bubble-editing">
-            <Plus size={16} aria-hidden="true" />
+            {!editForm.bubleText && <Plus size={16} aria-hidden="true" />}
             <input
               className="sh-bubble-input"
               aria-label="Thought"
@@ -665,13 +665,16 @@ useEffect(() => {
               maxLength={100}
               value={editForm.bubleText}
               onChange={(e) =>
-                setEditForm((v) => ({ ...v, bubleText: e.target.value }))
+                setEditForm((v) => ({
+                  ...v,
+                  bubleText: e.target.value.replace(/^\+\s*/, ''),
+                }))
               }
             />
           </div>
         ) : userData.bubleText ? (
           <div className="sh-profile-bubble">
-            {String(userData.bubleText)}
+            {String(userData.bubleText).replace(/^\+\s*/, '')}
           </div>
         ) : (
           <button
