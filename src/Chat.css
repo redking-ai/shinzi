@@ -685,11 +685,15 @@
 .shc-bubble {
   display: flex;
   flex-direction: column;
-  max-width: min(82%, 520px);
+  width: fit-content;
+  min-width: 76px;
+  max-width: 100%;
   padding: 8px 12px;
   border: 1px solid var(--line);
   border-radius: 17px 17px 17px 5px;
   background: var(--surface-2);
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .shc-bubble-own {
@@ -717,7 +721,8 @@
   font-size: 15px;
   line-height: 1.4;
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .shc-meta {
@@ -778,18 +783,43 @@
 .shc-msg-swipe-container {
   position: relative;
   display: flex;
-  align-items: center;
-  max-width: 100%;
+  align-items: flex-end;
+  max-width: min(82%, 520px);
+  min-width: 0;
+}
+
+.shc-msg-own .shc-msg-swipe-container,
+.shc-msg-swipe-container.shc-msg-swipe-own {
+  justify-content: flex-end;
+}
+
+.shc-msg-swipe-container.shc-msg-swipe-card,
+.shc-msg-swipe-container:has(.shc-card) {
+  width: min(86%, 420px);
+  max-width: min(86%, 420px);
 }
 
 .shc-msg-bubble-wrap {
   position: relative;
   z-index: 1;
+  display: flex;
+  flex-direction: column;
   max-width: 100%;
+  min-width: 0;
   will-change: transform;
   touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
+}
+
+.shc-msg-swipe-own .shc-msg-bubble-wrap,
+.shc-msg-own .shc-msg-bubble-wrap {
+  align-items: flex-end;
+}
+
+.shc-msg-swipe-card .shc-msg-bubble-wrap,
+.shc-msg-bubble-wrap:has(.shc-card) {
+  width: 100%;
 }
 
 .shc-msg-swipe-indicator {
@@ -832,6 +862,7 @@
   text-align: left;
   border: none;
   width: 100%;
+  min-width: 140px;
   user-select: none;
   transition: background 0.15s ease;
 }
@@ -932,7 +963,8 @@
 /* Poll + event cards */
 
 .shc-card {
-  width: min(86%, 420px);
+  width: 100%;
+  max-width: 420px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -944,7 +976,8 @@
 
 .shc-card-title {
   font-size: 15px;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .shc-card-text {
@@ -952,7 +985,8 @@
   color: var(--muted);
   font-size: 13px;
   line-height: 1.45;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .shc-card-foot {
@@ -1007,6 +1041,7 @@
 .shc-event {
   flex-direction: row;
   gap: 12px;
+  min-width: min(280px, 100%);
 }
 
 .shc-event-icon {

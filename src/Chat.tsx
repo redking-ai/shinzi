@@ -349,11 +349,12 @@ function SwipeableMessage({
         moveX = Math.min(moveX, 65);
       }
     } else {
-      // Outgoing message: swipe left or right toward center
-      const absDiff = Math.abs(diffX);
-      const damped = absDiff > threshold ? threshold + (absDiff - threshold) * 0.35 : absDiff;
-      const clamped = Math.min(damped, 65);
-      moveX = diffX < 0 ? -clamped : clamped;
+      // Outgoing message: swipe left toward center
+      if (diffX < 0) {
+        const absDiff = Math.abs(diffX);
+        const damped = absDiff > threshold ? threshold + (absDiff - threshold) * 0.35 : absDiff;
+        moveX = -Math.min(damped, 65);
+      }
     }
 
     currentDrag.current = moveX;
@@ -383,7 +384,7 @@ function SwipeableMessage({
 
     const drag = currentDrag.current;
     const threshold = 40;
-    const shouldReply = Math.abs(drag) >= threshold;
+    const shouldReply = !own ? drag >= threshold : drag <= -threshold;
 
     if (bubbleWrapRef.current) {
       bubbleWrapRef.current.style.transition = 'transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1)';
@@ -430,8 +431,14 @@ function SwipeableMessage({
     currentDrag.current = 0;
   };
 
+  const isCard = item.type === 'event' || item.type === 'poll';
+
   return (
-    <div className="shc-msg-swipe-container">
+    <div
+      className={`shc-msg-swipe-container ${own ? 'shc-msg-swipe-own' : ''} ${
+        isCard ? 'shc-msg-swipe-card' : ''
+      }`}
+    >
       <div
         className="shc-msg-swipe-indicator shc-msg-swipe-left"
         ref={leftIndicatorRef}
