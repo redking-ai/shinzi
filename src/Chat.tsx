@@ -369,18 +369,23 @@ function UserAvatar({
         let directUrl = photoURL;
         let assetId = profileAssetId;
 
-        if (!directUrl && !assetId && targetUid) {
-          const userSnap = await getDoc(doc(db, 'users', targetUid));
-          if (userSnap.exists()) {
-            const data = userSnap.data();
-            directUrl =
-              data?.photoURL ||
-              data?.photoUrl ||
-              data?.avatarUrl ||
-              data?.avatarURL ||
-              data?.profileImageUri;
-            assetId = data?.profileAssetId;
-          }
+        // Always check Firestore user doc if directUrl is not passed
+        if (!directUrl && targetUid) {
+          try {
+            const userSnap = await getDoc(doc(db, 'users', targetUid));
+            if (userSnap.exists()) {
+              const data = userSnap.data();
+              directUrl =
+                data?.photoURL ||
+                data?.photoUrl ||
+                data?.avatarUrl ||
+                data?.avatarURL ||
+                data?.profileImageUri;
+              if (!assetId) {
+                assetId = data?.profileAssetId;
+              }
+            }
+          } catch {}
         }
 
         if (directUrl && (directUrl.startsWith('http') || directUrl.startsWith('data:'))) {
@@ -440,6 +445,10 @@ function UserAvatar({
                       try {
                         localStorage.setItem(`shinzi_avatar_${targetUid}`, dataUri);
                       } catch {}
+                      const currentAuthUid = auth.currentUser?.uid;
+                      if (currentAuthUid && targetUid === currentAuthUid && dataUri) {
+                        updateDoc(doc(db, 'users', currentAuthUid), { photoURL: dataUri }).catch(() => {});
+                      }
                     }
                     setLoading(false);
                     return;
@@ -2861,7 +2870,13 @@ const handleSearchMessage = async (target: Rec) => {
           className="shc-person"
           onClick={() => void openDirectConversation(item)}
         >
-          <Avatar name={item.displayName || item.username} />
+          <UserAvatar
+            uid={item.id}
+            name={item.displayName || item.username}
+            photoURL={item.photoURL}
+            profileAssetId={item.profileAssetId}
+            size="md"
+          />
           <span className="shc-person-info">
             <strong>{item.displayName || item.username || 'User'}</strong>
             <span>@{item.username || 'user'}</span>
@@ -2878,7 +2893,13 @@ const handleSearchMessage = async (target: Rec) => {
     function Row(item: Rec) {
       return (
         <div key={item.id} className="shc-request">
-          <Avatar name={item.fromProfile?.displayName || item.fromProfile?.username} />
+          <UserAvatar
+            uid={item.fromUid || item.fromProfile?.uid}
+            name={item.fromProfile?.displayName || item.fromProfile?.username}
+            photoURL={item.fromProfile?.photoURL}
+            profileAssetId={item.fromProfile?.profileAssetId}
+            size="md"
+          />
 
           <span className="shc-person-info">
             <strong>
@@ -2964,7 +2985,13 @@ const handleSearchMessage = async (target: Rec) => {
 
         {searchResult ? (
           <div className="shc-request shc-result">
-            <Avatar name={searchResult.displayName || searchResult.username} />
+            <UserAvatar
+              uid={searchResult.id}
+              name={searchResult.displayName || searchResult.username}
+              photoURL={searchResult.photoURL}
+              profileAssetId={searchResult.profileAssetId}
+              size="md"
+            />
 
             <span className="shc-person-info">
               <strong>{searchResult.displayName || searchResult.username || 'User'}</strong>
@@ -3050,6 +3077,8 @@ const handleSearchMessage = async (target: Rec) => {
     const username = getConversationUsername(selectedConversation);
     const isGroup = selectedConversation?.type === 'group';
     const fav = isFavorite(selectedConversation);
+    const targetUid = isGroup ? undefined : otherMemberId(selectedConversation);
+    const targetProfile = targetUid ? selectedConversation?.memberProfiles?.[targetUid] : undefined;
 
     return (
       <>
@@ -3063,7 +3092,14 @@ const handleSearchMessage = async (target: Rec) => {
             <ArrowLeft size={23} />
           </button>
 
-          <Avatar name={name} group={isGroup} small />
+          <UserAvatar
+            uid={targetUid}
+            name={name}
+            photoURL={targetProfile?.photoURL}
+            profileAssetId={targetProfile?.profileAssetId}
+            group={isGroup}
+            size="sm"
+          />
 
           <div className="shc-chat-title">
             <strong>{name}</strong>

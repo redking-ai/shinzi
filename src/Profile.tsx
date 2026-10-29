@@ -3,6 +3,7 @@ import {
   doc,
   getDoc,
   serverTimestamp,
+  updateDoc,
   writeBatch,
 } from 'firebase/firestore';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
@@ -332,6 +333,12 @@ useEffect(() => {
         if (!cancelled) {
           setProfileImageUri(avatarUri || fallbackAvatar);
           setBannerImageUri(bannerUri || fallbackBanner);
+
+          if (avatarUri && currentUser?.uid && userData?.photoURL !== avatarUri) {
+            updateDoc(doc(db, 'users', currentUser.uid), {
+              photoURL: avatarUri,
+            }).catch(() => {});
+          }
         }
       } finally {
         if (!cancelled) {
