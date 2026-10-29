@@ -27,11 +27,11 @@ import {
   AlertCircle,
   ArrowLeft,
   BarChart3,
+  Bell,
   Calendar,
   FileText,
   Gamepad2,
   Image as ImageIcon,
-  Mail,
   MessageCircle,
   MessagesSquare,
   Mic,
@@ -59,6 +59,7 @@ import {
 } from 'lucide-react';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { auth, db } from './firebaseConfig';
+import { useDriveStore } from './driveStore';
 import { navigateTo as navigateToUrl, setCachedProfile } from './profileCache';
 import './Chat.css';
 
@@ -73,11 +74,9 @@ type Screen =
   | 'friends'
   | 'friendRequests'
   | 'dmRequests'
+  | 'notifications'
   | 'search';
 type Panel = 'poll' | 'event' | 'gif' | null;
-
-const TABS = ['All', 'Recent', 'Urgent', 'Favorite', 'Groups'] as const;
-type Tab = (typeof TABS)[number];
 
 interface ChatProps {
   onNavigate?: (target: 'ai' | 'servers' | 'profile') => void;
@@ -137,6 +136,66 @@ const dateLabel = (value: any) => {
     day: 'numeric',
     month: 'short',
     year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric',
+  });
+};
+
+const formatDiscordTimestamp = (value: any) => {
+  if (!millis(value)) return '';
+  const d = new Date(millis(value));
+  const now = new Date();
+  const y = new Date();
+  y.setDate(y.getDate() - 1);
+
+  const timeStr = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+  if (dayKey(d) === dayKey(now)) {
+    return `Today at ${timeStr}`;
+  }
+  if (dayKey(d) === dayKey(y)) {
+    return `Yesterday at ${timeStr}`;
+  }
+
+  const month = (d.getMonth() + 1).toString().padStart(2, '0');
+  const day = d.getDate().toString().padStart(2, '0');
+  const year = d.getFullYear();
+  return `${month}/${day}/${year} ${timeStr}`;
+};
+
+const isSingleEmoji = (text?: string): boolean => {
+  if (!text) return false;
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+
+  if (typeof Intl !== 'undefined' && (Intl as any).Segmenter) {
+    try {
+      const segmenter = new (Intl as any).Segmenter('en', { granularity: 'grapheme' });
+      const segments = Array.from(segmenter.segment(trimmed)) as Array<{ segment: string }>;
+      if (segments.length === 1) {
+        return /^\p{Extended_Pictographic}$/u.test(segments[0].segment);
+      }
+      return false;
+    } catch {}
+  }
+
+  const regex = /^(\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?(?:\p{Emoji_Modifier})?)$/u;
+  return regex.test(trimmed);
+};
+
+const renderComposerFormattedText = (text: string) => {
+  if (!text) return null;
+  const parts = text.split(/((?:^|\s)@[a-zA-Z0-9_]+(?![a-zA-Z0-9_]))/g);
+  return parts.map((part, i) => {
+    const match = part.match(/^(\s*)(@[a-zA-Z0-9_]+)$/);
+    if (match) {
+      const [, space, mention] = match;
+      return (
+        <span key={i}>
+          {space}
+          <span className="shc-composer-mention-token">{mention}</span>
+        </span>
+      );
+    }
+    return <span key={i}>{part}</span>;
   });
 };
 
@@ -204,24 +263,185 @@ const formatDuration = (seconds: number) =>
 // SMALL COMPONENTS
 // ============================================================
 
-function Avatar({
+const avatarMemoryCache = new Map<string, string>();
+
+function UserAvatar({
+  uid: targetUid,
   name,
+  photoURL,
+  profileAssetId,
+  size = 'md',
   group = false,
   small = false,
+  className = '',
 }: {
+  uid?: string | null;
   name?: string;
+  photoURL?: string;
+  profileAssetId?: string;
+  size?: 'xs' | 'sm' | 'md' | 'nav';
   group?: boolean;
   small?: boolean;
+  className?: string;
 }) {
+  const drive = useDriveStore();
+  const effectiveSize = small ? 'sm' : size;
+
+  const [imageUri, setImageUri] = useState<string | null>(() => {
+    if (photoURL && (photoURL.startsWith('http') || photoURL.startsWith('data:'))) {
+      return photoURL;
+    }
+    if (targetUid && avatarMemoryCache.has(targetUid)) {
+      return avatarMemoryCache.get(targetUid)!;
+    }
+    if (profileAssetId && typeof window !== 'undefined' && window.sessionStorage) {
+      const stored = window.sessionStorage.getItem(`shinzi_drive_${profileAssetId}`);
+      if (stored) return stored;
+    }
+    return null;
+  });
+
+  const [loading, setLoading] = useState<boolean>(() => {
+    if (group) return false;
+    if (photoURL && (photoURL.startsWith('http') || photoURL.startsWith('data:'))) return false;
+    if (targetUid && avatarMemoryCache.has(targetUid)) return false;
+    return Boolean(targetUid || profileAssetId);
+  });
+
+  useEffect(() => {
+    if (group) {
+      setLoading(false);
+      return;
+    }
+
+    if (photoURL && (photoURL.startsWith('http') || photoURL.startsWith('data:'))) {
+      setImageUri(photoURL);
+      if (targetUid) avatarMemoryCache.set(targetUid, photoURL);
+      setLoading(false);
+      return;
+    }
+
+    if (targetUid && avatarMemoryCache.has(targetUid)) {
+      setImageUri(avatarMemoryCache.get(targetUid)!);
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const resolveAvatar = async () => {
+      try {
+        let directUrl = photoURL;
+        let assetId = profileAssetId;
+
+        if (!directUrl && !assetId && targetUid) {
+          const userSnap = await getDoc(doc(db, 'users', targetUid));
+          if (userSnap.exists()) {
+            const data = userSnap.data();
+            directUrl = data?.photoURL;
+            assetId = data?.profileAssetId;
+          }
+        }
+
+        if (directUrl && (directUrl.startsWith('http') || directUrl.startsWith('data:'))) {
+          if (!cancelled) {
+            setImageUri(directUrl);
+            if (targetUid) avatarMemoryCache.set(targetUid, directUrl);
+            setLoading(false);
+          }
+          return;
+        }
+
+        if (assetId) {
+          if (typeof window !== 'undefined' && window.sessionStorage) {
+            const stored = window.sessionStorage.getItem(`shinzi_drive_${assetId}`);
+            if (stored) {
+              if (!cancelled) {
+                setImageUri(stored);
+                if (targetUid) avatarMemoryCache.set(targetUid, stored);
+                setLoading(false);
+              }
+              return;
+            }
+          }
+
+          const assetSnap = await getDoc(doc(db, 'assets', assetId));
+          if (assetSnap.exists()) {
+            const assetData = assetSnap.data();
+            const providerFileId = assetData?.providerFileId;
+            if (providerFileId) {
+              if (typeof window !== 'undefined' && window.sessionStorage) {
+                const storedFile = window.sessionStorage.getItem(`shinzi_drive_${providerFileId}`);
+                if (storedFile) {
+                  if (!cancelled) {
+                    setImageUri(storedFile);
+                    if (targetUid) avatarMemoryCache.set(targetUid, storedFile);
+                    setLoading(false);
+                  }
+                  return;
+                }
+              }
+
+              if (drive.hasActiveSession) {
+                const dataUri = await drive.getFileDataUri(providerFileId);
+                if (dataUri && !cancelled) {
+                  setImageUri(dataUri);
+                  if (targetUid) avatarMemoryCache.set(targetUid, dataUri);
+                  setLoading(false);
+                  return;
+                }
+              }
+            }
+          }
+        }
+
+        if (!cancelled) {
+          setLoading(false);
+        }
+      } catch {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void resolveAvatar();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [targetUid, photoURL, profileAssetId, group, drive.hasActiveSession]);
+
+  const sizeClass =
+    effectiveSize === 'xs'
+      ? 'shc-avatar-xs'
+      : effectiveSize === 'sm'
+        ? 'shc-avatar-sm'
+        : effectiveSize === 'nav'
+          ? 'shc-avatar-nav'
+          : 'shc-avatar-md';
+
   return (
-    <div
-      className={small ? 'shc-avatar shc-avatar-sm' : 'shc-avatar'}
-      aria-hidden="true"
-    >
-      {group ? <Users size={small ? 17 : 23} /> : <span>{initials(name)}</span>}
+    <div className={`shc-avatar ${sizeClass} ${className}`} aria-hidden="true">
+      {loading ? (
+        <div className="shc-avatar-skeleton" />
+      ) : imageUri ? (
+        <img
+          src={imageUri}
+          alt={name || 'Avatar'}
+          className="shc-avatar-img"
+          onError={() => setImageUri(null)}
+        />
+      ) : group ? (
+        <Users size={effectiveSize === 'sm' || effectiveSize === 'xs' ? 15 : 20} />
+      ) : (
+        <span>{initials(name || 'User')}</span>
+      )}
     </div>
   );
 }
+
+const Avatar = UserAvatar;
 
 function Badge({ count }: { count: number }) {
   return <span className="shc-badge">{count > 9 ? '9+' : count}</span>;
@@ -523,7 +743,6 @@ export default function Chat({ onNavigate }: ChatProps) {
     }
     return 'main';
   });
-  const [activeTab, setActiveTab] = useState<Tab>('All');
   const [selected, setSelected] = useState<Rec | null>(null);
   const [visualHeight, setVisualHeight] = useState<number | null>(null);
   const [visualTop, setVisualTop] = useState<number>(0);
@@ -586,7 +805,15 @@ export default function Chat({ onNavigate }: ChatProps) {
   const toastTimer = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const backdropRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+
+  const syncBackdropScroll = () => {
+    if (inputRef.current && backdropRef.current) {
+      backdropRef.current.scrollTop = inputRef.current.scrollTop;
+      backdropRef.current.scrollLeft = inputRef.current.scrollLeft;
+    }
+  };
 
   const notify = useCallback((title: string, text = '') => {
     setToast({ title, text });
@@ -969,13 +1196,6 @@ export default function Chat({ onNavigate }: ChatProps) {
   const filteredConversations = useMemo(() => {
     let rows = [...conversations];
 
-    if (activeTab === 'Recent') {
-      rows = rows.filter((item) => millis(item.lastMessageAt) > 0);
-    }
-    if (activeTab === 'Urgent') rows = rows.filter(isUrgent);
-    if (activeTab === 'Favorite') rows = rows.filter(isFavorite);
-    if (activeTab === 'Groups') rows = rows.filter((i) => i.type === 'group');
-
     const text = chatFilter.trim().toLowerCase();
 
     if (text) {
@@ -990,10 +1210,17 @@ export default function Chat({ onNavigate }: ChatProps) {
     }
 
     rows.sort((a, b) => {
-      if (activeTab !== 'Recent' && activeTab !== 'Favorite') {
-        const fav = Number(isFavorite(b)) - Number(isFavorite(a));
-        if (fav !== 0) return fav;
-      }
+      // 1. Starred / Favorite at the top
+      const favA = isFavorite(a) ? 1 : 0;
+      const favB = isFavorite(b) ? 1 : 0;
+      if (favA !== favB) return favB - favA;
+
+      // 2. Mentioned / Urgent right below starred
+      const urgA = isUrgent(a) ? 1 : 0;
+      const urgB = isUrgent(b) ? 1 : 0;
+      if (urgA !== urgB) return urgB - urgA;
+
+      // 3. Followed by newest message
       return (
         millis(b.lastMessageAt || b.updatedAt) -
         millis(a.lastMessageAt || a.updatedAt)
@@ -1001,8 +1228,7 @@ export default function Chat({ onNavigate }: ChatProps) {
     });
 
     return rows;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversations, activeTab, chatFilter, uid, optimisticFavorites]);
+  }, [conversations, chatFilter, uid, optimisticFavorites]);
 
   // ----------------------------------------------------------
   // CONVERSATION ACTIONS
@@ -1054,11 +1280,24 @@ export default function Chat({ onNavigate }: ChatProps) {
 
     setSelected(conversation);
     setScreen('conversation');
-    setMessageText('');
+
+    const savedDraft =
+      typeof window !== 'undefined'
+        ? localStorage.getItem(`shinzi_draft_${conversation.id}`) || ''
+        : '';
+    setMessageText(savedDraft);
     setReplyTarget(null);
     setMentionQuery(null);
     setMentionSelectedIndex(0);
     await markRead(conversation);
+
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.style.height = 'auto';
+        inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 140)}px`;
+        syncBackdropScroll();
+      }
+    }, 50);
   };
 
   const openDirectConversation = async (otherUser: Rec) => {
@@ -1209,10 +1448,21 @@ const handleSearchMessage = async (target: Rec) => {
     setMessageText(text);
     checkMentionToken(text, el);
 
+    if (selected?.id) {
+      try {
+        if (text.trim()) {
+          localStorage.setItem(`shinzi_draft_${selected.id}`, text);
+        } else {
+          localStorage.removeItem(`shinzi_draft_${selected.id}`);
+        }
+      } catch {}
+    }
+
     if (el) {
       el.style.height = 'auto';
-      el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+      el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
     }
+    syncBackdropScroll();
 
     if (!selected?.id || !uid) return;
 
@@ -1273,6 +1523,8 @@ const handleSearchMessage = async (target: Rec) => {
         senderId: uid,
         senderName: profile?.displayName || profile?.username || 'User',
         senderUsername: profile?.username || '',
+        senderPhotoURL: profile?.photoURL || '',
+        senderProfileAssetId: profile?.profileAssetId || '',
         createdAt: serverTimestamp(),
         editedAt: null,
         deleted: false,
@@ -1318,6 +1570,12 @@ const handleSearchMessage = async (target: Rec) => {
       });
 
       await updateDoc(doc(db, 'conversations', selected.id), updates);
+
+      if (selected?.id) {
+        try {
+          localStorage.removeItem(`shinzi_draft_${selected.id}`);
+        } catch {}
+      }
 
       setMessageText('');
       setReplyTarget(null);
@@ -2164,144 +2422,158 @@ const handleSearchMessage = async (target: Rec) => {
       millis(item.createdAt) > 0 &&
       (!previous || dayKey(previous.createdAt) !== dayKey(item.createdAt));
 
-    let body: ReactNode;
+    const replyId = item.replyToMessageId || item.replyTo?.id;
+    const original = replyId ? messages.find((m) => m.id === replyId) : null;
+
+    let quotedSender = 'User';
+    let quotedText = 'Original message unavailable';
+    let quotedSenderId = '';
+
+    if (replyId) {
+      if (original) {
+        quotedSenderId = original.senderId || '';
+        if (original.deleted) {
+          quotedSender =
+            original.senderId === uid
+              ? 'You'
+              : original.senderName ||
+                original.senderUsername ||
+                'User';
+          quotedText = 'Original message was deleted';
+        } else {
+          quotedSender =
+            original.senderId === uid
+              ? 'You'
+              : original.senderName ||
+                original.senderUsername ||
+                'User';
+          quotedText = getReplyExcerpt(original);
+        }
+      } else if (item.replyTo) {
+        quotedSenderId = item.replyTo.senderId || '';
+        quotedSender =
+          item.replyTo.senderId === uid
+            ? 'You'
+            : item.replyTo.senderName ||
+              item.replyTo.senderUsername ||
+              'User';
+        quotedText = item.replyTo.text || 'Original message unavailable';
+      }
+    }
+
+    const authorName = own
+      ? profile?.displayName || profile?.username || 'You'
+      : item.senderName || item.senderUsername || 'User';
+
+    const mentionedMe =
+      !own &&
+      (isMentioned(item.text, profile?.username, profile?.displayName) ||
+        Boolean(item.text?.includes('@here')));
+
+    let contentNode: ReactNode;
 
     if (item.deleted) {
-      body = (
-        <div className="shc-bubble shc-bubble-deleted">
-          This message was deleted.
-        </div>
+      contentNode = (
+        <span className="shc-dc-deleted">This message was deleted.</span>
       );
     } else if (item.type === 'poll') {
-      body = renderPoll(item);
+      contentNode = renderPoll(item);
     } else if (item.type === 'event') {
-      body = renderEvent(item);
+      contentNode = renderEvent(item);
     } else if (item.type === 'voice') {
-      body = (
-        <div className={own ? 'shc-voice shc-voice-own' : 'shc-voice'}>
+      contentNode = (
+        <div className="shc-voice">
           <Mic size={20} />
           <span>Voice message</span>
           <span className="shc-voice-time">{item.duration || '00:00'}</span>
         </div>
       );
     } else {
-      const replyId = item.replyToMessageId || item.replyTo?.id;
-      const original = replyId ? messages.find((m) => m.id === replyId) : null;
-
-      body = (
-        <div
-          className={own ? 'shc-bubble shc-bubble-own' : 'shc-bubble'}
-          onDoubleClick={() => !item.deleted && startReply(item)}
-        >
-          {!own && selected?.type === 'group' && (
-            <span className="shc-sender">
-              {item.senderName || item.senderUsername || 'User'}
-            </span>
-          )}
-
-          {replyId && (() => {
-            let quotedSender = 'User';
-            let quotedText = 'Original message unavailable';
-
-            if (original) {
-              if (original.deleted) {
-                quotedSender =
-                  original.senderId === uid
-                    ? 'You'
-                    : original.senderName ||
-                      original.senderUsername ||
-                      'User';
-                quotedText = 'Original message was deleted';
-              } else {
-                quotedSender =
-                  original.senderId === uid
-                    ? 'You'
-                    : original.senderName ||
-                      original.senderUsername ||
-                      'User';
-                quotedText = getReplyExcerpt(original);
-              }
-            } else if (item.replyTo) {
-              quotedSender =
-                item.replyTo.senderId === uid
-                  ? 'You'
-                  : item.replyTo.senderName ||
-                    item.replyTo.senderUsername ||
-                    'User';
-              quotedText = item.replyTo.text || 'Original message unavailable';
-            }
-
-            return (
-              <div
-                role="button"
-                tabIndex={0}
-                className={own ? 'shc-quote shc-quote-own' : 'shc-quote'}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  scrollToMessage(replyId);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    scrollToMessage(replyId);
-                  }
-                }}
-                title="Jump to original message"
-                aria-label="Jump to original message"
-              >
-                <div className="shc-quote-bar" />
-                <div className="shc-quote-content">
-                  <span className="shc-quote-sender">{quotedSender}</span>
-                  <span className="shc-quote-text">{quotedText}</span>
-                </div>
-              </div>
-            );
-          })()}
-
-          <span className="shc-text">{renderFormattedText(item.text)}</span>
-
-          <span className="shc-meta">
-            {formatTime(item.createdAt)}
-          </span>
-        </div>
+      const singleEmoji = isSingleEmoji(item.text);
+      contentNode = singleEmoji ? (
+        <span className="shc-dc-jumbo-emoji">{item.text.trim()}</span>
+      ) : (
+        <span className="shc-dc-text">{renderFormattedText(item.text)}</span>
       );
     }
+
+    const messageContent = (
+      <div
+        className={`shc-dc-msg ${mentionedMe ? 'shc-dc-msg-highlight' : ''}`}
+        onDoubleClick={() => !item.deleted && startReply(item)}
+      >
+        {replyId && (
+          <div
+            role="button"
+            tabIndex={0}
+            className="shc-dc-reply-spine"
+            onClick={(e) => {
+              e.stopPropagation();
+              scrollToMessage(replyId);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                scrollToMessage(replyId);
+              }
+            }}
+            title="Jump to original message"
+            aria-label="Jump to original message"
+          >
+            <div className="shc-dc-reply-line" />
+            <UserAvatar uid={quotedSenderId} name={quotedSender} size="xs" />
+            <span className="shc-dc-reply-sender">{quotedSender}</span>
+            <span className="shc-dc-reply-text">{quotedText}</span>
+          </div>
+        )}
+
+        <div className="shc-dc-main">
+          <div className="shc-dc-avatar-col">
+            <UserAvatar
+              uid={item.senderId}
+              name={authorName}
+              photoURL={item.senderPhotoURL}
+              profileAssetId={item.senderProfileAssetId}
+              size="md"
+            />
+          </div>
+
+          <div className="shc-dc-body-col">
+            <div className="shc-dc-header">
+              <span className={`shc-dc-author ${own ? 'shc-dc-author-me' : ''}`}>
+                {authorName}
+              </span>
+              <span className="shc-dc-timestamp">
+                {formatDiscordTimestamp(item.createdAt)}
+              </span>
+            </div>
+
+            <div className="shc-dc-content">
+              {contentNode}
+            </div>
+          </div>
+
+          {!item.deleted && (
+            <button
+              type="button"
+              className="shc-msg-reply-btn"
+              onClick={() => startReply(item)}
+              title="Reply"
+              aria-label="Reply"
+            >
+              <Reply size={15} />
+            </button>
+          )}
+        </div>
+      </div>
+    );
 
     return (
       <div key={item.id} id={`shc-msg-${item.id}`}>
         {showDay && <div className="shc-day">{dateLabel(item.createdAt)}</div>}
-
-        <div className={own ? 'shc-msg-row shc-msg-own' : 'shc-msg-row'}>
-          {own && !item.deleted && (
-            <button
-              type="button"
-              className="shc-msg-reply-btn"
-              onClick={() => startReply(item)}
-              title="Reply"
-              aria-label="Reply"
-            >
-              <Reply size={15} />
-            </button>
-          )}
-
-          {!own && <Avatar name={item.senderName} small />}
-
-          <SwipeableMessage item={item} own={own} onReply={startReply}>
-            {body}
-          </SwipeableMessage>
-
-          {!own && !item.deleted && (
-            <button
-              type="button"
-              className="shc-msg-reply-btn"
-              onClick={() => startReply(item)}
-              title="Reply"
-              aria-label="Reply"
-            >
-              <Reply size={15} />
-            </button>
-          )}
-        </div>
+        <SwipeableMessage item={item} own={own} onReply={startReply}>
+          {messageContent}
+        </SwipeableMessage>
       </div>
     );
   };
@@ -2350,8 +2622,15 @@ const handleSearchMessage = async (target: Rec) => {
         type="button"
         onClick={() => navigateTo('profile')}
         aria-label="Profile"
+        className="shc-bottom-profile-btn"
       >
-        <User size={22} />
+        <UserAvatar
+          uid={uid}
+          name={profile?.displayName || profile?.username || 'User'}
+          photoURL={profile?.photoURL}
+          profileAssetId={profile?.profileAssetId}
+          size="nav"
+        />
       </button>
     </nav>
   );
@@ -2363,57 +2642,30 @@ const handleSearchMessage = async (target: Rec) => {
 
   const renderMain = () => (
     <>
-     <header className="shc-header">
-  <h1>Chats</h1>
+      <header className="shc-header">
+        <h1>Chats</h1>
 
-  <div className="shc-header-actions">
-    <button
-      type="button"
-      className="shc-icon-btn"
-      onClick={() => setScreen('dmRequests')}
-      aria-label="DM requests"
-    >
-      <Mail size={21} />
-      {dmRequests.length > 0 && <Badge count={dmRequests.length} />}
-    </button>
-
-    <button
-      type="button"
-      className="shc-icon-btn"
-      onClick={() => setScreen('friendRequests')}
-      aria-label="Friend requests"
-    >
-      <UserPlus size={21} />
-      {friendRequests.length > 0 && <Badge count={friendRequests.length} />}
-    </button>
-
-    <button
-      type="button"
-      className="shc-icon-btn"
-      onClick={() => setShowGroup(true)}
-      aria-label="Create group"
-    >
-      <Users size={21} />
-    </button>
-  </div>
-</header>
-      
-
-      <nav className="shc-tabs" aria-label="Chat filters">
-        {TABS.map((tab) => (
+        <div className="shc-header-actions">
           <button
             type="button"
-            key={tab}
-            className={activeTab === tab ? 'shc-tab shc-tab-active' : 'shc-tab'}
-            onClick={() => setActiveTab(tab)}
+            className="shc-icon-btn"
+            onClick={() => setScreen('notifications')}
+            aria-label="Notifications"
           >
-            {tab}
-            {tab === 'Urgent' && conversations.some(isUrgent) && (
-              <span className="shc-tab-dot" />
-            )}
+            <Bell size={21} />
+            {dmRequests.length > 0 && <Badge count={dmRequests.length} />}
           </button>
-        ))}
-      </nav>
+
+          <button
+            type="button"
+            className="shc-icon-btn"
+            onClick={() => setShowGroup(true)}
+            aria-label="Create group"
+          >
+            <Plus size={22} />
+          </button>
+        </div>
+      </header>
 
       <div className="shc-list">
         {loadingChats ? (
@@ -2424,11 +2676,7 @@ const handleSearchMessage = async (target: Rec) => {
           <EmptyState
             icon={<MessagesSquare size={44} />}
             title="No chats"
-            text={
-              activeTab === 'All'
-                ? 'Your conversations will appear here.'
-                : `There are no ${activeTab.toLowerCase()} chats right now.`
-            }
+            text="Your conversations will appear here."
           />
         ) : (
           filteredConversations.map((item) => {
@@ -2444,7 +2692,22 @@ const handleSearchMessage = async (target: Rec) => {
                 className="shc-conv"
                 onClick={() => void openConversation(item)}
               >
-                <Avatar name={name} group={item.type === 'group'} />
+                <UserAvatar
+                  uid={item.type === 'group' ? undefined : otherMemberId(item)}
+                  name={name}
+                  photoURL={
+                    item.type === 'group'
+                      ? undefined
+                      : item.memberProfiles?.[otherMemberId(item)]?.photoURL
+                  }
+                  profileAssetId={
+                    item.type === 'group'
+                      ? undefined
+                      : item.memberProfiles?.[otherMemberId(item)]?.profileAssetId
+                  }
+                  group={item.type === 'group'}
+                  size="md"
+                />
 
                 <span className="shc-conv-body">
                   <span className="shc-conv-top">
@@ -2578,15 +2841,15 @@ const handleSearchMessage = async (target: Rec) => {
       renderRequestRow('friendRequests', acceptFriendRequest),
     );
 
-  const renderDmRequests = () =>
+  const renderNotifications = () =>
     renderPeople(
-      'DM requests',
+      'Notifications',
       dmRequests,
       false,
       <EmptyState
-        icon={<Mail size={44} />}
-        title="No DM requests"
-        text="New direct-message requests will appear here."
+        icon={<Bell size={44} />}
+        title="No notifications received"
+        text="New notifications will appear here."
       />,
       renderRequestRow('dmRequests', acceptDMRequest),
     );
@@ -2867,17 +3130,6 @@ const handleSearchMessage = async (target: Rec) => {
             </div>
           )}
 
-          {activeComposerMentions.length > 0 && (
-            <div className="shc-composer-mentions">
-              <span className="shc-composer-mentions-label">Mentioning:</span>
-              {activeComposerMentions.map((mention) => (
-                <span key={mention} className="shc-mention">
-                  {mention}
-                </span>
-              ))}
-            </div>
-          )}
-
           <div
             className={
               isKeyboardOpen ? 'shc-composer shc-composer-kb' : 'shc-composer'
@@ -2892,24 +3144,40 @@ const handleSearchMessage = async (target: Rec) => {
               <Plus size={26} />
             </button>
 
-            <textarea
-              ref={inputRef}
-              rows={1}
-              placeholder="Message"
-              value={messageText}
-              maxLength={MAX_MESSAGE_LENGTH}
-              onChange={(e) => handleMessageChange(e.target.value, e.target)}
-              onKeyDown={onComposerKey}
-              onClick={(e) => checkMentionToken(messageText, e.currentTarget)}
-              onKeyUp={(e) => checkMentionToken(messageText, e.currentTarget)}
-              onFocus={() => {
-                window.requestAnimationFrame(() => {
-                  if (scrollRef.current) {
-                    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-                  }
-                });
-              }}
-            />
+            <div
+              className={`shc-composer-input-box ${
+                activeComposerMentions.length > 0
+                  ? 'shc-composer-has-mentions'
+                  : ''
+              }`}
+            >
+              <div
+                className="shc-composer-backdrop"
+                aria-hidden="true"
+                ref={backdropRef}
+              >
+                {renderComposerFormattedText(messageText)}
+              </div>
+              <textarea
+                ref={inputRef}
+                rows={1}
+                placeholder="Message"
+                value={messageText}
+                maxLength={MAX_MESSAGE_LENGTH}
+                onChange={(e) => handleMessageChange(e.target.value, e.target)}
+                onKeyDown={onComposerKey}
+                onClick={(e) => checkMentionToken(messageText, e.currentTarget)}
+                onKeyUp={(e) => checkMentionToken(messageText, e.currentTarget)}
+                onScroll={syncBackdropScroll}
+                onFocus={() => {
+                  window.requestAnimationFrame(() => {
+                    if (scrollRef.current) {
+                      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+                    }
+                  });
+                }}
+              />
+            </div>
 
             <button
               type="button"
@@ -3413,8 +3681,8 @@ return (
           ? renderFriends()
           : screen === 'friendRequests'
             ? renderFriendRequests()
-            : screen === 'dmRequests'
-              ? renderDmRequests()
+            : screen === 'notifications' || screen === 'dmRequests'
+              ? renderNotifications()
               : screen === 'search'
                 ? renderSearch()
                 : renderMain()}
