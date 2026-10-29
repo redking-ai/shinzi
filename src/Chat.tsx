@@ -419,6 +419,21 @@ function UserAvatar({
           return;
         }
 
+        // Try backend /api/avatar endpoint (resolves any user's Drive file via server OAuth + edge CDN)
+        if (targetUid) {
+          const apiAvatarUrl = `/api/avatar?uid=${encodeURIComponent(targetUid)}`;
+          const canLoadFromApi = await testImageLoad(apiAvatarUrl);
+          if (canLoadFromApi && !cancelled) {
+            setImageUri(apiAvatarUrl);
+            avatarMemoryCache.set(targetUid, apiAvatarUrl);
+            try {
+              localStorage.setItem(`shinzi_avatar_${targetUid}`, apiAvatarUrl);
+            } catch {}
+            setLoading(false);
+            return;
+          }
+        }
+
         if (assetId) {
           if (typeof window !== 'undefined' && window.sessionStorage) {
             const stored = window.sessionStorage.getItem(`shinzi_drive_${assetId}`);
