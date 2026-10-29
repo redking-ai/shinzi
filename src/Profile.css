@@ -531,7 +531,7 @@
 
 @media (max-width: 600px) {
   .sh-profile-page {
-    padding: 0 10px 28px;
+    padding: 0 0 calc(76px + env(safe-area-inset-bottom, 0px));
   }
 
   .sh-profile-banner {
@@ -539,8 +539,10 @@
   }
 
   .sh-profile-card {
-    margin-top: 14px;
-    border-radius: 17px;
+    margin-top: 0;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
   }
 
   .sh-profile-identity {
@@ -1126,20 +1128,58 @@ body {
   height: 34px;
   border-radius: 50%;
   border: 2px solid var(--line-strong, #39265d);
-  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease, transform 0.15s ease;
   object-fit: cover;
   image-rendering: -webkit-optimize-contrast;
   display: block;
   overflow: hidden;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 
 .sh-profile-bottom-nav button.sh-bottom-active .shc-avatar-nav {
-  border-color: #79c0ff;
-  box-shadow: 0 0 10px rgba(121, 192, 255, 0.45);
-  transform: scale(1.05);
+  border-color: #5865F2;
+  box-shadow: none;
+  transform: none;
 }
 
 .sh-profile-bottom-nav button.shc-bottom-profile-btn {
   padding: 0;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Skeleton Loading Shimmer */
+.sh-avatar-skeleton,
+.shc-avatar-skeleton {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.05) 0%,
+    rgba(255, 255, 255, 0.18) 50%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  background-size: 200% 100%;
+  animation: shc-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes shc-skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Prevent unwanted selection on tap/hold */
+.sh-profile-banner,
+.sh-profile-identity,
+.sh-profile-topbar,
+.sh-profile-tabs,
+.sh-profile-bottom-nav {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }

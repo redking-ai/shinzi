@@ -613,7 +613,9 @@ useEffect(() => {
 
         <div className="sh-profile-identity">
           <div className="sh-avatar-wrap">
-            {profileImageUri ? (
+            {assetLoading && !profileImageUri ? (
+              <div className="sh-avatar sh-avatar-skeleton" />
+            ) : profileImageUri ? (
               <img
                 className="sh-avatar"
                 src={profileImageUri}
@@ -935,7 +937,9 @@ useEffect(() => {
           className="sh-bottom-active shc-bottom-profile-btn"
           aria-label="Profile"
         >
-          {profileImageUri ? (
+          {assetLoading && !profileImageUri ? (
+            <div className="shc-avatar shc-avatar-nav shc-avatar-skeleton" />
+          ) : profileImageUri ? (
             <img
               src={profileImageUri}
               alt="Profile"

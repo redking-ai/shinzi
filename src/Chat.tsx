@@ -26,16 +26,22 @@ import {
 import {
   AlertCircle,
   ArrowLeft,
+  AtSign,
   BarChart3,
   Bell,
   Calendar,
+  Check,
+  Copy,
+  CornerUpLeft,
   FileText,
   Gamepad2,
   Image as ImageIcon,
+  Megaphone,
   MessageCircle,
   MessagesSquare,
   Mic,
   MicOff,
+  Pencil,
   Phone,
   PhoneOff,
   Plus,
@@ -44,23 +50,27 @@ import {
   Send,
   Server,
   Smile,
+  SmilePlus,
   Sparkles,
   Square,
   Star,
+  Trash2,
   User,
   UserPlus,
   Users,
   Video,
   X,
   XCircle,
-  Check,
-  AtSign,
-  Megaphone,
 } from 'lucide-react';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { auth, db } from './firebaseConfig';
 import { useDriveStore } from './driveStore';
 import { navigateTo as navigateToUrl, setCachedProfile } from './profileCache';
+import {
+  EMOJI_CATEGORIES,
+  getRecentEmojis,
+  saveRecentEmoji,
+} from './emojiData';
 import './Chat.css';
 
 // ============================================================
@@ -641,6 +651,7 @@ interface SwipeableMessageProps {
   item: Rec;
   own: boolean;
   onReply: (item: Rec) => void;
+  onLongPress: (item: Rec) => void;
   children: ReactNode;
 }
 
@@ -648,10 +659,10 @@ function SwipeableMessage({
   item,
   own,
   onReply,
+  onLongPress,
   children,
 }: SwipeableMessageProps) {
   const bubbleWrapRef = useRef<HTMLDivElement | null>(null);
-  const leftIndicatorRef = useRef<HTMLDivElement | null>(null);
   const rightIndicatorRef = useRef<HTMLDivElement | null>(null);
 
   const startX = useRef(0);
@@ -659,6 +670,14 @@ function SwipeableMessage({
   const isSwiping = useRef(false);
   const isVertical = useRef(false);
   const currentDrag = useRef(0);
+  const longPressTimer = useRef<number | null>(null);
+
+  const clearLongPress = () => {
+    if (longPressTimer.current) {
+      window.clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
 
   const onTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     if (item.deleted || e.touches.length !== 1) return;
@@ -668,11 +687,18 @@ function SwipeableMessage({
     isVertical.current = false;
     currentDrag.current = 0;
 
+    clearLongPress();
+    longPressTimer.current = window.setTimeout(() => {
+      try {
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          navigator.vibrate(30);
+        }
+      } catch {}
+      onLongPress(item);
+    }, 450);
+
     if (bubbleWrapRef.current) {
       bubbleWrapRef.current.style.transition = 'none';
-    }
-    if (leftIndicatorRef.current) {
-      leftIndicatorRef.current.style.transition = 'none';
     }
     if (rightIndicatorRef.current) {
       rightIndicatorRef.current.style.transition = 'none';
@@ -687,8 +713,11 @@ function SwipeableMessage({
     const diffX = touchX - startX.current;
     const diffY = touchY - startY.current;
 
+    if (Math.hypot(diffX, diffY) > 8) {
+      clearLongPress();
+    }
+
     if (!isSwiping.current && !isVertical.current) {
-      // Determine if vertical scrolling or horizontal swiping
       if (Math.abs(diffY) > 8 && Math.abs(diffY) > Math.abs(diffX)) {
         isVertical.current = true;
         return;
@@ -700,25 +729,19 @@ function SwipeableMessage({
 
     if (!isSwiping.current) return;
 
-    // Prevent vertical scrolling or navigation once horizontal swipe starts
     if (e.cancelable) e.preventDefault();
 
     let moveX = 0;
-    const threshold = 40;
+    const threshold = 36;
 
-    if (!own) {
-      // Incoming message: swipe right
-      if (diffX > 0) {
-        moveX = diffX > threshold ? threshold + (diffX - threshold) * 0.35 : diffX;
-        moveX = Math.min(moveX, 65);
-      }
-    } else {
-      // Outgoing message: swipe left toward center
-      if (diffX < 0) {
-        const absDiff = Math.abs(diffX);
-        const damped = absDiff > threshold ? threshold + (absDiff - threshold) * 0.35 : absDiff;
-        moveX = -Math.min(damped, 65);
-      }
+    // Discord mobile standard: ALL messages swipe left to reply
+    if (diffX < 0) {
+      const absDiff = Math.abs(diffX);
+      const damped =
+        absDiff > threshold
+          ? threshold + (absDiff - threshold) * 0.35
+          : absDiff;
+      moveX = -Math.min(damped, 65);
     }
 
     currentDrag.current = moveX;
@@ -729,39 +752,33 @@ function SwipeableMessage({
 
     const progress = Math.min(1, Math.abs(moveX) / threshold);
 
-    if (moveX > 0 && leftIndicatorRef.current) {
-      leftIndicatorRef.current.style.opacity = `${progress}`;
-      leftIndicatorRef.current.style.transform = `translateY(-50%) scale(${0.5 + 0.5 * progress})`;
-      if (rightIndicatorRef.current) rightIndicatorRef.current.style.opacity = '0';
-    } else if (moveX < 0 && rightIndicatorRef.current) {
+    if (moveX < 0 && rightIndicatorRef.current) {
       rightIndicatorRef.current.style.opacity = `${progress}`;
-      rightIndicatorRef.current.style.transform = `translateY(-50%) scale(${0.5 + 0.5 * progress})`;
-      if (leftIndicatorRef.current) leftIndicatorRef.current.style.opacity = '0';
-    } else {
-      if (leftIndicatorRef.current) leftIndicatorRef.current.style.opacity = '0';
-      if (rightIndicatorRef.current) rightIndicatorRef.current.style.opacity = '0';
+      rightIndicatorRef.current.style.transform = `translateY(-50%) scale(${
+        0.5 + 0.5 * progress
+      })`;
+    } else if (rightIndicatorRef.current) {
+      rightIndicatorRef.current.style.opacity = '0';
     }
   };
 
   const onTouchEnd = () => {
+    clearLongPress();
     if (!isSwiping.current) return;
 
     const drag = currentDrag.current;
-    const threshold = 40;
-    const shouldReply = !own ? drag >= threshold : drag <= -threshold;
+    const threshold = 36;
+    const shouldReply = drag <= -threshold;
 
     if (bubbleWrapRef.current) {
-      bubbleWrapRef.current.style.transition = 'transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1)';
+      bubbleWrapRef.current.style.transition =
+        'transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1)';
       bubbleWrapRef.current.style.transform = 'translateX(0px)';
     }
 
-    if (leftIndicatorRef.current) {
-      leftIndicatorRef.current.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
-      leftIndicatorRef.current.style.opacity = '0';
-      leftIndicatorRef.current.style.transform = 'translateY(-50%) scale(0.5)';
-    }
     if (rightIndicatorRef.current) {
-      rightIndicatorRef.current.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+      rightIndicatorRef.current.style.transition =
+        'opacity 0.2s ease, transform 0.2s ease';
       rightIndicatorRef.current.style.opacity = '0';
       rightIndicatorRef.current.style.transform = 'translateY(-50%) scale(0.5)';
     }
@@ -779,10 +796,6 @@ function SwipeableMessage({
       if (bubbleWrapRef.current) {
         bubbleWrapRef.current.style.transition = '';
         bubbleWrapRef.current.style.transform = '';
-      }
-      if (leftIndicatorRef.current) {
-        leftIndicatorRef.current.style.transition = '';
-        leftIndicatorRef.current.style.transform = '';
       }
       if (rightIndicatorRef.current) {
         rightIndicatorRef.current.style.transition = '';
@@ -802,14 +815,13 @@ function SwipeableMessage({
       className={`shc-msg-swipe-container ${own ? 'shc-msg-swipe-own' : ''} ${
         isCard ? 'shc-msg-swipe-card' : ''
       }`}
+      onContextMenu={(e) => {
+        if (!item.deleted) {
+          e.preventDefault();
+          onLongPress(item);
+        }
+      }}
     >
-      <div
-        className="shc-msg-swipe-indicator shc-msg-swipe-left"
-        ref={leftIndicatorRef}
-      >
-        <Reply size={15} />
-      </div>
-
       <div
         className="shc-msg-bubble-wrap"
         ref={bubbleWrapRef}
@@ -881,6 +893,13 @@ export default function Chat({ onNavigate }: ChatProps) {
 
   const [messageText, setMessageText] = useState('');
   const [replyTarget, setReplyTarget] = useState<Rec | null>(null);
+  const [editingMessage, setEditingMessage] = useState<Rec | null>(null);
+  const [actionMessage, setActionMessage] = useState<Rec | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState<boolean>(false);
+  const [emojiSearch, setEmojiSearch] = useState<string>('');
+  const [recentEmojis, setRecentEmojis] = useState<string[]>(() => getRecentEmojis());
+  const [toastMessage, setToastMessage] = useState<string>('');
+  const toastMessageTimer = useRef<number | null>(null);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionSelectedIndex, setMentionSelectedIndex] = useState(0);
   const [sending, setSending] = useState(false);
@@ -1598,8 +1617,83 @@ const handleSearchMessage = async (target: Rec) => {
     }, 5000);
   };
 
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    if (toastMessageTimer.current) window.clearTimeout(toastMessageTimer.current);
+    toastMessageTimer.current = window.setTimeout(() => {
+      setToastMessage('');
+    }, 2500);
+  };
+
+  const copyMessageText = async (content: string) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      showToast('Copied text to clipboard');
+    } catch {
+      showToast('Failed to copy');
+    }
+  };
+
+  const handleToggleReaction = async (msg: Rec, emoji: string) => {
+    if (!uid || !selected?.id || msg.deleted) return;
+    try {
+      const msgRef = doc(db, 'conversations', selected.id, 'messages', msg.id);
+      const current = (msg.reactions || {}) as Record<string, string[]>;
+      const list = Array.isArray(current[emoji]) ? [...current[emoji]] : [];
+      const idx = list.indexOf(uid);
+      if (idx > -1) {
+        list.splice(idx, 1);
+      } else {
+        list.push(uid);
+        const updated = saveRecentEmoji(emoji);
+        setRecentEmojis(updated);
+      }
+      const updatedReactions = { ...current };
+      if (list.length === 0) {
+        delete updatedReactions[emoji];
+      } else {
+        updatedReactions[emoji] = list;
+      }
+      await updateDoc(msgRef, {
+        reactions: updatedReactions,
+      });
+    } catch (err) {
+      console.error('[REACTIONS] Failed to toggle reaction:', err);
+    }
+  };
+
+  const startEditing = (msg: Rec) => {
+    if (!msg || msg.deleted) return;
+    setReplyTarget(null);
+    setEditingMessage(msg);
+    setMessageText(msg.text || '');
+    if (inputRef.current && screen === 'conversation' && selected?.id) {
+      inputRef.current.focus({ preventScroll: true });
+    }
+  };
+
+  const cancelEditing = () => {
+    setEditingMessage(null);
+    setMessageText('');
+  };
+
+  const handleDeleteMessage = async (msgId: string) => {
+    if (!selected?.id) return;
+    try {
+      await updateDoc(doc(db, 'conversations', selected.id, 'messages', msgId), {
+        deleted: true,
+        text: '',
+        reactions: {},
+      });
+      showToast('Message deleted');
+    } catch (err) {
+      console.error('[CHAT] Failed to delete message:', err);
+    }
+  };
+
   const startReply = (msg: Rec) => {
     if (!msg || msg.deleted) return;
+    setEditingMessage(null);
     setReplyTarget(msg);
     if (inputRef.current && screen === 'conversation' && selected?.id) {
       inputRef.current.focus({ preventScroll: true });
@@ -1627,6 +1721,27 @@ const handleSearchMessage = async (target: Rec) => {
 
   const sendMessage = async () => {
     if (!uid || !selected?.id || sendingRef.current) return;
+
+    if (editingMessage) {
+      const msgId = editingMessage.id;
+      const newText = messageText.trim();
+      if (newText) {
+        try {
+          await updateDoc(
+            doc(db, 'conversations', selected.id, 'messages', msgId),
+            {
+              text: newText,
+              editedAt: serverTimestamp(),
+            },
+          );
+        } catch (e) {
+          console.error('[CHAT] Failed to edit message:', e);
+        }
+      }
+      setEditingMessage(null);
+      setMessageText('');
+      return;
+    }
 
     const text = messageText.trim();
     if (!text) return;
@@ -2539,6 +2654,61 @@ const handleSearchMessage = async (target: Rec) => {
     );
   };
 
+  const filteredEmojiCategories = useMemo(() => {
+    if (!emojiSearch.trim()) return EMOJI_CATEGORIES;
+    const term = emojiSearch.trim().toLowerCase();
+    return EMOJI_CATEGORIES.map((cat) => ({
+      ...cat,
+      emojis: cat.emojis.filter((e) => {
+        return cat.name.toLowerCase().includes(term) || e.includes(term);
+      }),
+    })).filter((cat) => cat.emojis.length > 0);
+  }, [emojiSearch]);
+
+  const renderReactions = (item: Rec) => {
+    const reactions = (item.reactions || {}) as Record<string, string[]>;
+    const entries = Object.entries(reactions).filter(
+      ([, uids]) => Array.isArray(uids) && uids.length > 0,
+    );
+    if (entries.length === 0) return null;
+
+    return (
+      <div className="shc-dc-reactions">
+        {entries.map(([emoji, uids]) => {
+          const count = uids.length;
+          const hasReacted = Boolean(uid && uids.includes(uid));
+          return (
+            <button
+              key={emoji}
+              type="button"
+              className={`shc-dc-reaction-pill ${hasReacted ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                void handleToggleReaction(item, emoji);
+              }}
+              title={`${count} ${count === 1 ? 'person' : 'people'} reacted`}
+            >
+              <span className="shc-reaction-emoji">{emoji}</span>
+              <span className="shc-reaction-count">{count}</span>
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          className="shc-dc-reaction-pill shc-dc-reaction-add"
+          onClick={(e) => {
+            e.stopPropagation();
+            setActionMessage(item);
+            setShowEmojiPicker(true);
+          }}
+          title="Add reaction"
+        >
+          <SmilePlus size={14} />
+        </button>
+      </div>
+    );
+  };
+
   const renderMessage = (item: Rec, index: number) => {
     const own = item.senderId === uid;
     const previous = messages[index - 1];
@@ -2674,7 +2844,11 @@ const handleSearchMessage = async (target: Rec) => {
 
             <div className="shc-dc-content">
               {contentNode}
+              {item.editedAt && (
+                <span className="shc-dc-edited">(edited)</span>
+              )}
             </div>
+            {renderReactions(item)}
           </div>
 
           {!item.deleted && (
@@ -2695,7 +2869,12 @@ const handleSearchMessage = async (target: Rec) => {
     return (
       <div key={item.id} id={`shc-msg-${item.id}`}>
         {showDay && <div className="shc-day">{dateLabel(item.createdAt)}</div>}
-        <SwipeableMessage item={item} own={own} onReply={startReply}>
+        <SwipeableMessage
+          item={item}
+          own={own}
+          onReply={startReply}
+          onLongPress={(msg) => setActionMessage(msg)}
+        >
           {messageContent}
         </SwipeableMessage>
       </div>
@@ -3246,6 +3425,24 @@ const handleSearchMessage = async (target: Rec) => {
           </div>
         )}
 
+        {editingMessage && (
+          <div className="shc-editing-banner">
+            <div className="shc-editing-info">
+              <Pencil size={15} className="shc-editing-icon" />
+              <span>Editing message</span>
+            </div>
+            <button
+              type="button"
+              className="shc-editing-cancel"
+              onClick={cancelEditing}
+              title="Cancel editing"
+              aria-label="Cancel editing"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
+
         <div className="shc-composer-wrap">
           {mentionQuery !== null && filteredMentionSuggestions.length > 0 && (
             <div
@@ -3779,6 +3976,185 @@ const handleSearchMessage = async (target: Rec) => {
                 <Video size={24} />
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {toastMessage && (
+        <div className="shc-toast" role="status">
+          {toastMessage}
+        </div>
+      )}
+
+      {actionMessage && !showEmojiPicker && (
+        <div
+          className="shc-sheet-backdrop"
+          onClick={() => setActionMessage(null)}
+        >
+          <div
+            className="shc-action-sheet"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="shc-sheet-handle" />
+
+            {/* Quick 5 Recent Emojis + SmilePlus */}
+            <div className="shc-action-emoji-bar">
+              {recentEmojis.slice(0, 5).map((em) => (
+                <button
+                  key={em}
+                  type="button"
+                  className="shc-action-emoji-btn"
+                  onClick={() => {
+                    const target = actionMessage;
+                    setActionMessage(null);
+                    void handleToggleReaction(target, em);
+                  }}
+                >
+                  {em}
+                </button>
+              ))}
+              <button
+                type="button"
+                className="shc-action-emoji-btn shc-action-emoji-btn-more"
+                onClick={() => setShowEmojiPicker(true)}
+                aria-label="More emojis"
+              >
+                <SmilePlus size={22} />
+              </button>
+            </div>
+
+            {/* Discord Menu Options */}
+            <div className="shc-action-menu">
+              <button
+                type="button"
+                className="shc-action-item"
+                onClick={() => {
+                  const target = actionMessage;
+                  setActionMessage(null);
+                  startReply(target);
+                }}
+              >
+                <CornerUpLeft size={19} />
+                <span>Reply</span>
+              </button>
+
+              {actionMessage.senderId === uid &&
+                !actionMessage.deleted &&
+                !actionMessage.type && (
+                  <button
+                    type="button"
+                    className="shc-action-item"
+                    onClick={() => {
+                      const target = actionMessage;
+                      setActionMessage(null);
+                      startEditing(target);
+                    }}
+                  >
+                    <Pencil size={19} />
+                    <span>Edit Message</span>
+                  </button>
+                )}
+
+              {actionMessage.text && !actionMessage.deleted && (
+                <button
+                  type="button"
+                  className="shc-action-item"
+                  onClick={() => {
+                    const textVal = actionMessage.text;
+                    setActionMessage(null);
+                    void copyMessageText(textVal);
+                  }}
+                >
+                  <Copy size={19} />
+                  <span>Copy Text</span>
+                </button>
+              )}
+
+              {actionMessage.senderId === uid && !actionMessage.deleted && (
+                <button
+                  type="button"
+                  className="shc-action-item shc-action-item-danger"
+                  onClick={() => {
+                    const id = actionMessage.id;
+                    setActionMessage(null);
+                    void handleDeleteMessage(id);
+                  }}
+                >
+                  <Trash2 size={19} />
+                  <span>Delete Message</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showEmojiPicker && (
+        <div
+          className="shc-sheet-backdrop"
+          onClick={() => {
+            setShowEmojiPicker(false);
+            setActionMessage(null);
+            setEmojiSearch('');
+          }}
+        >
+          <div
+            className="shc-emoji-picker-sheet"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="shc-sheet-handle" />
+
+            <div className="shc-emoji-search-wrap">
+              <Search size={16} className="shc-emoji-search-icon" />
+              <input
+                type="text"
+                className="shc-emoji-search-input"
+                placeholder="Find the perfect reaction"
+                value={emojiSearch}
+                onChange={(e) => setEmojiSearch(e.target.value)}
+                autoFocus
+              />
+              {emojiSearch && (
+                <button
+                  type="button"
+                  className="shc-emoji-search-clear"
+                  onClick={() => setEmojiSearch('')}
+                >
+                  <X size={15} />
+                </button>
+              )}
+            </div>
+
+            <div className="shc-emoji-scroll-body">
+              {filteredEmojiCategories.map((cat) => (
+                <div key={cat.name} className="shc-emoji-category-section">
+                  <div className="shc-emoji-category-title">{cat.name.toUpperCase()}</div>
+                  <div className="shc-emoji-grid">
+                    {cat.emojis.map((em, idx) => (
+                      <button
+                        key={`${cat.name}-${idx}-${em}`}
+                        type="button"
+                        className="shc-emoji-cell"
+                        onClick={() => {
+                          if (actionMessage) {
+                            void handleToggleReaction(actionMessage, em);
+                          } else {
+                            setMessageText((prev) => prev + em);
+                          }
+                          const updated = saveRecentEmoji(em);
+                          setRecentEmojis(updated);
+                          setShowEmojiPicker(false);
+                          setActionMessage(null);
+                          setEmojiSearch('');
+                        }}
+                      >
+                        {em}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
