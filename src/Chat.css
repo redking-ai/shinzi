@@ -717,15 +717,18 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 2px;
-  margin: 0 4px 0 6px;
+  margin: 0 4px 0 8px;
 }
 
 .shc-chat-title strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 15px;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
 }
 
 .shc-chat-title span {
@@ -1766,18 +1769,22 @@
 
 .shc-pill {
   min-width: 62px;
-  padding: 7px 12px;
-  border: 1px solid var(--line-strong);
-  border-radius: 16px;
-  font-size: 12px;
-  font-weight: 700;
+  padding: 6px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 18px;
+  font-size: 13px;
+  font-weight: 600;
   text-align: center;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f2f3f5;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
 .shc-pill-on {
-  border-color: var(--green);
-  background: var(--green);
-  color: #07110b;
+  border-color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
 }
 
 .shc-count {

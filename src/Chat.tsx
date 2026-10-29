@@ -3115,6 +3115,11 @@ const handleSearchMessage = async (target: Rec) => {
     const fav = isFavorite(selectedConversation);
     const targetUid = isGroup ? undefined : otherMemberId(selectedConversation);
     const targetProfile = targetUid ? selectedConversation?.memberProfiles?.[targetUid] : undefined;
+    const composerPlaceholder = isGroup
+      ? `Message #${name}`
+      : username
+        ? `Message @${username}`
+        : `Message @${name}`;
 
     return (
       <>
@@ -3139,13 +3144,11 @@ const handleSearchMessage = async (target: Rec) => {
 
           <div className="shc-chat-title">
             <strong>{name}</strong>
-            <span>
-              {isGroup
-                ? `${selectedConversation?.memberIds?.length || 0} members`
-                : username
-                  ? `@${username}`
-                  : 'Direct message'}
-            </span>
+            {isGroup && (
+              <span>
+                {`${selectedConversation?.memberIds?.length || 0} members`}
+              </span>
+            )}
           </div>
 
           <button
@@ -3313,7 +3316,7 @@ const handleSearchMessage = async (target: Rec) => {
               <textarea
                 ref={inputRef}
                 rows={1}
-                placeholder="Message"
+                placeholder={composerPlaceholder}
                 value={messageText}
                 maxLength={MAX_MESSAGE_LENGTH}
                 onChange={(e) => handleMessageChange(e.target.value, e.target)}
@@ -3476,7 +3479,13 @@ const handleSearchMessage = async (target: Rec) => {
                       }))
                     }
                   >
-                    <Avatar name={friend.displayName || friend.username} small />
+                    <UserAvatar
+                      uid={friend.id}
+                      name={friend.displayName || friend.username}
+                      photoURL={friend.photoURL}
+                      profileAssetId={friend.profileAssetId}
+                      size="sm"
+                    />
                     <span className="shc-person-info">
                       <strong>{friend.displayName || friend.username || 'User'}</strong>
                       <span>@{friend.username || 'user'}</span>
