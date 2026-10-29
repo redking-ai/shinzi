@@ -340,6 +340,7 @@ function UserAvatar({
 
   useEffect(() => {
     if (group) {
+      setImageUri(null);
       setLoading(false);
       return;
     }
@@ -361,6 +362,22 @@ function UserAvatar({
       setLoading(false);
       return;
     }
+
+    if (typeof window !== 'undefined' && targetUid) {
+      try {
+        const localStored = localStorage.getItem(`shinzi_avatar_${targetUid}`);
+        if (localStored) {
+          avatarMemoryCache.set(targetUid, localStored);
+          setImageUri(localStored);
+          setLoading(false);
+          return;
+        }
+      } catch {}
+    }
+
+    // Reset imageUri immediately so previous user's avatar never lingers on search or reuse
+    setImageUri(null);
+    setLoading(Boolean(targetUid || profileAssetId));
 
     let cancelled = false;
 
@@ -448,6 +465,7 @@ function UserAvatar({
                       const currentAuthUid = auth.currentUser?.uid;
                       if (currentAuthUid && targetUid === currentAuthUid && dataUri) {
                         updateDoc(doc(db, 'users', currentAuthUid), { photoURL: dataUri }).catch(() => {});
+                        void drive.makeFilePublic(providerFileId);
                       }
                     }
                     setLoading(false);
@@ -485,10 +503,12 @@ function UserAvatar({
         }
 
         if (!cancelled) {
+          setImageUri(null);
           setLoading(false);
         }
       } catch {
         if (!cancelled) {
+          setImageUri(null);
           setLoading(false);
         }
       }
@@ -2986,6 +3006,7 @@ const handleSearchMessage = async (target: Rec) => {
         {searchResult ? (
           <div className="shc-request shc-result">
             <UserAvatar
+              key={searchResult.id}
               uid={searchResult.id}
               name={searchResult.displayName || searchResult.username}
               photoURL={searchResult.photoURL}

@@ -300,6 +300,10 @@ useEffect(() => {
             asset.providerFileId,
           );
 
+          if (drive.hasActiveSession) {
+            void drive.makeFilePublic(asset.providerFileId);
+          }
+
           if (!dataUri.startsWith('data:image/')) {
             console.error(
               `[PROFILE IMAGE] ${kind} download did not return an image data URI.`,

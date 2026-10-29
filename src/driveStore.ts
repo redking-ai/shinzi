@@ -134,6 +134,10 @@ interface DriveStore {
     fileId: string
   ) => Promise<string>;
 
+  makeFilePublic: (
+    fileId: string
+  ) => Promise<boolean>;
+
   deleteFile: (
     fileId: string
   ) => Promise<boolean>;
@@ -387,6 +391,26 @@ const uploadMultipart = async (
     throw new Error(
       'Google Drive upload completed without returning a file ID.'
     );
+  }
+
+  // Attempt to grant public read permission so Google CDN and other users can view it
+  try {
+    await fetch(
+      `${DRIVE_API}/files/${encodeURIComponent(uploaded.id)}/permissions`,
+      {
+        method: 'POST',
+        headers: {
+          ...getAuthHeader(token),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          role: 'reader',
+          type: 'anyone',
+        }),
+      }
+    );
+  } catch {
+    // Non-blocking if permissions call fails
   }
 
   return {
@@ -1226,6 +1250,35 @@ export const useDriveStore = (): DriveStore => {
         [withToken]
       );
 
+    const makeFilePublic =
+      useCallback(
+        async (fileId: string): Promise<boolean> => {
+          if (!fileId) return false;
+          try {
+            return await withToken(async (token) => {
+              const res = await fetch(
+                `${DRIVE_API}/files/${encodeURIComponent(fileId.trim())}/permissions`,
+                {
+                  method: 'POST',
+                  headers: {
+                    ...getAuthHeader(token),
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    role: 'reader',
+                    type: 'anyone',
+                  }),
+                }
+              );
+              return res.ok;
+            });
+          } catch {
+            return false;
+          }
+        },
+        [withToken]
+      );
+
 
     // ========================================================
     // RETURN STORE API
@@ -1257,6 +1310,8 @@ export const useDriveStore = (): DriveStore => {
       getFileMetadata,
 
       getFileDataUri,
+
+      makeFilePublic,
 
       deleteFile,
     };
