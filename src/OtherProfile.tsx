@@ -339,7 +339,11 @@ export default function OtherProfile({
       ]);
 
       if (!cancelled) {
-        if (avatarUri) setAvatar(avatarUri);
+        if (avatarUri) {
+          setAvatar(avatarUri);
+        } else if (targetUid) {
+          setAvatar(`/api/avatar?uid=${encodeURIComponent(targetUid)}`);
+        }
         if (bannerUri) setBanner(bannerUri);
       }
     };
