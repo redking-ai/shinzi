@@ -1120,3 +1120,26 @@ body {
 .sh-profile-bottom-nav button.sh-bottom-active {
   color: #20d9ff;
 }
+
+.shc-avatar-nav {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 2px solid var(--line-strong, #39265d);
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  object-fit: cover;
+  image-rendering: -webkit-optimize-contrast;
+  display: block;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.sh-profile-bottom-nav button.sh-bottom-active .shc-avatar-nav {
+  border-color: #79c0ff;
+  box-shadow: 0 0 10px rgba(121, 192, 255, 0.45);
+  transform: scale(1.05);
+}
+
+.sh-profile-bottom-nav button.shc-bottom-profile-btn {
+  padding: 0;
+}

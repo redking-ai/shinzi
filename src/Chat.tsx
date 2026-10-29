@@ -265,6 +265,18 @@ const formatDuration = (seconds: number) =>
 
 const avatarMemoryCache = new Map<string, string>();
 
+const testImageLoad = (url: string): Promise<boolean> =>
+  new Promise((resolve) => {
+    if (typeof window === 'undefined') {
+      resolve(false);
+      return;
+    }
+    const img = new Image();
+    img.onload = () => resolve(true);
+    img.onerror = () => resolve(false);
+    img.src = url;
+  });
+
 function UserAvatar({
   uid: targetUid,
   name,
@@ -294,9 +306,22 @@ function UserAvatar({
     if (targetUid && avatarMemoryCache.has(targetUid)) {
       return avatarMemoryCache.get(targetUid)!;
     }
-    if (profileAssetId && typeof window !== 'undefined' && window.sessionStorage) {
-      const stored = window.sessionStorage.getItem(`shinzi_drive_${profileAssetId}`);
-      if (stored) return stored;
+    if (typeof window !== 'undefined') {
+      if (targetUid) {
+        try {
+          const localStored = localStorage.getItem(`shinzi_avatar_${targetUid}`);
+          if (localStored) {
+            avatarMemoryCache.set(targetUid, localStored);
+            return localStored;
+          }
+        } catch {}
+      }
+      if (profileAssetId && window.sessionStorage) {
+        try {
+          const stored = window.sessionStorage.getItem(`shinzi_drive_${profileAssetId}`);
+          if (stored) return stored;
+        } catch {}
+      }
     }
     return null;
   });
@@ -305,6 +330,11 @@ function UserAvatar({
     if (group) return false;
     if (photoURL && (photoURL.startsWith('http') || photoURL.startsWith('data:'))) return false;
     if (targetUid && avatarMemoryCache.has(targetUid)) return false;
+    if (typeof window !== 'undefined' && targetUid) {
+      try {
+        if (localStorage.getItem(`shinzi_avatar_${targetUid}`)) return false;
+      } catch {}
+    }
     return Boolean(targetUid || profileAssetId);
   });
 
@@ -316,7 +346,12 @@ function UserAvatar({
 
     if (photoURL && (photoURL.startsWith('http') || photoURL.startsWith('data:'))) {
       setImageUri(photoURL);
-      if (targetUid) avatarMemoryCache.set(targetUid, photoURL);
+      if (targetUid) {
+        avatarMemoryCache.set(targetUid, photoURL);
+        try {
+          localStorage.setItem(`shinzi_avatar_${targetUid}`, photoURL);
+        } catch {}
+      }
       setLoading(false);
       return;
     }
@@ -338,7 +373,12 @@ function UserAvatar({
           const userSnap = await getDoc(doc(db, 'users', targetUid));
           if (userSnap.exists()) {
             const data = userSnap.data();
-            directUrl = data?.photoURL;
+            directUrl =
+              data?.photoURL ||
+              data?.photoUrl ||
+              data?.avatarUrl ||
+              data?.avatarURL ||
+              data?.profileImageUri;
             assetId = data?.profileAssetId;
           }
         }
@@ -346,7 +386,12 @@ function UserAvatar({
         if (directUrl && (directUrl.startsWith('http') || directUrl.startsWith('data:'))) {
           if (!cancelled) {
             setImageUri(directUrl);
-            if (targetUid) avatarMemoryCache.set(targetUid, directUrl);
+            if (targetUid) {
+              avatarMemoryCache.set(targetUid, directUrl);
+              try {
+                localStorage.setItem(`shinzi_avatar_${targetUid}`, directUrl);
+              } catch {}
+            }
             setLoading(false);
           }
           return;
@@ -371,7 +416,9 @@ function UserAvatar({
             const providerFileId = assetData?.providerFileId;
             if (providerFileId) {
               if (typeof window !== 'undefined' && window.sessionStorage) {
-                const storedFile = window.sessionStorage.getItem(`shinzi_drive_${providerFileId}`);
+                const storedFile = window.sessionStorage.getItem(
+                  `shinzi_drive_${providerFileId}`,
+                );
                 if (storedFile) {
                   if (!cancelled) {
                     setImageUri(storedFile);
@@ -382,11 +429,44 @@ function UserAvatar({
                 }
               }
 
+              // 1. Try Drive OAuth download if session is active
               if (drive.hasActiveSession) {
-                const dataUri = await drive.getFileDataUri(providerFileId);
-                if (dataUri && !cancelled) {
-                  setImageUri(dataUri);
-                  if (targetUid) avatarMemoryCache.set(targetUid, dataUri);
+                try {
+                  const dataUri = await drive.getFileDataUri(providerFileId);
+                  if (dataUri && !cancelled) {
+                    setImageUri(dataUri);
+                    if (targetUid) {
+                      avatarMemoryCache.set(targetUid, dataUri);
+                      try {
+                        localStorage.setItem(`shinzi_avatar_${targetUid}`, dataUri);
+                      } catch {}
+                    }
+                    setLoading(false);
+                    return;
+                  }
+                } catch {
+                  // Fall through to public CDN / thumbnails
+                }
+              }
+
+              // 2. Try Google Drive CDN / Thumbnail endpoints (publicly viewable assets)
+              const cdnCandidates = [
+                `https://lh3.googleusercontent.com/d/${providerFileId}=s400`,
+                `https://drive.google.com/thumbnail?id=${providerFileId}&sz=w400`,
+                `https://drive.google.com/uc?export=view&id=${providerFileId}`,
+              ];
+
+              for (const candidate of cdnCandidates) {
+                if (cancelled) return;
+                const canLoad = await testImageLoad(candidate);
+                if (canLoad && !cancelled) {
+                  setImageUri(candidate);
+                  if (targetUid) {
+                    avatarMemoryCache.set(targetUid, candidate);
+                    try {
+                      localStorage.setItem(`shinzi_avatar_${targetUid}`, candidate);
+                    } catch {}
+                  }
                   setLoading(false);
                   return;
                 }

@@ -13,7 +13,6 @@ import {
   Search,
   Server,
   Sparkles,
-  User,
 } from 'lucide-react';
 import { auth, db } from './firebaseConfig';
 import { useDriveStore } from './driveStore';
@@ -922,10 +921,24 @@ useEffect(() => {
 
         <button
           type="button"
-          className="sh-bottom-active"
+          className="sh-bottom-active shc-bottom-profile-btn"
           aria-label="Profile"
         >
-          <User size={22} />
+          {profileImageUri ? (
+            <img
+              src={profileImageUri}
+              alt="Profile"
+              className="shc-avatar-nav"
+            />
+          ) : (
+            <div className="shc-avatar shc-avatar-nav">
+              <span>
+                {String(userData?.displayName ?? '?')
+                  .slice(0, 1)
+                  .toUpperCase()}
+              </span>
+            </div>
+          )}
         </button>
       </nav>
     </main>
