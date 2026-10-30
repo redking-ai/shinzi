@@ -33,6 +33,7 @@ import {
   Bell,
   Calendar,
   Check,
+  ChevronRight,
   Copy,
   CornerUpLeft,
   FileText,
@@ -2597,6 +2598,15 @@ const handleSearchMessage = async (target: Rec) => {
     }
   };
 
+  const openUserProfile = (profileUid?: string) => {
+    if (!profileUid) return;
+    navigateToUrl(
+      profileUid === uid
+        ? '/profile'
+        : `/profile?uid=${encodeURIComponent(profileUid)}`,
+    );
+  };
+
   const goBack = () => {
     if (screen === 'conversation') {
       void publishTyping(false);
@@ -2861,7 +2871,16 @@ const handleSearchMessage = async (target: Rec) => {
         )}
 
         <div className="shc-dc-main">
-          <div className="shc-dc-avatar-col">
+          <button
+            type="button"
+            className="shc-dc-avatar-col shc-profile-trigger"
+            onClick={(event) => {
+              event.stopPropagation();
+              openUserProfile(item.senderId);
+            }}
+            onDoubleClick={(event) => event.stopPropagation()}
+            aria-label={`Open ${authorName}'s profile`}
+          >
             <UserAvatar
               uid={item.senderId}
               name={authorName}
@@ -2869,13 +2888,22 @@ const handleSearchMessage = async (target: Rec) => {
               profileAssetId={item.senderProfileAssetId}
               size="md"
             />
-          </div>
+          </button>
 
           <div className="shc-dc-body-col">
             <div className="shc-dc-header">
-              <span className={`shc-dc-author ${own ? 'shc-dc-author-me' : ''}`}>
+              <button
+                type="button"
+                className={`shc-dc-author shc-profile-trigger ${own ? 'shc-dc-author-me' : ''}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  openUserProfile(item.senderId);
+                }}
+                onDoubleClick={(event) => event.stopPropagation()}
+                aria-label={`Open ${authorName}'s profile`}
+              >
                 {authorName}
-              </span>
+              </button>
               <span className="shc-dc-timestamp">
                 {formatDiscordTimestamp(item.createdAt)}
               </span>
@@ -3242,19 +3270,26 @@ const handleSearchMessage = async (target: Rec) => {
 
         {searchResult ? (
           <div className="shc-request shc-result">
-            <UserAvatar
-              key={searchResult.id}
-              uid={searchResult.id}
-              name={searchResult.displayName || searchResult.username}
-              photoURL={searchResult.photoURL}
-              profileAssetId={searchResult.profileAssetId}
-              size="md"
-            />
+            <button
+              type="button"
+              className="shc-search-profile-trigger"
+              onClick={() => openUserProfile(searchResult.id)}
+              aria-label={`Open ${searchResult.displayName || searchResult.username || 'user'}'s profile`}
+            >
+              <UserAvatar
+                key={searchResult.id}
+                uid={searchResult.id}
+                name={searchResult.displayName || searchResult.username}
+                photoURL={searchResult.photoURL}
+                profileAssetId={searchResult.profileAssetId}
+                size="md"
+              />
 
-            <span className="shc-person-info">
-              <strong>{searchResult.displayName || searchResult.username || 'User'}</strong>
-              <span>@{searchResult.username || 'user'}</span>
-            </span>
+              <span className="shc-person-info">
+                <strong>{searchResult.displayName || searchResult.username || 'User'}</strong>
+                <span>@{searchResult.username || 'user'}</span>
+              </span>
+            </button>
 
             {searchResult.id !== uid && (() => {
               const isFriend = friends.some((f) => f.id === searchResult.id || f.uid === searchResult.id);
@@ -3355,23 +3390,49 @@ const handleSearchMessage = async (target: Rec) => {
             <ArrowLeft size={23} />
           </button>
 
-          <UserAvatar
-            uid={targetUid}
-            name={name}
-            photoURL={targetProfile?.photoURL}
-            profileAssetId={targetProfile?.profileAssetId}
-            group={isGroup}
-            size="sm"
-          />
+          {targetUid ? (
+            <button
+              type="button"
+              className="shc-chat-avatar-trigger"
+              onClick={() => openUserProfile(targetUid)}
+              aria-label={`Open ${name}'s profile`}
+            >
+              <UserAvatar
+                uid={targetUid}
+                name={name}
+                photoURL={targetProfile?.photoURL}
+                profileAssetId={targetProfile?.profileAssetId}
+                size="sm"
+              />
+            </button>
+          ) : (
+            <UserAvatar
+              uid={undefined}
+              name={name}
+              group={isGroup}
+              size="sm"
+            />
+          )}
 
-          <div className="shc-chat-title">
-            <strong>{name}</strong>
-            {isGroup && (
-              <span>
-                {`${selectedConversation?.memberIds?.length || 0} members`}
-              </span>
-            )}
-          </div>
+          {targetUid ? (
+            <button
+              type="button"
+              className="shc-chat-title shc-chat-title-trigger"
+              onClick={() => openUserProfile(targetUid)}
+              aria-label={`Open ${name}'s profile`}
+            >
+              <strong>
+                <span className="shc-chat-title-name">{name}</span>
+                <ChevronRight size={16} aria-hidden="true" />
+              </strong>
+              <span>{username ? `@${username}` : 'View profile'}</span>
+            </button>
+          ) : (
+            <div className="shc-chat-title">
+              <strong>{name}</strong>
+              <span>{`${selectedConversation?.memberIds?.length || 0} members`}</span>
+            </div>
+          )}
 
           <button
             type="button"

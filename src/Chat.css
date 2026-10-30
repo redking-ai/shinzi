@@ -737,6 +737,9 @@
 }
 
 .shc-chat-title strong {
+  display: flex;
+  align-items: center;
+  gap: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -744,6 +747,43 @@
   font-weight: 700;
   line-height: 1.25;
   color: #fff;
+}
+
+.shc-chat-title strong .shc-chat-title-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.shc-chat-title-trigger,
+.shc-chat-avatar-trigger,
+.shc-profile-trigger,
+.shc-search-profile-trigger {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.shc-chat-title-trigger {
+  text-align: left;
+}
+
+.shc-chat-title-trigger strong svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.shc-chat-avatar-trigger {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .shc-chat-title span {
@@ -865,6 +905,11 @@
   margin-top: 2px;
 }
 
+.shc-profile-trigger {
+  color: inherit;
+  text-align: inherit;
+}
+
 .shc-dc-body-col {
   display: flex;
   flex-direction: column;
@@ -881,6 +926,11 @@
 }
 
 .shc-dc-author {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
   font-size: 14px;
   font-weight: 700;
   color: var(--text);
@@ -2127,6 +2177,16 @@
 .shc-result .shc-person-info {
   flex: 1;
   min-width: 0;
+}
+
+.shc-search-profile-trigger {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  text-align: left;
 }
 
 .shc-result .shc-circle {

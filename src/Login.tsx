@@ -37,9 +37,6 @@ export default function Login({
   const [loggingIn, setLoggingIn] =
     useState(false);
 
-  // Password validation
-  const hasNumber = /\d/.test(password);
-
   // ======================================================
   // LOGIN
   // ======================================================
@@ -59,13 +56,6 @@ export default function Login({
     if (!password) {
       window.alert(
         'Login Failed\n\nPlease enter your password.'
-      );
-      return;
-    }
-
-    if (!hasNumber) {
-      window.alert(
-        'Login Failed\n\nYour password must contain at least 1 number.'
       );
       return;
     }
@@ -336,8 +326,7 @@ export default function Login({
                 if (
                   event.key === 'Enter' &&
                   identity &&
-                  password &&
-                  hasNumber
+                  password
                 ) {
                   void handleFirebaseLogin();
                 }
@@ -348,17 +337,6 @@ export default function Login({
           </div>
 
         </div>
-
-        {/* ==================================================
-            PASSWORD NUMBER WARNING
-        ================================================== */}
-
-        {password.length > 0 &&
-          !hasNumber && (
-            <div style={styles.errorText}>
-              * Password must contain at least 1 number
-            </div>
-          )}
 
         {/* ==================================================
             FORGOT PASSWORD
@@ -387,7 +365,6 @@ export default function Login({
           disabled={
             !identity ||
             !password ||
-            !hasNumber ||
             loggingIn
           }
           onClick={() => {
@@ -398,7 +375,6 @@ export default function Login({
             ...(
               !identity ||
               !password ||
-              !hasNumber ||
               loggingIn
             )
               ? styles.disabledBtn
