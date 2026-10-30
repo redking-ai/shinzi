@@ -2984,7 +2984,9 @@ const handleSearchMessage = async (target: Rec) => {
             aria-label="Notifications"
           >
             <Bell size={21} />
-            {dmRequests.length > 0 && <Badge count={dmRequests.length} />}
+            {friendRequests.length + dmRequests.length > 0 && (
+              <Badge count={friendRequests.length + dmRequests.length} />
+            )}
           </button>
 
           <button
@@ -3134,7 +3136,7 @@ const handleSearchMessage = async (target: Rec) => {
   ) =>
     function Row(item: Rec) {
       return (
-        <div key={item.id} className="shc-request">
+        <div key={`${kind}:${item.id}`} className="shc-request">
           <UserAvatar
             uid={item.fromUid || item.fromProfile?.uid}
             name={item.fromProfile?.displayName || item.fromProfile?.username}
@@ -3147,7 +3149,10 @@ const handleSearchMessage = async (target: Rec) => {
             <strong>
               {item.fromProfile?.displayName || item.fromProfile?.username || 'User'}
             </strong>
-            <span>@{item.fromProfile?.username || 'user'}</span>
+            <span>
+              {kind === 'friendRequests' ? 'Friend request' : 'DM request'}
+              {' · '}@{item.fromProfile?.username || 'user'}
+            </span>
           </span>
 
           <button
@@ -3184,18 +3189,28 @@ const handleSearchMessage = async (target: Rec) => {
       renderRequestRow('friendRequests', acceptFriendRequest),
     );
 
-  const renderNotifications = () =>
-    renderPeople(
+  const renderNotifications = () => {
+    const requests: Rec[] = [
+      ...friendRequests.map((item): Rec => ({ ...item, _requestKind: 'friendRequests' })),
+      ...dmRequests.map((item): Rec => ({ ...item, _requestKind: 'dmRequests' })),
+    ].sort((a, b) => millis(b.createdAt) - millis(a.createdAt));
+
+    return renderPeople(
       'Notifications',
-      dmRequests,
+      requests,
       false,
       <EmptyState
         icon={<Bell size={44} />}
         title="No notifications received"
         text="New notifications will appear here."
       />,
-      renderRequestRow('dmRequests', acceptDMRequest),
+      (item) => {
+        const kind = item._requestKind as 'friendRequests' | 'dmRequests';
+        const accept = kind === 'friendRequests' ? acceptFriendRequest : acceptDMRequest;
+        return renderRequestRow(kind, accept)(item);
+      },
     );
+  };
 
   const renderSearch = () => (
     <>

@@ -689,13 +689,20 @@
 }
 
 .shc-accept {
-  border-color: var(--green);
-  background: var(--green);
+  border-color: #5865F2;
+  background: #5865F2;
+  color: #fff !important;
+}
+
+.shc-accept:hover {
+  border-color: #4752c4;
+  background: #4752c4;
 }
 
 .shc-reject {
   border-color: var(--danger);
   background: var(--danger);
+  color: #fff !important;
 }
 
 .shc-result {
