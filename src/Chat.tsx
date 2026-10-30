@@ -70,6 +70,7 @@ import { useDriveStore } from './driveStore';
 import { navigateTo as navigateToUrl, setCachedProfile } from './profileCache';
 import {
   getRecentEmojis,
+  loadEmojiPickerData,
   saveRecentEmoji,
 } from './emojiData';
 import './Chat.css';
@@ -4096,6 +4097,7 @@ const handleSearchMessage = async (target: Rec) => {
                 emojiStyle="native"
                 width="100%"
                 height="100%"
+                emojiData={loadEmojiPickerData}
                 previewConfig={{ showPreview: false }}
                 searchPlaceholder="Search all emojis"
                 onEmojiClick={({ emoji }) => {
