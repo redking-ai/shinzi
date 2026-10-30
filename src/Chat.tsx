@@ -3425,7 +3425,6 @@ const handleSearchMessage = async (target: Rec) => {
                 <span className="shc-chat-title-name">{name}</span>
                 <ChevronRight size={16} aria-hidden="true" />
               </strong>
-              <span>{username ? `@${username}` : 'View profile'}</span>
             </button>
           ) : (
             <div className="shc-chat-title">
