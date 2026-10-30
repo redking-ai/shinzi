@@ -1,9 +1,11 @@
 import {
   useCallback,
   useEffect,
+  lazy,
   useMemo,
   useRef,
   useState,
+  Suspense,
   type ChangeEvent,
   type KeyboardEvent,
   type ReactNode,
@@ -67,11 +69,12 @@ import { auth, db } from './firebaseConfig';
 import { useDriveStore } from './driveStore';
 import { navigateTo as navigateToUrl, setCachedProfile } from './profileCache';
 import {
-  EMOJI_CATEGORIES,
   getRecentEmojis,
   saveRecentEmoji,
 } from './emojiData';
 import './Chat.css';
+
+const EmojiPicker = lazy(() => import('emoji-picker-react'));
 
 // ============================================================
 // TYPES + CONSTANTS
@@ -896,7 +899,6 @@ export default function Chat({ onNavigate }: ChatProps) {
   const [editingMessage, setEditingMessage] = useState<Rec | null>(null);
   const [actionMessage, setActionMessage] = useState<Rec | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState<boolean>(false);
-  const [emojiSearch, setEmojiSearch] = useState<string>('');
   const [recentEmojis, setRecentEmojis] = useState<string[]>(() => getRecentEmojis());
   const [toastMessage, setToastMessage] = useState<string>('');
   const toastMessageTimer = useRef<number | null>(null);
@@ -2654,17 +2656,6 @@ const handleSearchMessage = async (target: Rec) => {
     );
   };
 
-  const filteredEmojiCategories = useMemo(() => {
-    if (!emojiSearch.trim()) return EMOJI_CATEGORIES;
-    const term = emojiSearch.trim().toLowerCase();
-    return EMOJI_CATEGORIES.map((cat) => ({
-      ...cat,
-      emojis: cat.emojis.filter((e) => {
-        return cat.name.toLowerCase().includes(term) || e.includes(term);
-      }),
-    })).filter((cat) => cat.emojis.length > 0);
-  }, [emojiSearch]);
-
   const renderReactions = (item: Rec) => {
     const reactions = (item.reactions || {}) as Record<string, string[]>;
     const entries = Object.entries(reactions).filter(
@@ -2851,17 +2842,6 @@ const handleSearchMessage = async (target: Rec) => {
             {renderReactions(item)}
           </div>
 
-          {!item.deleted && (
-            <button
-              type="button"
-              className="shc-msg-reply-btn"
-              onClick={() => startReply(item)}
-              title="Reply"
-              aria-label="Reply"
-            >
-              <Reply size={15} />
-            </button>
-          )}
         </div>
       </div>
     );
@@ -4095,7 +4075,6 @@ const handleSearchMessage = async (target: Rec) => {
           onClick={() => {
             setShowEmojiPicker(false);
             setActionMessage(null);
-            setEmojiSearch('');
           }}
         >
           <div
@@ -4103,58 +4082,37 @@ const handleSearchMessage = async (target: Rec) => {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="shc-sheet-handle" />
-
-            <div className="shc-emoji-search-wrap">
-              <Search size={16} className="shc-emoji-search-icon" />
-              <input
-                type="text"
-                className="shc-emoji-search-input"
-                placeholder="Find the perfect reaction"
-                value={emojiSearch}
-                onChange={(e) => setEmojiSearch(e.target.value)}
-                autoFocus
-              />
-              {emojiSearch && (
-                <button
-                  type="button"
-                  className="shc-emoji-search-clear"
-                  onClick={() => setEmojiSearch('')}
-                >
-                  <X size={15} />
-                </button>
-              )}
-            </div>
-
-            <div className="shc-emoji-scroll-body">
-              {filteredEmojiCategories.map((cat) => (
-                <div key={cat.name} className="shc-emoji-category-section">
-                  <div className="shc-emoji-category-title">{cat.name.toUpperCase()}</div>
-                  <div className="shc-emoji-grid">
-                    {cat.emojis.map((em, idx) => (
-                      <button
-                        key={`${cat.name}-${idx}-${em}`}
-                        type="button"
-                        className="shc-emoji-cell"
-                        onClick={() => {
-                          if (actionMessage) {
-                            void handleToggleReaction(actionMessage, em);
-                          } else {
-                            setMessageText((prev) => prev + em);
-                          }
-                          const updated = saveRecentEmoji(em);
-                          setRecentEmojis(updated);
-                          setShowEmojiPicker(false);
-                          setActionMessage(null);
-                          setEmojiSearch('');
-                        }}
-                      >
-                        {em}
-                      </button>
-                    ))}
-                  </div>
+            <Suspense
+              fallback={
+                <div className="shc-emoji-picker-loading" role="status">
+                  <span className="shc-spinner shc-spinner-sm" />
+                  <span>Loading emojis…</span>
                 </div>
-              ))}
-            </div>
+              }
+            >
+              <EmojiPicker
+                className="shc-emoji-picker"
+                colorScheme="dark"
+                emojiStyle="native"
+                width="100%"
+                height="100%"
+                previewConfig={{ showPreview: false }}
+                searchPlaceholder="Search all emojis"
+                onEmojiClick={({ emoji }) => {
+                  const updated = saveRecentEmoji(emoji);
+                  setRecentEmojis(updated);
+
+                  if (actionMessage) {
+                    void handleToggleReaction(actionMessage, emoji);
+                  } else {
+                    setMessageText((previous) => previous + emoji);
+                  }
+
+                  setShowEmojiPicker(false);
+                  setActionMessage(null);
+                }}
+              />
+            </Suspense>
           </div>
         </div>
       )}
