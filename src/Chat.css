@@ -793,8 +793,8 @@
   border-radius: 6px;
   position: relative;
   transition: background 0.12s ease;
-  user-select: text;
-  -webkit-user-select: text;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .shc-dc-msg:hover {
