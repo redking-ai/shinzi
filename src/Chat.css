@@ -2316,30 +2316,27 @@ button {
   --epr-picker-border-color: #292930;
   --epr-text-color: #e4e4e7;
   --epr-highlight-color: #5865f2;
+  --epr-category-icon-active-color: #5865f2;
+  --epr-category-icon-inactive-color: #b5bac1;
   --epr-hover-bg-color: #1c1c22;
   --epr-focus-bg-color: #24242d;
   --epr-emoji-size: 27px;
 }
 
-/* Keep one clear blue state for the selected emoji category. */
-.shc-emoji-picker [data-epr-part='category-tab'] {
-  border-radius: 8px;
-  box-shadow: none;
-  outline: none;
-  transition: background-color 0.12s ease, color 0.12s ease;
+/* Category state is shown on the icon only, without a focus circle. */
+.shc-emoji-picker .shc-emoji-category-tab {
+  color: #b5bac1;
+  transition: color 0.12s ease;
 }
 
-.shc-emoji-picker [data-epr-part='category-tab'][aria-selected='true'] {
-  background: #5865f2;
-  color: #fff;
-  box-shadow: none;
-  outline: none;
+.shc-emoji-picker .shc-emoji-category-tab[aria-selected='true'] {
+  color: #5865f2;
 }
 
-.shc-emoji-picker [data-epr-part='category-tab']:focus,
-.shc-emoji-picker [data-epr-part='category-tab']:focus-visible {
-  box-shadow: none;
+.shc-emoji-picker .shc-emoji-category-tab:focus,
+.shc-emoji-picker .shc-emoji-category-tab:focus-visible {
   outline: none;
+  box-shadow: none;
 }
 
 .shc-emoji-picker-loading {

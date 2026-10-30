@@ -65,6 +65,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
+import type { CategoryButtonRenderProps } from 'emoji-picker-react';
 import { auth, db } from './firebaseConfig';
 import { useDriveStore } from './driveStore';
 import { navigateTo as navigateToUrl, setCachedProfile } from './profileCache';
@@ -76,6 +77,52 @@ import {
 import './Chat.css';
 
 const EmojiPicker = lazy(() => import('emoji-picker-react'));
+
+function EmojiCategoryButton({
+  category,
+  className,
+  onClick,
+  style,
+  ...buttonProps
+}: CategoryButtonRenderProps) {
+  const handleClick: React.MouseEventHandler<HTMLButtonElement> = (event) => {
+    onClick?.(event);
+    if (event.defaultPrevented) return;
+
+    const button = event.currentTarget;
+    window.requestAnimationFrame(() => {
+      const picker = button.closest<HTMLElement>('[data-epr-part="root"]');
+      const scrollBody = picker?.querySelector<HTMLElement>('.epr-body');
+      const section = Array.from(
+        picker?.querySelectorAll<HTMLElement>('[data-epr-part="category"]') || [],
+      ).find((item) => item.dataset.eprCategory === category.id);
+
+      if (!scrollBody || !section) return;
+
+      const top =
+        section.getBoundingClientRect().top -
+        scrollBody.getBoundingClientRect().top +
+        scrollBody.scrollTop;
+      scrollBody.scrollTo({ top, behavior: 'smooth' });
+    });
+  };
+
+  return (
+    <button
+      {...buttonProps}
+      className={`${className || ''} shc-emoji-category-tab`}
+      onClick={handleClick}
+      style={{
+        ...style,
+        background: 'transparent',
+        border: 0,
+        borderRadius: 8,
+        outline: 'none',
+        boxShadow: 'none',
+      }}
+    />
+  );
+}
 
 // ============================================================
 // TYPES + CONSTANTS
@@ -4093,6 +4140,7 @@ const handleSearchMessage = async (target: Rec) => {
             >
               <EmojiPicker
                 className="shc-emoji-picker"
+                components={{ CategoryButton: EmojiCategoryButton }}
                 colorScheme="dark"
                 emojiStyle="native"
                 width="100%"
