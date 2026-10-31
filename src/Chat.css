@@ -134,18 +134,17 @@
 }
 
 .shc-avatar-sm {
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   font-size: 11px;
 }
 
 .shc-avatar-nav {
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
   font-size: 13px;
   border-radius: 50%;
-  border: 2px solid var(--line-strong);
-  transition: border-color 0.15s ease;
+  border: 0;
   object-fit: cover;
   image-rendering: -webkit-optimize-contrast;
   display: block;
@@ -154,14 +153,14 @@
 
 .shc-avatar-nav:hover,
 .shc-bottom-active .shc-avatar-nav {
-  border-color: #5865F2;
+  border-color: transparent;
   box-shadow: none;
   transform: none;
 }
 
 .shc-avatar-md {
-  width: 40px;
-  height: 40px;
+  width: 48px;
+  height: 48px;
   font-size: 14px;
 }
 
@@ -778,12 +777,17 @@
 }
 
 .shc-chat-avatar-trigger {
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+}
+
+.shc-chat-avatar-trigger .shc-avatar-sm {
+  width: 40px;
+  height: 40px;
 }
 
 .shc-chat-title span {
@@ -1466,7 +1470,7 @@
 /* First-contact direct message view */
 .shc-dm-intro {
   width: min(100%, 620px);
-  margin: auto;
+  margin: 18px auto 28px;
   padding: 28px 10px 34px;
   display: flex;
   flex-direction: column;
@@ -1474,8 +1478,8 @@
 }
 
 .shc-dm-intro-avatar {
-  width: 88px;
-  height: 88px;
+  width: 104px;
+  height: 104px;
   font-size: 28px;
 }
 
@@ -1504,26 +1508,6 @@
   line-height: 1.5;
 }
 
-.shc-dm-request-message {
-  width: min(100%, 480px);
-  margin-top: 18px;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface);
-}
-
-.shc-dm-request-message > span {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.shc-dm-request-message p {
-  margin: 6px 0 0;
-  color: var(--text);
-  overflow-wrap: anywhere;
-}
-
 .shc-dm-intro-actions {
   display: flex;
   align-items: center;
@@ -1545,40 +1529,6 @@
 
 .shc-dm-intro-actions button:first-child {
   color: #ed4245;
-}
-
-.shc-dm-request-notice {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-  background: var(--bg);
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.shc-dm-request-notice svg {
-  flex-shrink: 0;
-  color: #9da3ad;
-}
-
-.shc-user-clock-icon {
-  position: relative;
-  width: 19px;
-  height: 19px;
-  display: inline-flex;
-  flex: 0 0 19px;
-}
-
-.shc-user-clock-icon svg:last-child {
-  position: absolute;
-  right: -2px;
-  bottom: -1px;
-  padding: 1px;
-  border-radius: 50%;
-  background: var(--bg);
 }
 
 .shc-request-preview {

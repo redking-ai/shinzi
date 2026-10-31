@@ -1,5 +1,5 @@
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   deleteDoc,
   doc,
@@ -105,6 +105,7 @@ export default function OtherProfile({
     incoming: false,
   });
   const [friendActionBusy, setFriendActionBusy] = useState(false);
+  const profileTouchStartY = useRef<number | null>(null);
 
   useEffect(() => {
     if (!currentUser || !targetUid || currentUser.uid === targetUid) {
@@ -441,6 +442,23 @@ export default function OtherProfile({
     navigateTo(`/chat?user=${encodeURIComponent(targetUid)}`);
   };
 
+  const handleProfileTouchStart = (event: React.TouchEvent<HTMLElement>) => {
+    profileTouchStartY.current = event.touches[0]?.clientY ?? null;
+  };
+
+  const handleProfileTouchEnd = (event: React.TouchEvent<HTMLElement>) => {
+    const startY = profileTouchStartY.current;
+    profileTouchStartY.current = null;
+    if (startY === null) return;
+
+    const endY = event.changedTouches[0]?.clientY ?? startY;
+    const pageTop = document.scrollingElement?.scrollTop ?? window.scrollY;
+    if (endY - startY > 110 && pageTop <= 1) {
+      if (window.history.length > 1) window.history.back();
+      else navigateTo('/profile');
+    }
+  };
+
   if (loading) {
     return (
       <main className="sh-profile-page sh-other-profile-page">
@@ -469,7 +487,12 @@ export default function OtherProfile({
   }
 
   return (
-    <main className="sh-profile-page sh-other-profile-page">
+    <main
+      className="sh-profile-page sh-other-profile-page"
+      onTouchStart={handleProfileTouchStart}
+      onTouchEnd={handleProfileTouchEnd}
+      onTouchCancel={() => { profileTouchStartY.current = null; }}
+    >
       {error && (
         <div className="sh-profile-alert" role="alert">
           <span>{error}</span>
@@ -496,6 +519,7 @@ export default function OtherProfile({
           }
         >
           {!banner && <div className="sh-banner-glow" />}
+          <span className="sh-profile-sheet-handle" aria-hidden="true" />
           <button
             type="button"
             className="sh-banner-settings-button"

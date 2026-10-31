@@ -27,6 +27,16 @@ function isValidSocialStats(stats) {
     && stats.serversJoined is number;  
 }  
 
+function isMessageFromAcceptedDMRequest() {
+  return 'dmRequestId' in request.resource.data
+    && request.resource.data.dmRequestId is string
+    && exists(/databases/$(database)/documents/dmRequests/$(request.resource.data.dmRequestId))
+    && get(/databases/$(database)/documents/dmRequests/$(request.resource.data.dmRequestId)).data.status == 'pending'
+    && getAfter(/databases/$(database)/documents/dmRequests/$(request.resource.data.dmRequestId)).data.status == 'accepted'
+    && getAfter(/databases/$(database)/documents/dmRequests/$(request.resource.data.dmRequestId)).data.toUid == request.auth.uid
+    && getAfter(/databases/$(database)/documents/dmRequests/$(request.resource.data.dmRequestId)).data.fromUid == request.resource.data.senderId;
+}
+
 // ==============================  
 // USER PROFILES  
 // ==============================  
@@ -284,8 +294,8 @@ match /conversations/{conversationId} {
       && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.memberIds;  
 
     allow create: if request.auth != null  
-      && request.resource.data.senderId == request.auth.uid  
-      && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.memberIds
+      && (request.resource.data.senderId == request.auth.uid || isMessageFromAcceptedDMRequest())
+      && request.auth.uid in getAfter(/databases/$(database)/documents/conversations/$(conversationId)).data.memberIds
       && (!('replyToMessageId' in request.resource.data) || (
         request.resource.data.replyToMessageId is string
         && exists(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.replyToMessageId))

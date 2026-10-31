@@ -12,6 +12,7 @@ import {
 } from 'react';
 import {
   addDoc,
+  arrayUnion,
   collection,
   doc,
   getDoc,
@@ -31,7 +32,6 @@ import {
   AtSign,
   Ban,
   BarChart3,
-  Clock3,
   Bell,
   Calendar,
   Check,
@@ -62,7 +62,6 @@ import {
   Star,
   Trash2,
   User,
-  UserRound,
   UserPlus,
   Users,
   Video,
@@ -926,6 +925,7 @@ export default function Chat({ onNavigate }: ChatProps) {
   const [dmRequests, setDmRequests] = useState<Rec[]>([]);
   const [sentDMRequests, setSentDMRequests] = useState<Rec[]>([]);
   const [messages, setMessages] = useState<Rec[]>([]);
+  const [pendingDmMessages, setPendingDmMessages] = useState<Rec[]>([]);
   const [activity, setActivity] = useState<Record<string, Rec>>({});
   const [now, setNow] = useState(() => Date.now());
 
@@ -1201,18 +1201,35 @@ export default function Chat({ onNavigate }: ChatProps) {
       return undefined;
     }
 
-    const q = query(
-      collection(db, 'conversations', selected.id, 'messages'),
-      orderBy('createdAt', 'asc'),
-      limitToLast(300),
+    let unsubscribeMessages: (() => void) | null = null;
+    const unsubscribeConversation = onSnapshot(
+      doc(db, 'conversations', selected.id),
+      (conversationSnap) => {
+        unsubscribeMessages?.();
+        unsubscribeMessages = null;
+        if (!conversationSnap.exists()) {
+          setMessages([]);
+          return;
+        }
+
+        const messagesQuery = query(
+          collection(db, 'conversations', selected.id, 'messages'),
+          orderBy('createdAt', 'asc'),
+          limitToLast(300),
+        );
+        unsubscribeMessages = onSnapshot(
+          messagesQuery,
+          (snap) => setMessages(snap.docs.map((item) => ({ id: item.id, ...item.data() }))),
+          (error) => console.error('Messages listener error:', error),
+        );
+      },
+      (error) => console.error('Conversation detail listener error:', error),
     );
 
-    return onSnapshot(
-      q,
-      (snap) =>
-        setMessages(snap.docs.map((item) => ({ id: item.id, ...item.data() }))),
-      (error) => console.error('Messages listener error:', error),
-    );
+    return () => {
+      unsubscribeConversation();
+      unsubscribeMessages?.();
+    };
   }, [selected?.id]);
 
   useEffect(() => {
@@ -1502,6 +1519,7 @@ export default function Chat({ onNavigate }: ChatProps) {
 
     setSelected(conversation);
     setScreen('conversation');
+    setPendingDmMessages([]);
 
     const savedDraft =
       typeof window !== 'undefined'
@@ -1565,6 +1583,7 @@ export default function Chat({ onNavigate }: ChatProps) {
           lastMessageAt: null,
           lastMessageText: '',
           lastSenderId: null,
+          hasChatIntro: true,
         });
       }
 
@@ -1615,6 +1634,24 @@ export default function Chat({ onNavigate }: ChatProps) {
         : incoming?.status === 'pending'
           ? 'incoming'
           : 'new';
+      const queuedRequest = requestStatus === 'pending' ? outgoing : requestStatus === 'incoming' ? incoming : null;
+      const queuedMessages = Array.isArray(queuedRequest?.messages)
+        ? queuedRequest.messages
+        : queuedRequest?.message
+          ? [{
+              id: `${queuedRequest.fromUid}_${queuedRequest.toUid}_0`,
+              type: 'text',
+              text: queuedRequest.message,
+              senderId: queuedRequest.fromUid,
+              senderName: queuedRequest.fromProfile?.displayName || queuedRequest.fromProfile?.username || 'User',
+              senderUsername: queuedRequest.fromProfile?.username || '',
+              senderPhotoURL: queuedRequest.fromProfile?.photoURL || '',
+              senderProfileAssetId: queuedRequest.fromProfile?.profileAssetId || '',
+              createdAt: millis(queuedRequest.createdAt) || Date.now(),
+              deleted: false,
+            }]
+          : [];
+      setPendingDmMessages(queuedMessages);
       setSelected({
         id: conversationId,
         type: 'direct',
@@ -1635,6 +1672,7 @@ export default function Chat({ onNavigate }: ChatProps) {
         },
         requestStatus,
         requestMessage: pendingRequest?.message || '',
+        hasChatIntro: existingConversation?.hasChatIntro ?? true,
       });
       setScreen('conversation');
       setMessageText('');
@@ -1677,6 +1715,11 @@ const handleSearchMessage = async (target: Rec) => {
 
   const publishTyping = async (typing: boolean) => {
     if (!uid || !selected?.id) return;
+    const activeConversation = selectedConversation || selected;
+    if (
+      activeConversation?.type !== 'group' &&
+      ['new', 'pending', 'incoming'].includes(getDirectRequestState(activeConversation))
+    ) return;
 
     try {
       await setDoc(
@@ -1910,18 +1953,64 @@ const handleSearchMessage = async (target: Rec) => {
       const isFriend = friends.some((friend) => friend.id === directTargetUid || friend.uid === directTargetUid);
       const requestState = getDirectRequestState(activeConv);
 
-      if (!isFriend && (requestState === 'pending' || requestState === 'incoming')) {
+      if (!isFriend && requestState === 'pending') {
+        const queuedMessage: Rec = {
+          id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          type: 'text',
+          text,
+          senderId: uid,
+          senderName: profile?.displayName || profile?.username || 'User',
+          senderUsername: profile?.username || '',
+          senderPhotoURL: profile?.photoURL || '',
+          senderProfileAssetId: profile?.profileAssetId || '',
+          createdAt: Date.now(),
+          editedAt: null,
+          deleted: false,
+        };
+        sendingRef.current = true;
+        setSending(true);
+        try {
+          await updateDoc(doc(db, 'dmRequests', `${uid}_${directTargetUid}`), {
+            messages: arrayUnion(queuedMessage),
+            updatedAt: serverTimestamp(),
+          });
+          setPendingDmMessages((previous) => [...previous, queuedMessage]);
+          setMessageText('');
+          setReplyTarget(null);
+          setMentionQuery(null);
+        } catch (error) {
+          console.error('Queue pending DM error:', error);
+          notify('Message not saved', messageOf(error, 'Unable to queue this message.'));
+        } finally {
+          sendingRef.current = false;
+          setSending(false);
+        }
+        return;
+      }
+
+      if (!isFriend && requestState === 'incoming') {
         notify(
-          requestState === 'incoming' ? 'Message request received' : 'Request pending',
-          requestState === 'incoming'
-            ? 'Accept their message request from your requests before replying.'
-            : 'Your message request is waiting for them. These messages will not be delivered until they accept.',
+          'Message request received',
+          'Accept their message request from your requests before replying.',
         );
         return;
       }
 
       if (!isFriend && requestState !== 'accepted') {
         const targetProfile = activeConv?.memberProfiles?.[directTargetUid] || {};
+        const queuedMessage: Rec = {
+          id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          type: 'text',
+          text,
+          senderId: uid,
+          senderName: profile?.displayName || profile?.username || 'User',
+          senderUsername: profile?.username || '',
+          senderPhotoURL: profile?.photoURL || '',
+          senderProfileAssetId: profile?.profileAssetId || '',
+          createdAt: Date.now(),
+          editedAt: null,
+          deleted: false,
+        };
         sendingRef.current = true;
         setSending(true);
         try {
@@ -1931,13 +2020,14 @@ const handleSearchMessage = async (target: Rec) => {
             username: targetProfile.username || getConversationUsername(activeConv),
             photoURL: targetProfile.photoURL || '',
             profileAssetId: targetProfile.profileAssetId || '',
-          }, text);
+          }, text, queuedMessage);
           if (didSendRequest) {
             setSelected((previous) => previous ? {
               ...previous,
               requestStatus: 'pending',
               requestMessage: text,
             } : previous);
+            setPendingDmMessages([queuedMessage]);
             setMessageText('');
             setReplyTarget(null);
             setMentionQuery(null);
@@ -2110,6 +2200,7 @@ const handleSearchMessage = async (target: Rec) => {
     kind: 'friendRequests' | 'dmRequests',
     target: Rec,
     message = '',
+    queuedMessage?: Rec,
   ) => {
     if (!uid || !target?.id) return false;
 
@@ -2144,7 +2235,7 @@ const handleSearchMessage = async (target: Rec) => {
       }
 
       if (isAlreadyPending) {
-        notify('Already sent', `A ${label} is already pending.`);
+        if (kind === 'friendRequests') notify('Already sent', `A ${label} is already pending.`);
         if (kind === 'friendRequests') {
           setSentRequestUids((prev) => new Set(prev).add(target.id));
         }
@@ -2166,7 +2257,21 @@ const handleSearchMessage = async (target: Rec) => {
           photoURL: target.photoURL || '',
           profileAssetId: target.profileAssetId || '',
         },
-        ...(kind === 'dmRequests' && message ? { message } : {}),
+        ...(kind === 'dmRequests' && message ? {
+          message,
+          messages: [queuedMessage || {
+            id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            type: 'text',
+            text: message,
+            senderId: uid,
+            senderName: profile?.displayName || profile?.username || 'User',
+            senderUsername: profile?.username || '',
+            senderPhotoURL: profile?.photoURL || '',
+            senderProfileAssetId: profile?.profileAssetId || '',
+            createdAt: Date.now(),
+            deleted: false,
+          }],
+        } : {}),
         status: 'pending',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -2175,7 +2280,7 @@ const handleSearchMessage = async (target: Rec) => {
       if (kind === 'friendRequests') {
         setSentRequestUids((prev) => new Set(prev).add(target.id));
       }
-      notify('Request sent', `Your ${label} was sent.`);
+      if (kind === 'friendRequests') notify('Request sent', `Your ${label} was sent.`);
       return true;
     } catch (error) {
       console.error('Request error:', error);
@@ -2293,7 +2398,12 @@ const handleSearchMessage = async (target: Rec) => {
 
         const conversationSnap = await transaction.get(conversationRef);
 
-        const initialMessage = String(data.message || '').trim();
+        const queuedMessages: Rec[] = Array.isArray(data.messages) && data.messages.length
+          ? data.messages.filter((item: Rec) => String(item?.text || '').trim())
+          : String(data.message || '').trim()
+            ? [{ id: `${request.id}_0`, text: String(data.message).trim(), createdAt: data.createdAt }]
+            : [];
+        const finalQueuedMessage = queuedMessages[queuedMessages.length - 1];
         const conversationData: Rec = {
           type: 'direct',
           memberIds: [uid, fromUid],
@@ -2316,29 +2426,34 @@ const handleSearchMessage = async (target: Rec) => {
           lastReadAt: { [uid]: serverTimestamp() },
           createdAt: conversationSnap.data()?.createdAt || serverTimestamp(),
           updatedAt: serverTimestamp(),
-          ...(initialMessage ? {
-            lastMessageId: request.id,
-            lastMessageText: initialMessage,
+          hasChatIntro: conversationSnap.data()?.hasChatIntro ?? true,
+          ...(finalQueuedMessage ? {
+            lastMessageId: finalQueuedMessage.id || `${request.id}_${queuedMessages.length - 1}`,
+            lastMessageText: String(finalQueuedMessage.text),
             lastMessageAt: serverTimestamp(),
             lastSenderId: fromUid,
           } : {}),
         };
         transaction.set(conversationRef, conversationData, { merge: true });
 
-        if (initialMessage) {
-          transaction.set(doc(db, 'conversations', conversationId, 'messages', request.id), {
+        queuedMessages.forEach((item: Rec, index: number) => {
+          const messageId = String(item.id || `${request.id}_${index}`);
+          transaction.set(doc(db, 'conversations', conversationId, 'messages', messageId), {
             type: 'text',
-            text: initialMessage,
+            text: String(item.text).trim(),
             senderId: fromUid,
+            dmRequestId: request.id,
             senderName: data.fromProfile?.displayName || data.fromProfile?.username || 'User',
             senderUsername: data.fromProfile?.username || '',
             senderPhotoURL: data.fromProfile?.photoURL || '',
             senderProfileAssetId: data.fromProfile?.profileAssetId || '',
-            createdAt: data.createdAt || serverTimestamp(),
+            createdAt: typeof item.createdAt === 'number'
+              ? new Date(item.createdAt)
+              : item.createdAt || data.createdAt || serverTimestamp(),
             editedAt: null,
             deleted: false,
           });
-        }
+        });
 
         transaction.update(requestRef, {
           status: 'accepted',
@@ -2940,15 +3055,15 @@ const handleSearchMessage = async (target: Rec) => {
     );
   };
 
-  const renderMessage = (item: Rec, index: number) => {
+  const renderMessage = (item: Rec, index: number, messageList: Rec[] = messages) => {
     const own = item.senderId === uid;
-    const previous = messages[index - 1];
+    const previous = messageList[index - 1];
     const showDay =
       millis(item.createdAt) > 0 &&
       (!previous || dayKey(previous.createdAt) !== dayKey(item.createdAt));
 
     const replyId = item.replyToMessageId || item.replyTo?.id;
-    const original = replyId ? messages.find((m) => m.id === replyId) : null;
+    const original = replyId ? messageList.find((m) => m.id === replyId) : null;
 
     let quotedSender = 'User';
     let quotedText = 'Original message unavailable';
@@ -3558,7 +3673,10 @@ const handleSearchMessage = async (target: Rec) => {
     const targetUid = isGroup ? undefined : otherMemberId(selectedConversation);
     const targetProfile = targetUid ? selectedConversation?.memberProfiles?.[targetUid] : undefined;
     const dmRequestState = getDirectRequestState(selectedConversation);
-    const requestMessage = String(selectedConversation?.requestMessage || sentDMRequests.find((request) => request.toUid === targetUid)?.message || '');
+    const conversationMessages = targetUid && dmRequestState !== 'accepted'
+      ? pendingDmMessages
+      : messages;
+    const hasFirstContactIntro = Boolean(targetUid && selectedConversation?.hasChatIntro);
     const composerPlaceholder = isGroup
       ? `Message #${name}`
       : username
@@ -3597,7 +3715,7 @@ const handleSearchMessage = async (target: Rec) => {
               uid={undefined}
               name={name}
               group={isGroup}
-              size="sm"
+              size="md"
             />
           )}
 
@@ -3653,8 +3771,7 @@ const handleSearchMessage = async (target: Rec) => {
         </header>
 
         <div className="shc-messages" ref={scrollRef}>
-          {messages.length === 0 ? (
-            targetUid ? (
+          {hasFirstContactIntro && targetUid && (
               <div className="shc-dm-intro">
                 <UserAvatar
                   uid={targetUid}
@@ -3667,12 +3784,6 @@ const handleSearchMessage = async (target: Rec) => {
                 <h2>{name}</h2>
                 <span className="shc-dm-intro-username">@{username || 'user'}</span>
                 <p>This is the first time talking to @{username || 'user'}.</p>
-                {requestMessage && dmRequestState !== 'new' && (
-                  <div className="shc-dm-request-message">
-                    <span>Message request</span>
-                    <p>{requestMessage}</p>
-                  </div>
-                )}
                 <div className="shc-dm-intro-actions">
                   <button type="button" title="Block is not connected yet">
                     <Ban size={16} aria-hidden="true" /> Block
@@ -3682,7 +3793,9 @@ const handleSearchMessage = async (target: Rec) => {
                   </button>
                 </div>
               </div>
-            ) : (
+          )}
+          {conversationMessages.length === 0 ? (
+            !hasFirstContactIntro && (
               <EmptyState
                 icon={<MessageCircle size={44} />}
                 title="Start the conversation"
@@ -3690,28 +3803,9 @@ const handleSearchMessage = async (target: Rec) => {
               />
             )
           ) : (
-            messages.map(renderMessage)
+            conversationMessages.map((item, index) => renderMessage(item, index, conversationMessages))
           )}
         </div>
-
-        {targetUid && dmRequestState === 'pending' && (
-          <div className="shc-dm-request-notice" role="status">
-            <span className="shc-user-clock-icon" aria-hidden="true">
-              <UserRound size={17} />
-              <Clock3 size={9} />
-            </span>
-            <span>Request pending. Messages won’t be delivered until they accept.</span>
-          </div>
-        )}
-        {targetUid && dmRequestState === 'incoming' && (
-          <div className="shc-dm-request-notice" role="status">
-            <span className="shc-user-clock-icon" aria-hidden="true">
-              <UserRound size={17} />
-              <Clock3 size={9} />
-            </span>
-            <span>They sent you a message request. Accept it from Requests to reply.</span>
-          </div>
-        )}
 
         {typingNames.length > 0 && (
           <div className="shc-typing">
@@ -3882,7 +3976,7 @@ const handleSearchMessage = async (target: Rec) => {
             <button
               type="button"
               className="shc-send"
-              disabled={!messageText.trim() || sending || (Boolean(targetUid) && (dmRequestState === 'pending' || dmRequestState === 'incoming'))}
+              disabled={!messageText.trim() || sending || (Boolean(targetUid) && dmRequestState === 'incoming')}
               onPointerDown={(e) => {
                 // Crucial for mobile virtual keyboards:
                 // Calling preventDefault on pointerdown stops the button tap from blurring the textarea,

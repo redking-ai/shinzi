@@ -1081,6 +1081,12 @@ body {
 }
 
 .sh-other-profile-page {
+  position: relative;
+  min-height: 100dvh;
+  height: auto !important;
+  overflow-y: visible !important;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
   padding-bottom: max(20px, env(safe-area-inset-bottom, 0px));
 }
 
@@ -1088,6 +1094,26 @@ body {
   border: 0;
   border-radius: 0;
   box-shadow: none;
+}
+
+.sh-other-profile-page .sh-avatar-wrap {
+  width: 128px;
+  height: 128px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.sh-other-profile-page .sh-profile-sheet-handle {
+  position: absolute;
+  z-index: 6;
+  top: 9px;
+  left: 50%;
+  width: 36px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  transform: translateX(-50%);
 }
 
 .sh-other-profile-menu {
@@ -1103,6 +1129,11 @@ body {
 }
 
 @media (max-width: 600px) {
+  .sh-other-profile-page .sh-avatar-wrap {
+    width: 104px;
+    height: 104px;
+  }
+
   .sh-other-profile-actions {
     padding: 18px 15px 0;
     gap: 7px;
@@ -1159,11 +1190,11 @@ body {
 }
 
 .shc-avatar-nav {
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  border: 2px solid var(--line-strong, #39265d);
-  transition: border-color 0.15s ease, transform 0.15s ease;
+  border: 0;
+  transition: transform 0.15s ease;
   object-fit: cover;
   image-rendering: -webkit-optimize-contrast;
   display: block;
@@ -1171,7 +1202,7 @@ body {
 }
 
 .sh-profile-bottom-nav button.sh-bottom-active .shc-avatar-nav {
-  border-color: #5865F2;
+  border-color: transparent;
   box-shadow: none;
   transform: none;
 }
