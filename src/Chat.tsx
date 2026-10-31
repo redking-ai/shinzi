@@ -38,6 +38,7 @@ import {
   ChevronRight,
   Copy,
   CornerUpLeft,
+  ExternalLink,
   FileText,
   Flag,
   Gamepad2,
@@ -293,12 +294,37 @@ const renderFormattedText = (text: string) => {
   });
 };
 
+const blobToDataUri = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') resolve(reader.result);
+      else reject(new Error('Failed to convert blob to data URI.'));
+    };
+    reader.onerror = () => reject(reader.error || new Error('FileReader failed.'));
+    reader.readAsDataURL(blob);
+  });
+
+const isStandaloneImageUrl = (text?: string): string | null => {
+  if (!text) return null;
+  const trimmed = text.trim();
+  if (/^https?:\/\/[^\s]+\.(jpg|jpeg|png|gif|webp|svg)(\?[^\s]*)?$/i.test(trimmed)) {
+    return trimmed;
+  }
+  const driveMatch = trimmed.match(/^https?:\/\/(?:drive\.google\.com\/(?:file\/d\/|open\?id=)|lh3\.googleusercontent\.com\/d\/)([a-zA-Z0-9_-]+)/i);
+  if (driveMatch && driveMatch[1]) {
+    return `https://lh3.googleusercontent.com/d/${driveMatch[1]}=s1600`;
+  }
+  return null;
+};
+
 const getReplyExcerpt = (msg: Rec | null | undefined): string => {
   if (!msg) return '';
   if (msg.deleted) return 'This message was deleted';
   if (msg.type === 'poll') return `Poll: ${msg.question || ''}`;
   if (msg.type === 'event') return `Event: ${msg.name || ''}`;
   if (msg.type === 'voice') return 'Voice message';
+  if (msg.type === 'image' || msg.driveFileId || msg.mediaUrl) return msg.text ? `📷 ${msg.text}` : '📷 Photo';
   return String(msg.text || '').slice(0, 100);
 };
 
@@ -903,6 +929,7 @@ function SwipeableMessage({
 // ============================================================
 
 export default function Chat({ onNavigate }: ChatProps) {
+  const drive = useDriveStore();
   const [authUser, setAuthUser] = useState<FirebaseUser | null>(() => auth.currentUser);
   const [authLoading, setAuthLoading] = useState(() => !auth.currentUser);
   const user = authUser;
@@ -952,6 +979,11 @@ export default function Chat({ onNavigate }: ChatProps) {
   const [replyTarget, setReplyTarget] = useState<Rec | null>(null);
   const [editingMessage, setEditingMessage] = useState<Rec | null>(null);
   const [actionMessage, setActionMessage] = useState<Rec | null>(null);
+  const [activeImageViewer, setActiveImageViewer] = useState<{
+    previewUrl: string;
+    originalUrl: string;
+    fileName?: string;
+  } | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState<boolean>(false);
   const [recentEmojis, setRecentEmojis] = useState<string[]>(() => getRecentEmojis());
   const [toastMessage, setToastMessage] = useState<string>('');
@@ -1502,6 +1534,15 @@ export default function Chat({ onNavigate }: ChatProps) {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages.length, screen, typingNames.length]);
+
+  useEffect(() => {
+    if (!activeImageViewer) return;
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') setActiveImageViewer(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeImageViewer]);
 
   // Clear mention suggestions whenever switching conversations, screens, or when text is empty
   useEffect(() => {
@@ -2836,14 +2877,178 @@ const handleSearchMessage = async (target: Rec) => {
   // MEDIA / VOICE / CALL (UI ONLY — NOT CONNECTED YET)
   // ----------------------------------------------------------
 
-  const onPickImage = (e: ChangeEvent<HTMLInputElement>) => {
+  const sendImageMessage = async (params: {
+    driveFileId?: string;
+    mediaUrl: string;
+    originalUrl?: string;
+    fileName?: string;
+    width?: number;
+    height?: number;
+    size?: number;
+    text?: string;
+  }) => {
+    if (!uid || !selected?.id) return;
+    const activeConv = selectedConversation || selected;
+    if (!activeConv) return;
+
+    sendingRef.current = true;
+    setSending(true);
+
+    try {
+      const targetReply =
+        replyTarget && messages.some((m) => m.id === replyTarget.id)
+          ? replyTarget
+          : null;
+
+      const messageData: Rec = {
+        type: 'image',
+        text: params.text || '',
+        mediaUrl: params.mediaUrl,
+        originalUrl: params.originalUrl || params.mediaUrl,
+        driveFileId: params.driveFileId || null,
+        fileName: params.fileName || 'photo.jpg',
+        width: params.width || null,
+        height: params.height || null,
+        sizeBytes: params.size || null,
+        senderId: uid,
+        senderName: profile?.displayName || profile?.username || 'User',
+        senderUsername: profile?.username || '',
+        senderPhotoURL: profile?.photoURL || '',
+        senderProfileAssetId: profile?.profileAssetId || '',
+        createdAt: serverTimestamp(),
+        editedAt: null,
+        deleted: false,
+      };
+
+      if (targetReply) {
+        messageData.replyToMessageId = targetReply.id;
+        messageData.replyTo = {
+          id: targetReply.id,
+          senderId: targetReply.senderId || '',
+          senderName:
+            targetReply.senderName || targetReply.senderUsername || 'User',
+          senderUsername: targetReply.senderUsername || '',
+          text: getReplyExcerpt(targetReply),
+        };
+      }
+
+      const messageRef = await addDoc(
+        collection(db, 'conversations', selected.id, 'messages'),
+        messageData,
+      );
+
+      const updates: Rec = {
+        lastMessageId: messageRef.id,
+        lastMessageText: params.text ? `📷 ${params.text}` : '📷 Photo',
+        lastMessageAt: serverTimestamp(),
+        lastSenderId: uid,
+        updatedAt: serverTimestamp(),
+      };
+
+      await updateDoc(doc(db, 'conversations', selected.id), updates);
+      setReplyTarget(null);
+    } catch (error) {
+      console.error('Send image error:', error);
+      notify('Unable to send photo', messageOf(error));
+    } finally {
+      sendingRef.current = false;
+      setSending(false);
+    }
+  };
+
+  const onPickImage = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
 
+    if (!selected?.id) {
+      notify('No chat open', 'Please open a conversation to send a photo.');
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      notify('Invalid file', 'Please select an image file (PNG, JPG, GIF, WebP).');
+      return;
+    }
+
+    let width = 0;
+    let height = 0;
+    try {
+      const objectUrl = URL.createObjectURL(file);
+      const img = new Image();
+      img.src = objectUrl;
+      await new Promise((resolve) => {
+        img.onload = resolve;
+        img.onerror = resolve;
+      });
+      width = img.naturalWidth || 0;
+      height = img.naturalHeight || 0;
+      URL.revokeObjectURL(objectUrl);
+    } catch {}
+
+    const caption = messageText.trim();
+
+    if (drive.hasActiveSession) {
+      notify('Uploading photo…', 'Uploading in original high quality to Google Drive.');
+      setSending(true);
+      try {
+        const uploaded = await drive.uploadFile({
+          file,
+          fileName: file.name,
+          mimeType: file.type || 'image/jpeg',
+          folderType: 'photos',
+        });
+        await drive.makeFilePublic(uploaded.fileId);
+
+        const previewUrl = `https://lh3.googleusercontent.com/d/${uploaded.fileId}=s1600`;
+        const originalUrl = `https://lh3.googleusercontent.com/d/${uploaded.fileId}=s0`;
+
+        await sendImageMessage({
+          driveFileId: uploaded.fileId,
+          mediaUrl: previewUrl,
+          originalUrl,
+          fileName: file.name,
+          width,
+          height,
+          size: file.size,
+          text: caption,
+        });
+        setMessageText('');
+      } catch (err) {
+        console.error('Drive image upload error:', err);
+        notify('Upload failed', messageOf(err));
+      } finally {
+        setSending(false);
+      }
+      return;
+    }
+
+    if (file.size <= 850 * 1024) {
+      setSending(true);
+      try {
+        const dataUri = await blobToDataUri(file);
+        await sendImageMessage({
+          mediaUrl: dataUri,
+          originalUrl: dataUri,
+          fileName: file.name,
+          width,
+          height,
+          size: file.size,
+          text: caption,
+        });
+        setMessageText('');
+      } catch (err) {
+        console.error('Image processing error:', err);
+        notify('Unable to send photo', messageOf(err));
+      } finally {
+        setSending(false);
+      }
+      return;
+    }
+
     notify(
-      'Photo selected',
-      'Picking photos works, but Drive upload and sending attachments are not enabled yet.',
+      'Photo requires Google Drive',
+      'This image is large (>850KB). Please connect Google Drive in settings to send high-res photos.',
     );
   };
 
@@ -3115,6 +3320,43 @@ const handleSearchMessage = async (target: Rec) => {
 
     let contentNode: ReactNode;
 
+    const resolveImageUrls = (msg: Rec) => {
+      let preview = '';
+      let original = '';
+      const fileId = msg.driveFileId || msg.fileId;
+      if (fileId) {
+        preview = `https://lh3.googleusercontent.com/d/${fileId}=s1600`;
+        original = `https://lh3.googleusercontent.com/d/${fileId}=s0`;
+      } else if (msg.mediaUrl || msg.imageUrl) {
+        const raw = String(msg.mediaUrl || msg.imageUrl);
+        const driveMatch = raw.match(/lh3\.googleusercontent\.com\/d\/([a-zA-Z0-9_-]+)/);
+        if (driveMatch && driveMatch[1]) {
+          preview = `https://lh3.googleusercontent.com/d/${driveMatch[1]}=s1600`;
+          original = `https://lh3.googleusercontent.com/d/${driveMatch[1]}=s0`;
+        } else {
+          preview = raw;
+          original = msg.originalUrl || raw;
+        }
+      } else if (msg.text) {
+        const standalone = isStandaloneImageUrl(msg.text);
+        if (standalone) {
+          preview = standalone;
+          original = standalone;
+        }
+      }
+      return { preview, original };
+    };
+
+    const { preview: imgPreview, original: imgOriginal } = resolveImageUrls(item);
+    const hasImageMessage = Boolean(
+      imgPreview &&
+        (item.type === 'image' ||
+          item.driveFileId ||
+          item.mediaUrl ||
+          item.imageUrl ||
+          isStandaloneImageUrl(item.text)),
+    );
+
     if (item.deleted) {
       contentNode = (
         <span className="shc-dc-deleted">This message was deleted.</span>
@@ -3129,6 +3371,39 @@ const handleSearchMessage = async (target: Rec) => {
           <Mic size={20} />
           <span>Voice message</span>
           <span className="shc-voice-time">{item.duration || '00:00'}</span>
+        </div>
+      );
+    } else if (hasImageMessage) {
+      const isStandaloneUrl = isStandaloneImageUrl(item.text);
+      contentNode = (
+        <div className="shc-msg-image-block">
+          {item.text && !isStandaloneUrl && (
+            <span className="shc-dc-text">{renderFormattedText(item.text)}</span>
+          )}
+          <div className="shc-msg-image-wrap">
+            <button
+              type="button"
+              className="shc-msg-image-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveImageViewer({
+                  previewUrl: imgPreview,
+                  originalUrl: imgOriginal,
+                  fileName: item.fileName || 'Image',
+                });
+              }}
+              title="Click to view full-size image"
+              aria-label={`View full image: ${item.fileName || 'Image'}`}
+            >
+              <img
+                src={imgPreview}
+                alt={item.fileName || 'Chat image'}
+                className="shc-chat-image"
+                loading="lazy"
+                decoding="async"
+              />
+            </button>
+          </div>
         </div>
       );
     } else {
@@ -4575,6 +4850,53 @@ const handleSearchMessage = async (target: Rec) => {
                 }}
               />
             </Suspense>
+          </div>
+        </div>
+      )}
+
+      {activeImageViewer && (
+        <div
+          className="shc-lightbox-backdrop"
+          onClick={() => setActiveImageViewer(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Image preview"
+        >
+          <div className="shc-lightbox-bar" onClick={(e) => e.stopPropagation()}>
+            <span className="shc-lightbox-title">
+              {activeImageViewer.fileName || 'Image'}
+            </span>
+            <div className="shc-lightbox-actions">
+              <a
+                href={activeImageViewer.originalUrl || activeImageViewer.previewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shc-lightbox-btn"
+                title="Open original image in new tab"
+                aria-label="Open original image in new tab"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <ExternalLink size={16} />
+                <span>Open original</span>
+              </a>
+              <button
+                type="button"
+                className="shc-lightbox-btn shc-lightbox-close"
+                onClick={() => setActiveImageViewer(null)}
+                title="Close preview"
+                aria-label="Close image preview"
+              >
+                <X size={22} />
+              </button>
+            </div>
+          </div>
+
+          <div className="shc-lightbox-content" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={activeImageViewer.originalUrl || activeImageViewer.previewUrl}
+              alt={activeImageViewer.fileName || 'Full image preview'}
+              className="shc-lightbox-img"
+            />
           </div>
         </div>
       )}
