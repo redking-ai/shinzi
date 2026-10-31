@@ -1118,69 +1118,104 @@ export const useDriveStore = (): DriveStore => {
 
           const fetchPromise = (async () => {
             try {
-              return await withToken(async (token) => {
-                const controller = new AbortController();
-
-                const timeoutId = window.setTimeout(
-                  () => controller.abort(),
-                  15000
-                );
-
-                let response: Response;
-
+              // 1. Try authenticated Drive download if user has connected Google Drive
+              if (hasValidToken()) {
                 try {
-                  response = await fetch(
-                    `${DRIVE_API}/files/${encodeURIComponent(
-                      trimmedId
-                    )}?alt=media`,
-                    {
-                      headers: getAuthHeader(token),
-                      signal: controller.signal,
-                    }
-                  );
-                } catch (error) {
-                  if (
-                    error instanceof Error &&
-                    error.name === 'AbortError'
-                  ) {
-                    throw new Error(
-                      'Google Drive took too long to load this image. Please retry.'
+                  return await withToken(async (token) => {
+                    const controller = new AbortController();
+                    const timeoutId = window.setTimeout(
+                      () => controller.abort(),
+                      15000
                     );
-                  }
 
-                  throw new Error(
-                    'Unable to reach Google Drive. Check your connection and retry.'
-                  );
-                } finally {
+                    let response: Response;
+                    try {
+                      response = await fetch(
+                        `${DRIVE_API}/files/${encodeURIComponent(
+                          trimmedId
+                        )}?alt=media`,
+                        {
+                          headers: getAuthHeader(token),
+                          signal: controller.signal,
+                        }
+                      );
+                    } catch (error) {
+                      if (
+                        error instanceof Error &&
+                        error.name === 'AbortError'
+                      ) {
+                        throw new Error(
+                          'Google Drive took too long to load this image. Please retry.'
+                        );
+                      }
+                      throw new Error(
+                        'Unable to reach Google Drive. Check your connection and retry.'
+                      );
+                    } finally {
+                      window.clearTimeout(timeoutId);
+                    }
+
+                    await throwDriveError(
+                      response,
+                      'Unable to download Google Drive file.'
+                    );
+
+                    const blob = await response.blob();
+                    if (!blob || blob.size === 0) {
+                      throw new Error('Google Drive returned empty file data.');
+                    }
+
+                    const dataUri = await blobToDataUri(blob);
+                    driveDataUriCache.set(trimmedId, dataUri);
+
+                    if (typeof window !== 'undefined' && window.sessionStorage) {
+                      try {
+                        window.sessionStorage.setItem(`shinzi_drive_${trimmedId}`, dataUri);
+                      } catch {}
+                    }
+
+                    return dataUri;
+                  });
+                } catch (tokenErr) {
+                  console.info('[DRIVE] Authenticated download unavailable, falling back to public CDN:', tokenErr);
+                }
+              }
+
+              // 2. Fallback: Public Google Drive image CDN and thumbnail endpoints
+              // Enables profile photos and banners to load on any phone / user without OAuth
+              const publicEndpoints = [
+                `https://lh3.googleusercontent.com/d/${encodeURIComponent(trimmedId)}=s800`,
+                `https://drive.google.com/thumbnail?id=${encodeURIComponent(trimmedId)}&sz=w800`,
+                `https://drive.google.com/uc?export=view&id=${encodeURIComponent(trimmedId)}`,
+              ];
+
+              for (const endpoint of publicEndpoints) {
+                try {
+                  const controller = new AbortController();
+                  const timeoutId = window.setTimeout(() => controller.abort(), 8000);
+                  const response = await fetch(endpoint, { signal: controller.signal });
                   window.clearTimeout(timeoutId);
-                }
 
-                await throwDriveError(
-                  response,
-                  'Unable to download Google Drive file.'
-                );
-
-                const blob = await response.blob();
-
-                if (!blob) {
-                  throw new Error(
-                    'Google Drive returned empty file data.'
-                  );
-                }
-
-                const dataUri = await blobToDataUri(blob);
-                driveDataUriCache.set(trimmedId, dataUri);
-
-                if (typeof window !== 'undefined' && window.sessionStorage) {
-                  try {
-                    window.sessionStorage.setItem(`shinzi_drive_${trimmedId}`, dataUri);
-                  } catch {
-                    // Ignore storage quota limits
+                  if (response.ok) {
+                    const blob = await response.blob();
+                    if (blob && blob.size > 0 && blob.type.startsWith('image/')) {
+                      const dataUri = await blobToDataUri(blob);
+                      driveDataUriCache.set(trimmedId, dataUri);
+                      if (typeof window !== 'undefined' && window.sessionStorage) {
+                        try {
+                          window.sessionStorage.setItem(`shinzi_drive_${trimmedId}`, dataUri);
+                        } catch {}
+                      }
+                      return dataUri;
+                    }
                   }
-                }
+                } catch {}
+              }
 
-                return dataUri;
-              });
+              // 3. Final fallback: return high-speed Google CDN URL for direct browser <img> loading
+              const directCdnUrl = `https://lh3.googleusercontent.com/d/${encodeURIComponent(trimmedId)}=s800`;
+              driveDataUriCache.set(trimmedId, directCdnUrl);
+              return directCdnUrl;
             } finally {
               inFlightDriveRequests.delete(trimmedId);
             }

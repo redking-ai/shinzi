@@ -1096,7 +1096,8 @@ body {
   min-height: 100dvh;
   height: auto !important;
   overflow-y: visible !important;
-  overscroll-behavior-y: contain;
+  overscroll-behavior: none;
+  overscroll-behavior-y: none;
   touch-action: pan-y;
   padding-bottom: max(20px, env(safe-area-inset-bottom, 0px));
   animation: shOtherProfileSlideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1);

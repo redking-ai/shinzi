@@ -302,7 +302,7 @@ useEffect(() => {
             void drive.makeFilePublic(asset.providerFileId);
           }
 
-          if (!dataUri.startsWith('data:image/')) {
+          if (!dataUri.startsWith('data:image/') && !dataUri.startsWith('https://')) {
             console.error(
               `[PROFILE IMAGE] ${kind} download did not return an image data URI.`,
             );

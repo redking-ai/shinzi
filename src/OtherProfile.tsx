@@ -108,7 +108,75 @@ export default function OtherProfile({
   const [dragY, setDragY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
-  const profileTouchStartY = useRef<number | null>(null);
+  const containerRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    let touchStartY: number | null = null;
+
+    const onTouchStart = (e: TouchEvent) => {
+      const pageTop = document.scrollingElement?.scrollTop ?? window.scrollY;
+      if (pageTop <= 2) {
+        touchStartY = e.touches[0]?.clientY ?? null;
+      } else {
+        touchStartY = null;
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (touchStartY === null) return;
+      const currentY = e.touches[0]?.clientY ?? touchStartY;
+      const deltaY = currentY - touchStartY;
+      const pageTop = document.scrollingElement?.scrollTop ?? window.scrollY;
+
+      if (pageTop <= 2 && deltaY > 0) {
+        // Blocks Chrome's pull-to-refresh completely so sheet pull-down is buttery smooth
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+        setIsDragging(true);
+        const damping = deltaY > 160 ? 160 + (deltaY - 160) * 0.45 : deltaY;
+        setDragY(Math.max(0, damping));
+      } else if (deltaY < 0) {
+        setDragY(0);
+        setIsDragging(false);
+      }
+    };
+
+    const onTouchEnd = () => {
+      touchStartY = null;
+      setIsDragging(false);
+      setDragY((prev) => {
+        if (prev > 100) {
+          setIsClosing(true);
+          const exitDistance = typeof window !== 'undefined' ? window.innerHeight : 800;
+          setTimeout(() => {
+            if (typeof window !== 'undefined' && window.history.length > 1) {
+              window.history.back();
+            } else {
+              navigateTo('/profile');
+            }
+          }, 200);
+          return exitDistance;
+        }
+        return 0;
+      });
+    };
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', onTouchEnd, { passive: true });
+    el.addEventListener('touchcancel', onTouchEnd, { passive: true });
+
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('touchcancel', onTouchEnd);
+    };
+  }, []);
 
   useEffect(() => {
     if (!currentUser || !targetUid || currentUser.uid === targetUid) {
@@ -280,9 +348,15 @@ export default function OtherProfile({
             return '';
           }
 
-          return await drive.getFileDataUri(
-            String(data.providerFileId)
-          );
+          try {
+            const dataUri = await drive.getFileDataUri(
+              String(data.providerFileId)
+            );
+            if (dataUri) return dataUri;
+          } catch {}
+
+          // Fallback to Google Drive public image CDN
+          return `https://lh3.googleusercontent.com/d/${encodeURIComponent(String(data.providerFileId))}=s800`;
         } catch (e) {
           console.warn(
             'Unable to load other profile asset:',
@@ -300,10 +374,16 @@ export default function OtherProfile({
       if (!cancelled) {
         if (avatarUri) {
           setAvatar(avatarUri);
-        } else if (targetUid) {
-          setAvatar(`/api/avatar?uid=${encodeURIComponent(targetUid)}`);
+        } else if (userData?.photoURL) {
+          setAvatar(String(userData.photoURL));
+        } else {
+          setAvatar('');
         }
-        if (bannerUri) setBanner(bannerUri);
+        if (bannerUri) {
+          setBanner(bannerUri);
+        } else if (userData?.bannerUrl) {
+          setBanner(String(userData.bannerUrl));
+        }
       }
     };
 
@@ -445,50 +525,6 @@ export default function OtherProfile({
     navigateTo(`/chat?user=${encodeURIComponent(targetUid)}`);
   };
 
-  const handleProfileTouchStart = (event: React.TouchEvent<HTMLElement>) => {
-    const pageTop = document.scrollingElement?.scrollTop ?? window.scrollY;
-    if (pageTop <= 2) {
-      profileTouchStartY.current = event.touches[0]?.clientY ?? null;
-    } else {
-      profileTouchStartY.current = null;
-    }
-  };
-
-  const handleProfileTouchMove = (event: React.TouchEvent<HTMLElement>) => {
-    const startY = profileTouchStartY.current;
-    if (startY === null) return;
-    const currentY = event.touches[0]?.clientY ?? startY;
-    const deltaY = currentY - startY;
-    const pageTop = document.scrollingElement?.scrollTop ?? window.scrollY;
-    if (pageTop <= 2 && deltaY > 0) {
-      setIsDragging(true);
-      const damping = deltaY > 160 ? 160 + (deltaY - 160) * 0.45 : deltaY;
-      setDragY(Math.max(0, damping));
-    } else if (deltaY < 0 && dragY > 0) {
-      setDragY(0);
-      setIsDragging(false);
-    }
-  };
-
-  const handleProfileTouchEnd = () => {
-    profileTouchStartY.current = null;
-    setIsDragging(false);
-    if (dragY > 100) {
-      setIsClosing(true);
-      const exitDistance = typeof window !== 'undefined' ? window.innerHeight : 800;
-      setDragY(exitDistance);
-      setTimeout(() => {
-        if (typeof window !== 'undefined' && window.history.length > 1) {
-          window.history.back();
-        } else {
-          navigateTo('/profile');
-        }
-      }, 200);
-    } else {
-      setDragY(0);
-    }
-  };
-
   if (loading) {
     return (
       <main className="sh-profile-page sh-other-profile-page">
@@ -518,11 +554,8 @@ export default function OtherProfile({
 
   return (
     <main
+      ref={containerRef}
       className="sh-profile-page sh-other-profile-page"
-      onTouchStart={handleProfileTouchStart}
-      onTouchMove={handleProfileTouchMove}
-      onTouchEnd={handleProfileTouchEnd}
-      onTouchCancel={handleProfileTouchEnd}
       style={{
         transform: dragY > 0 || isClosing ? `translateY(${dragY}px)` : undefined,
         transition: isDragging ? 'none' : 'transform 0.22s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease',
@@ -592,6 +625,7 @@ export default function OtherProfile({
                 alt={`${userData.displayName || 'User'} profile`}
                 loading="eager"
                 decoding="async"
+                onError={() => setAvatar('')}
               />
             ) : (
               <div className="sh-avatar sh-avatar-fallback">
