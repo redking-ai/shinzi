@@ -1463,6 +1463,134 @@
   padding-bottom: 8px;
 }
 
+/* First-contact direct message view */
+.shc-dm-intro {
+  width: min(100%, 620px);
+  margin: auto;
+  padding: 28px 10px 34px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.shc-dm-intro-avatar {
+  width: 88px;
+  height: 88px;
+  font-size: 28px;
+}
+
+.shc-dm-intro-avatar .shc-avatar-img {
+  width: 100%;
+  height: 100%;
+}
+
+.shc-dm-intro h2 {
+  margin: 26px 0 2px;
+  color: var(--text);
+  font-size: 25px;
+  line-height: 1.2;
+}
+
+.shc-dm-intro-username {
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.shc-dm-intro > p {
+  max-width: 38ch;
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.shc-dm-request-message {
+  width: min(100%, 480px);
+  margin-top: 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.shc-dm-request-message > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.shc-dm-request-message p {
+  margin: 6px 0 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.shc-dm-intro-actions {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  margin-top: 24px;
+}
+
+.shc-dm-intro-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.shc-dm-intro-actions button:first-child {
+  color: #ed4245;
+}
+
+.shc-dm-request-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  background: var(--bg);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.shc-dm-request-notice svg {
+  flex-shrink: 0;
+  color: #9da3ad;
+}
+
+.shc-user-clock-icon {
+  position: relative;
+  width: 19px;
+  height: 19px;
+  display: inline-flex;
+  flex: 0 0 19px;
+}
+
+.shc-user-clock-icon svg:last-child {
+  position: absolute;
+  right: -2px;
+  bottom: -1px;
+  padding: 1px;
+  border-radius: 50%;
+  background: var(--bg);
+}
+
+.shc-request-preview {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .shc-composer-input-box {
   position: relative;
   flex: 1;

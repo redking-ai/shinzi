@@ -1021,62 +1021,97 @@ body {
 .sh-other-profile-actions {
   order: 4;
   display: flex;
-  align-items: stretch;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
   width: 100%;
-  padding: 20px 26px 0;
+  padding: 18px 26px 0;
 }
 
 .sh-other-profile-actions button {
-  min-height: 50px;
-  border-radius: 12px;
+  min-height: 46px;
+  border-radius: 10px;
   font: inherit;
-  font-weight: 650;
+  font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 7px;
 }
 
 .sh-other-add-friend {
-  flex: 1;
+  flex: 1.25;
   min-width: 0;
-  border: 1px solid #762bff;
-  background: linear-gradient(90deg, #3020a0, #762bff);
+  border: 1px solid #5865f2;
+  background: #5865f2;
   color: #fff;
 }
 
 .sh-other-action-button {
-  flex: 0 0 54px;
-  border: 1px solid #39265d;
-  background: #17102a;
+  flex: 1;
+  min-width: 0;
+  border: 1px solid #303139;
+  background: #202127;
   color: #fff;
 }
 
-.sh-other-action-label {
-  display: none;
+.sh-other-pending-button {
+  flex: 1.25;
+  border: 1px solid #303139;
+  background: #202127;
+  color: #c9cad1;
+  cursor: default !important;
+}
+
+.sh-profile-user-clock {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  flex: 0 0 20px;
+}
+
+.sh-profile-user-clock svg:last-child {
+  position: absolute;
+  right: -2px;
+  bottom: -1px;
+  padding: 1px;
+  border-radius: 50%;
+  background: #202127;
+}
+
+.sh-other-profile-page {
+  padding-bottom: max(20px, env(safe-area-inset-bottom, 0px));
+}
+
+.sh-other-profile-page .sh-profile-card {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.sh-other-profile-menu {
+  position: absolute;
+  top: 52px;
+  right: 14px;
+  margin: 0;
+}
+
+.sh-other-profile-actions button:disabled {
+  opacity: 0.75;
+  cursor: default;
 }
 
 @media (max-width: 600px) {
   .sh-other-profile-actions {
     padding: 18px 15px 0;
-    gap: 8px;
+    gap: 7px;
   }
 
-  .sh-other-profile-actions:has(.sh-other-add-friend)
-    .sh-other-action-button {
-    flex: 0 0 50px;
-  }
-
-  .sh-other-profile-actions:not(:has(.sh-other-add-friend))
-    .sh-other-action-button {
-    flex: 1;
-  }
-
-  .sh-other-profile-actions:not(:has(.sh-other-add-friend))
-    .sh-other-action-label {
-    display: inline;
+  .sh-other-profile-actions button {
+    min-height: 44px;
+    gap: 5px;
+    font-size: 13px;
   }
 }
 

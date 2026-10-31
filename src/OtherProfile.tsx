@@ -1,16 +1,15 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
-  collection,
   deleteDoc,
   doc,
   getDoc,
-  getDocs,
-  query,
+  onSnapshot,
+  runTransaction,
   serverTimestamp,
   setDoc,
-  where,
 } from 'firebase/firestore';
+import { Clock3, Ellipsis, MessageCircle, Phone, UserPlus, UserRound } from 'lucide-react';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { auth, db } from './firebaseConfig';
 import { useDriveStore } from './driveStore';
@@ -24,9 +23,6 @@ import {
 import './Profile.css';
 
 type AnyRecord = Record<string, any>;
-type ProfileTab = 'Personal' | 'Social';
-
-
 
 function dateLabel(value: any): string {
   if (!value) return 'A Shinzi member';
@@ -54,10 +50,8 @@ function errorText(error: unknown): string {
 
 export default function OtherProfile({
   targetUid: targetUidProp,
-  onBack,
 }: {
   targetUid?: string;
-  onBack?: () => void;
 }) {
   const drive = useDriveStore();
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(
@@ -104,80 +98,41 @@ export default function OtherProfile({
     }
     return String(cached?.bannerUrl ?? '');
   });
-  const [tab, setTab] = useState<ProfileTab>('Social');
   const [menuOpen, setMenuOpen] = useState(false);
-  const [isFriend] = useState(false);
-
-  const [mutualFriendsCount, setMutualFriendsCount] = useState<number>(0);
-  const [mutualServersCount, setMutualServersCount] = useState<number>(0);
-  const [loadingMutuals, setLoadingMutuals] = useState<boolean>(true);
+  const [friendState, setFriendState] = useState({
+    friend: false,
+    outgoing: false,
+    incoming: false,
+  });
+  const [friendActionBusy, setFriendActionBusy] = useState(false);
 
   useEffect(() => {
-    if (!currentUser || !targetUid) {
-      setMutualFriendsCount(0);
-      setMutualServersCount(0);
-      setLoadingMutuals(false);
-      return;
+    if (!currentUser || !targetUid || currentUser.uid === targetUid) {
+      setFriendState({ friend: false, outgoing: false, incoming: false });
+      return undefined;
     }
 
-    let cancelled = false;
-
-    async function computeMutuals() {
-      setLoadingMutuals(true);
-      try {
-        const [myFriendsSnap, targetFriendsSnap] = await Promise.all([
-          getDocs(collection(db, 'users', currentUser!.uid, 'friends')).catch(
-            () => null,
-          ),
-          getDocs(collection(db, 'users', targetUid, 'friends')).catch(
-            () => null,
-          ),
-        ]);
-
-        if (cancelled) return;
-
-        let calculatedMutualFriends = 0;
-        if (myFriendsSnap && targetFriendsSnap) {
-          const myFriendIds = new Set(myFriendsSnap.docs.map((d) => d.id));
-          calculatedMutualFriends = targetFriendsSnap.docs.filter((d) =>
-            myFriendIds.has(d.id),
-          ).length;
-        }
-
-        let calculatedMutualServers = 0;
-        try {
-          const myServersSnap = await getDocs(
-            query(
-              collection(db, 'servers'),
-              where('memberIds', 'array-contains', currentUser!.uid),
-            ),
-          );
-          if (!cancelled && myServersSnap && !myServersSnap.empty) {
-            calculatedMutualServers = myServersSnap.docs.filter((docSnap) => {
-              const members = docSnap.data()?.memberIds;
-              return Array.isArray(members) && members.includes(targetUid);
-            }).length;
-          }
-        } catch {
-          calculatedMutualServers = 0;
-        }
-
-        if (!cancelled) {
-          setMutualFriendsCount(calculatedMutualFriends);
-          setMutualServersCount(calculatedMutualServers);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingMutuals(false);
-        }
-      }
-    }
-
-    void computeMutuals();
-
-    return () => {
-      cancelled = true;
-    };
+    const friendRef = doc(db, 'users', currentUser.uid, 'friends', targetUid);
+    const outgoingRef = doc(db, 'friendRequests', `${currentUser.uid}_${targetUid}`);
+    const incomingRef = doc(db, 'friendRequests', `${targetUid}_${currentUser.uid}`);
+    const unsubscribers = [
+      onSnapshot(friendRef, (snap) =>
+        setFriendState((previous) => ({ ...previous, friend: snap.exists() })),
+      ),
+      onSnapshot(outgoingRef, (snap) =>
+        setFriendState((previous) => ({
+          ...previous,
+          outgoing: snap.exists() && snap.data()?.status === 'pending',
+        })),
+      ),
+      onSnapshot(incomingRef, (snap) =>
+        setFriendState((previous) => ({
+          ...previous,
+          incoming: snap.exists() && snap.data()?.status === 'pending',
+        })),
+      ),
+    ];
+    return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
   }, [currentUser, targetUid]);
 
   const [relationship, setRelationship] = useState({
@@ -419,19 +374,76 @@ export default function OtherProfile({
     }
   };
 
-  const goBack = () => {
-    if (onBack) {
-      onBack();
-    } else if (window.history.length > 1) {
-      window.history.back();
-    } else {
-      navigateTo('/profile');
+  const sendFriendRequest = async () => {
+    if (!currentUser || !userData || friendActionBusy) return;
+    setFriendActionBusy(true);
+    setError('');
+    try {
+      const myProfile = getCachedProfile(currentUser.uid);
+      await setDoc(doc(db, 'friendRequests', `${currentUser.uid}_${targetUid}`), {
+        fromUid: currentUser.uid,
+        toUid: targetUid,
+        fromProfile: {
+          displayName: myProfile?.displayName || currentUser.displayName || 'User',
+          username: myProfile?.username || '',
+        },
+        toProfile: {
+          displayName: userData.displayName || userData.username || 'User',
+          username: userData.username || '',
+        },
+        status: 'pending',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setFriendActionBusy(false);
     }
+  };
+
+  const acceptIncomingFriendRequest = async () => {
+    if (!currentUser || !userData || friendActionBusy) return;
+    setFriendActionBusy(true);
+    setError('');
+    try {
+      await runTransaction(db, async (transaction) => {
+        const requestRef = doc(db, 'friendRequests', `${targetUid}_${currentUser.uid}`);
+        const requestSnap = await transaction.get(requestRef);
+        if (!requestSnap.exists() || requestSnap.data()?.status !== 'pending') {
+          throw new Error('This friend request is no longer pending.');
+        }
+        transaction.set(doc(db, 'users', currentUser.uid, 'friends', targetUid), {
+          uid: targetUid,
+          username: userData.username || '',
+          displayName: userData.displayName || userData.username || 'User',
+          addedAt: serverTimestamp(),
+        }, { merge: true });
+        transaction.set(doc(db, 'users', targetUid, 'friends', currentUser.uid), {
+          uid: currentUser.uid,
+          username: '',
+          displayName: currentUser.displayName || 'User',
+          addedAt: serverTimestamp(),
+        }, { merge: true });
+        transaction.update(requestRef, {
+          status: 'accepted',
+          updatedAt: serverTimestamp(),
+        });
+      });
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setFriendActionBusy(false);
+    }
+  };
+
+  const openMessage = () => {
+    navigateTo(`/chat?user=${encodeURIComponent(targetUid)}`);
   };
 
   if (loading) {
     return (
-      <main className="sh-profile-page">
+      <main className="sh-profile-page sh-other-profile-page">
         <div className="sh-profile-state">
           Loading profile…
         </div>
@@ -441,19 +453,7 @@ export default function OtherProfile({
 
   if (!userData) {
     return (
-      <main className="sh-profile-page">
-        <header className="sh-profile-topbar">
-          <button
-            className="sh-icon-button"
-            onClick={goBack}
-            aria-label="Go back"
-          >
-            ←
-          </button>
-
-          <h1>Profile</h1>
-        </header>
-
+      <main className="sh-profile-page sh-other-profile-page">
         <div className="sh-profile-state">
           {error || 'Profile unavailable.'}
 
@@ -468,112 +468,8 @@ export default function OtherProfile({
     );
   }
 
-  const stats = userData.socialStats ?? {};
-
   return (
-    <main className="sh-profile-page">
-      <header className="sh-profile-topbar">
-        <button
-          className="sh-icon-button"
-          onClick={goBack}
-          aria-label="Go back"
-        >
-          ←
-        </button>
-
-        <h1>Profile</h1>
-
-        <div className="sh-top-actions">
-          <button
-            className="sh-icon-button"
-            title="More actions"
-            aria-label="More profile actions"
-            aria-expanded={menuOpen}
-            onClick={() => setMenuOpen((value) => !value)}
-          >
-            ⋯
-          </button>
-        </div>
-      </header>
-   <div className="sh-other-profile-actions">
-  {!isFriend && (
-    <button
-      type="button"
-      className="sh-other-add-friend"
-      onClick={() => {
-        // Friend request system will be connected later.
-        setError('Friend requests are not connected yet.');
-      }}
-    >
-      <span aria-hidden="true"></span>
-      Add Friend
-    </button>
-  )}
-
-  <button
-    type="button"
-    className="sh-other-action-button"
-    onClick={() => {
-      setError('Chat will be connected when chat.tsx is ready.');
-    }}
-  >
-    <span aria-hidden="true"></span>
-    {!isFriend && <span className="sh-other-action-label">Message</span>}
-  </button>
-
-  <button
-    type="button"
-    className="sh-other-action-button"
-    onClick={() => {
-      setError('Calling is not connected yet.');
-    }}
-  >
-    <span aria-hidden="true"></span>
-    {!isFriend && <span className="sh-other-action-label">Call</span>}
-  </button>
-</div>
-
-      {menuOpen && (
-        <div className="sh-profile-menu" role="menu">
-          <button
-            role="menuitem"
-            disabled={busy || !currentUser}
-            onClick={() =>
-              void toggleRelationship('favourite')
-            }
-          >
-            {relationship.favourite
-              ? '★ Remove favourite'
-              : '☆ Add to favourites'}
-          </button>
-
-          <button
-            role="menuitem"
-            disabled={busy || !currentUser}
-            onClick={() =>
-              void toggleRelationship('muted')
-            }
-          >
-            {relationship.muted
-              ? 'Unmute user'
-              : 'Mute user'}
-          </button>
-
-          <button
-            role="menuitem"
-            className="sh-danger-action"
-            disabled={busy || !currentUser}
-            onClick={() =>
-              void toggleRelationship('blocked')
-            }
-          >
-            {relationship.blocked
-              ? 'Unblock user'
-              : 'Block user'}
-          </button>
-        </div>
-      )}
-
+    <main className="sh-profile-page sh-other-profile-page">
       {error && (
         <div className="sh-profile-alert" role="alert">
           <span>{error}</span>
@@ -600,7 +496,31 @@ export default function OtherProfile({
           }
         >
           {!banner && <div className="sh-banner-glow" />}
+          <button
+            type="button"
+            className="sh-banner-settings-button"
+            title="More actions"
+            aria-label="More profile actions"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((value) => !value)}
+          >
+            <Ellipsis size={22} />
+          </button>
         </div>
+
+        {menuOpen && (
+          <div className="sh-profile-menu sh-other-profile-menu" role="menu">
+            <button role="menuitem" disabled={busy || !currentUser} onClick={() => void toggleRelationship('favourite')}>
+              {relationship.favourite ? '★ Remove favourite' : '☆ Add to favourites'}
+            </button>
+            <button role="menuitem" disabled={busy || !currentUser} onClick={() => void toggleRelationship('muted')}>
+              {relationship.muted ? 'Unmute user' : 'Mute user'}
+            </button>
+            <button role="menuitem" className="sh-danger-action" disabled={busy || !currentUser} onClick={() => void toggleRelationship('blocked')}>
+              {relationship.blocked ? 'Unblock user' : 'Block user'}
+            </button>
+          </div>
+        )}
 
         <div className="sh-profile-identity">
           <div className="sh-avatar-wrap">
@@ -636,10 +556,8 @@ export default function OtherProfile({
             </p>
 
             {userData.pronouns && (
-  <p className="sh-pronouns">
-    {String(userData.pronouns)}
-  </p>
-)}
+              <p className="sh-pronouns">{String(userData.pronouns)}</p>
+            )}
           </div>
         </div>
 
@@ -649,27 +567,49 @@ export default function OtherProfile({
           </div>
         )}
 
-        <nav
-          className="sh-profile-tabs"
-          aria-label="Profile sections"
-        >
-          <button
-            className={tab === 'Personal' ? 'active' : ''}
-            onClick={() => setTab('Personal')}
-          >
-            Personal
-          </button>
+        {currentUser?.uid !== targetUid && (
+          <div className="sh-other-profile-actions">
+            {friendState.friend ? (
+              <>
+                <button type="button" className="sh-other-action-button" onClick={openMessage}>
+                  <MessageCircle size={18} aria-hidden="true" /> Message
+                </button>
+                <button type="button" className="sh-other-action-button" onClick={() => setError('Calling is not connected yet.')}>
+                  <Phone size={18} aria-hidden="true" /> Call
+                </button>
+              </>
+            ) : friendState.outgoing ? (
+              <button type="button" className="sh-other-pending-button" disabled>
+                <span className="sh-profile-user-clock" aria-hidden="true">
+                  <UserRound size={18} />
+                  <Clock3 size={9} />
+                </span>
+                Request Pending
+              </button>
+            ) : friendState.incoming ? (
+              <button type="button" className="sh-other-add-friend" disabled={friendActionBusy} onClick={() => void acceptIncomingFriendRequest()}>
+                <UserPlus size={18} aria-hidden="true" /> {friendActionBusy ? 'Accepting…' : 'Accept Request'}
+              </button>
+            ) : (
+              <button type="button" className="sh-other-add-friend" disabled={!currentUser || friendActionBusy} onClick={() => void sendFriendRequest()}>
+                <UserPlus size={18} aria-hidden="true" /> {friendActionBusy ? 'Sending…' : 'Add Friend'}
+              </button>
+            )}
 
-          <button
-            className={tab === 'Social' ? 'active' : ''}
-            onClick={() => setTab('Social')}
-          >
-            Social
-          </button>
-        </nav>
+            {!friendState.friend && (
+              <>
+                <button type="button" className="sh-other-action-button" onClick={openMessage}>
+                  <MessageCircle size={18} aria-hidden="true" /> Message
+                </button>
+                <button type="button" className="sh-other-action-button" onClick={() => setError('Calling is not connected yet.')}>
+                  <Phone size={18} aria-hidden="true" /> Call
+                </button>
+              </>
+            )}
+          </div>
+        )}
 
-        {tab === 'Personal' ? (
-          <div className="sh-profile-content">
+        <div className="sh-profile-content">
             <section className="sh-info-section">
               <h3>About me</h3>
 
@@ -684,91 +624,7 @@ export default function OtherProfile({
               <p>{dateLabel(userData.createdAt)}</p>
             </section>
 
-            <section className="sh-info-section">
-              <h3>Other platforms</h3>
-
-              {Array.isArray(userData.otherPlatforms) &&
-              userData.otherPlatforms.length ? (
-                <div className="sh-platform-list">
-                  {userData.otherPlatforms.map(
-                    (item: AnyRecord, index: number) => (
-                      <div
-                        className="sh-platform-row"
-                        key={`${item.handle ?? 'platform'}-${index}`}
-                      >
-                        <span
-                          className="sh-platform-dot"
-                          style={{
-                            background:
-                              item.color || '#4DA8DA',
-                          }}
-                        >
-                          {String(item.iconName ?? '•')
-                            .slice(0, 1)
-                            .toUpperCase()}
-                        </span>
-
-                        <div>
-                          <strong>
-                            {item.platformName ||
-                              item.platform ||
-                              'Platform'}
-                          </strong>
-
-                          <p>
-                            {item.handle ||
-                              'No handle provided'}{' '}
-
-                            {item.verified && (
-                              <span className="sh-verified">
-                                ✓ verified
-                              </span>
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                    )
-                  )}
-                </div>
-              ) : (
-                <p className="sh-muted-note">
-                  No other platforms added.
-                </p>
-              )}
-            </section>
-          </div>
-        ) : (
-          <div className="sh-profile-content">
-            <h3>Social stats</h3>
-
-            <div className="sh-stats-grid">
-              <div className="sh-stat-tile">
-                <strong>{Number(stats.friendsCount) || 0}</strong>
-                <span>Friends</span>
-              </div>
-              <div className="sh-stat-tile">
-                <strong>{Number(stats.followersCount) || 0}</strong>
-                <span>Followers</span>
-              </div>
-              <div className="sh-stat-tile">
-                <strong>
-                  {loadingMutuals ? '…' : mutualFriendsCount}
-                </strong>
-                <span>Mutual friends</span>
-              </div>
-              <div className="sh-stat-tile">
-                <strong>
-                  {loadingMutuals ? '…' : mutualServersCount}
-                </strong>
-                <span>Mutual servers</span>
-              </div>
-              <div className="sh-stat-tile">
-                <strong>{Number(stats.serversJoined) || 0}</strong>
-                <span>Servers joined</span>
-              </div>
-            </div>
-          </div>
-        )}
+        </div>
 
         <div className="sh-profile-footer-actions">
           <span

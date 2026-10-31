@@ -27,7 +27,6 @@ import {
 import './Profile.css';
 
 type AnyRecord = Record<string, any>;
-type ProfileTab = 'Personal' | 'Social';
 
 const usernamePattern = /^[a-z0-9_]{3,15}$/;
 
@@ -127,7 +126,6 @@ useEffect(() => {
     }
     return String(cached?.bannerUrl ?? '');
   });
-  const [activeTab, setActiveTab] = useState<ProfileTab>('Personal');
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -796,29 +794,6 @@ useEffect(() => {
             </p>
           </section>
         ) : (
-          <>
-            <nav
-              className="sh-profile-tabs"
-              aria-label="Profile sections"
-            >
-              <button
-                type="button"
-                className={activeTab === 'Personal' ? 'active' : ''}
-                onClick={() => setActiveTab('Personal')}
-              >
-                Personal
-              </button>
-
-              <button
-                type="button"
-                className={activeTab === 'Social' ? 'active' : ''}
-                onClick={() => setActiveTab('Social')}
-              >
-                Social
-              </button>
-            </nav>
-
-            {activeTab === 'Personal' ? (
               <div className="sh-profile-content">
                 <section className="sh-info-section">
                   <h3>About me</h3>
@@ -833,65 +808,7 @@ useEffect(() => {
                   <p>{dateLabel(userData.createdAt)}</p>
                 </section>
 
-                <section className="sh-info-section">
-                  <h3>Other platforms</h3>
-
-                  {Array.isArray(userData.otherPlatforms) &&
-                  userData.otherPlatforms.length ? (
-                    <div className="sh-platform-list">
-                      {userData.otherPlatforms.map(
-                        (item: AnyRecord, i: number) => (
-                          <div
-                            className="sh-platform-row"
-                            key={`${item.handle ?? 'platform'}-${i}`}
-                          >
-                            <span
-                              className="sh-platform-dot"
-                              style={{
-                                background: item.color || '#762BFF',
-                              }}
-                            >
-                              {String(item.iconName ?? '•')
-                                .slice(0, 1)
-                                .toUpperCase()}
-                            </span>
-
-                            <div>
-                              <strong>
-                                {item.platformName ||
-                                  item.platform ||
-                                  'Platform'}
-                              </strong>
-                              <p>
-                                {item.handle || 'No handle provided'}{' '}
-                                {item.verified && (
-                                  <span className="sh-verified">
-                                    ✓ verified
-                                  </span>
-                                )}
-                              </p>
-                            </div>
-                          </div>
-                        ),
-                      )}
-                    </div>
-                  ) : (
-                    <p className="sh-muted-note">
-                      No other platforms added.
-                    </p>
-                  )}
-                </section>
               </div>
-            ) : (
-              <div className="sh-profile-content">
-                <section className="sh-info-section">
-                  <p className="sh-muted-note">
-                    No social statistics to display.
-                  </p>
-                </section>
-              </div>
-            )}
-          </>
         )}
       </section>
 
