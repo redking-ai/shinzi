@@ -105,6 +105,9 @@ export default function OtherProfile({
     incoming: false,
   });
   const [friendActionBusy, setFriendActionBusy] = useState(false);
+  const [dragY, setDragY] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
   const profileTouchStartY = useRef<number | null>(null);
 
   useEffect(() => {
@@ -443,19 +446,46 @@ export default function OtherProfile({
   };
 
   const handleProfileTouchStart = (event: React.TouchEvent<HTMLElement>) => {
-    profileTouchStartY.current = event.touches[0]?.clientY ?? null;
+    const pageTop = document.scrollingElement?.scrollTop ?? window.scrollY;
+    if (pageTop <= 2) {
+      profileTouchStartY.current = event.touches[0]?.clientY ?? null;
+    } else {
+      profileTouchStartY.current = null;
+    }
   };
 
-  const handleProfileTouchEnd = (event: React.TouchEvent<HTMLElement>) => {
+  const handleProfileTouchMove = (event: React.TouchEvent<HTMLElement>) => {
     const startY = profileTouchStartY.current;
-    profileTouchStartY.current = null;
     if (startY === null) return;
-
-    const endY = event.changedTouches[0]?.clientY ?? startY;
+    const currentY = event.touches[0]?.clientY ?? startY;
+    const deltaY = currentY - startY;
     const pageTop = document.scrollingElement?.scrollTop ?? window.scrollY;
-    if (endY - startY > 110 && pageTop <= 1) {
-      if (window.history.length > 1) window.history.back();
-      else navigateTo('/profile');
+    if (pageTop <= 2 && deltaY > 0) {
+      setIsDragging(true);
+      const damping = deltaY > 160 ? 160 + (deltaY - 160) * 0.45 : deltaY;
+      setDragY(Math.max(0, damping));
+    } else if (deltaY < 0 && dragY > 0) {
+      setDragY(0);
+      setIsDragging(false);
+    }
+  };
+
+  const handleProfileTouchEnd = () => {
+    profileTouchStartY.current = null;
+    setIsDragging(false);
+    if (dragY > 100) {
+      setIsClosing(true);
+      const exitDistance = typeof window !== 'undefined' ? window.innerHeight : 800;
+      setDragY(exitDistance);
+      setTimeout(() => {
+        if (typeof window !== 'undefined' && window.history.length > 1) {
+          window.history.back();
+        } else {
+          navigateTo('/profile');
+        }
+      }, 200);
+    } else {
+      setDragY(0);
     }
   };
 
@@ -490,8 +520,15 @@ export default function OtherProfile({
     <main
       className="sh-profile-page sh-other-profile-page"
       onTouchStart={handleProfileTouchStart}
+      onTouchMove={handleProfileTouchMove}
       onTouchEnd={handleProfileTouchEnd}
-      onTouchCancel={() => { profileTouchStartY.current = null; }}
+      onTouchCancel={handleProfileTouchEnd}
+      style={{
+        transform: dragY > 0 || isClosing ? `translateY(${dragY}px)` : undefined,
+        transition: isDragging ? 'none' : 'transform 0.22s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease',
+        opacity: isClosing ? 0 : 1,
+        willChange: 'transform',
+      }}
     >
       {error && (
         <div className="sh-profile-alert" role="alert">

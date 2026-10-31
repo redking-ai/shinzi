@@ -1355,6 +1355,8 @@ export default function Chat({ onNavigate }: ChatProps) {
 
   const getDirectRequestState = (conversation: Rec | null | undefined) => {
     if (!conversation || conversation.type === 'group') return '';
+    // If the conversation already has existing messages or history, it is an active conversation
+    if (messages.length > 0 || conversation.lastMessageAt) return 'accepted';
     const targetUid = otherMemberId(conversation);
     const outgoing = sentDMRequests.find((request) => request.toUid === targetUid);
     if (outgoing?.status) return String(outgoing.status);
@@ -1949,7 +1951,8 @@ const handleSearchMessage = async (target: Rec) => {
 
     const activeConv = selectedConversation || selected;
     const directTargetUid = activeConv?.type === 'group' ? '' : otherMemberId(activeConv);
-    if (directTargetUid) {
+    const hasExistingHistory = messages.length > 0 || Boolean(activeConv?.lastMessageAt);
+    if (directTargetUid && !hasExistingHistory) {
       const isFriend = friends.some((friend) => friend.id === directTargetUid || friend.uid === directTargetUid);
       const requestState = getDirectRequestState(activeConv);
 
@@ -3673,10 +3676,14 @@ const handleSearchMessage = async (target: Rec) => {
     const targetUid = isGroup ? undefined : otherMemberId(selectedConversation);
     const targetProfile = targetUid ? selectedConversation?.memberProfiles?.[targetUid] : undefined;
     const dmRequestState = getDirectRequestState(selectedConversation);
-    const conversationMessages = targetUid && dmRequestState !== 'accepted'
-      ? pendingDmMessages
-      : messages;
-    const hasFirstContactIntro = Boolean(targetUid && selectedConversation?.hasChatIntro);
+    const conversationMessages = (messages && messages.length > 0)
+      ? messages
+      : (pendingDmMessages && pendingDmMessages.length > 0
+          ? pendingDmMessages
+          : messages);
+    const hasFirstContactIntro = Boolean(
+      targetUid && selectedConversation?.hasChatIntro && conversationMessages.length === 0
+    );
     const composerPlaceholder = isGroup
       ? `Message #${name}`
       : username

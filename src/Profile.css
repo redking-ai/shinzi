@@ -1080,6 +1080,17 @@ body {
   background: #202127;
 }
 
+@keyframes shOtherProfileSlideUp {
+  from {
+    transform: translateY(60px);
+    opacity: 0.85;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
 .sh-other-profile-page {
   position: relative;
   min-height: 100dvh;
@@ -1088,6 +1099,8 @@ body {
   overscroll-behavior-y: contain;
   touch-action: pan-y;
   padding-bottom: max(20px, env(safe-area-inset-bottom, 0px));
+  animation: shOtherProfileSlideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
 }
 
 .sh-other-profile-page .sh-profile-card {
@@ -1096,24 +1109,23 @@ body {
   box-shadow: none;
 }
 
-.sh-other-profile-page .sh-avatar-wrap {
-  width: 128px;
-  height: 128px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-
 .sh-other-profile-page .sh-profile-sheet-handle {
   position: absolute;
   z-index: 6;
-  top: 9px;
+  top: 10px;
   left: 50%;
   width: 36px;
   height: 4px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.45);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
   transform: translateX(-50%);
+  cursor: grab;
+  transition: background 0.15s ease;
+}
+
+.sh-other-profile-page .sh-profile-sheet-handle:active {
+  background: rgba(255, 255, 255, 0.7);
 }
 
 .sh-other-profile-menu {
@@ -1129,11 +1141,6 @@ body {
 }
 
 @media (max-width: 600px) {
-  .sh-other-profile-page .sh-avatar-wrap {
-    width: 104px;
-    height: 104px;
-  }
-
   .sh-other-profile-actions {
     padding: 18px 15px 0;
     gap: 7px;

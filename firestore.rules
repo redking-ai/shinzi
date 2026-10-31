@@ -295,7 +295,12 @@ match /conversations/{conversationId} {
 
     allow create: if request.auth != null  
       && (request.resource.data.senderId == request.auth.uid || isMessageFromAcceptedDMRequest())
-      && request.auth.uid in getAfter(/databases/$(database)/documents/conversations/$(conversationId)).data.memberIds
+      && (
+        (exists(/databases/$(database)/documents/conversations/$(conversationId))
+          && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.memberIds)
+        || (existsAfter(/databases/$(database)/documents/conversations/$(conversationId))
+          && request.auth.uid in getAfter(/databases/$(database)/documents/conversations/$(conversationId)).data.memberIds)
+      )
       && (!('replyToMessageId' in request.resource.data) || (
         request.resource.data.replyToMessageId is string
         && exists(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.replyToMessageId))
