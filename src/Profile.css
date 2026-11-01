@@ -1,5 +1,9 @@
 .sh-profile-page {
-  min-height: 100vh;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   background: #09090f;
   color: #f5f7ff;
   padding: 0 0 calc(76px + env(safe-area-inset-bottom, 0px));
@@ -28,7 +32,7 @@
 
 .sh-profile-banner {
   order: 1;
-  height: 210px;
+  height: 160px;
   position: relative;
   background: linear-gradient(130deg, #19132f, #0b2639 55%, #24143b);
   background-position: center;
@@ -44,13 +48,43 @@
     radial-gradient(ellipse at 80% 80%, #00cfff36, transparent 45%);
 }
 
+.sh-banner-back-button {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 6;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(9, 9, 15, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #f5f7ff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.sh-banner-back-button:hover {
+  background: rgba(28, 28, 42, 0.85);
+  border-color: rgba(255, 255, 255, 0.28);
+  transform: scale(1.04);
+}
+
+.sh-banner-back-button:active {
+  transform: scale(0.96);
+}
+
 .sh-banner-settings-button {
   position: absolute;
   top: 14px;
   right: 14px;
   z-index: 5;
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: rgba(9, 9, 15, 0.65);
@@ -146,20 +180,21 @@
   order: 2;
   display: flex;
   align-items: flex-end;
-  gap: 18px;
-  padding: 0 26px;
-  margin-top: -52px;
+  gap: 16px;
+  padding: 0 24px;
+  margin-top: -46px;
   position: relative;
 }
 
 .sh-avatar-wrap {
-  width: 116px;
-  height: 116px;
+  width: 96px;
+  height: 96px;
   border-radius: 50%;
-  padding: 5px;
+  padding: 4px;
   background: #101018;
-  border: 1px solid #37334f;
+  border: 2px solid #2e2848;
   flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
 .sh-avatar {
@@ -535,7 +570,7 @@
   }
 
   .sh-profile-banner {
-    height: 160px;
+    height: 135px;
   }
 
   .sh-profile-card {
@@ -546,16 +581,17 @@
   }
 
   .sh-profile-identity {
-    padding: 0 15px;
+    padding: 0 16px;
     gap: 12px;
-    margin-top: -43px;
+    margin-top: -41px;
     align-items: flex-end;
   }
 
   .sh-avatar-wrap {
-    width: 88px;
-    height: 88px;
-    padding: 4px;
+    width: 82px;
+    height: 82px;
+    padding: 3px;
+    border-radius: 50%;
   }
 
   .sh-identity-copy {
@@ -1092,16 +1128,75 @@ body {
 }
 
 .sh-other-profile-page {
-  position: relative;
-  min-height: 100dvh;
-  height: auto !important;
-  overflow-y: visible !important;
-  overscroll-behavior: none;
-  overscroll-behavior-y: none;
-  touch-action: pan-y;
-  padding-bottom: max(20px, env(safe-area-inset-bottom, 0px));
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior: contain;
+  overscroll-behavior-y: contain;
+  z-index: 1000;
+  background: #09090f;
+  padding-bottom: max(32px, env(safe-area-inset-bottom, 0px));
   animation: shOtherProfileSlideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   will-change: transform;
+  box-sizing: border-box;
+}
+
+/* Contained Profile Info Card (Discord-inspired) */
+.sh-profile-info-card {
+  background: #141320;
+  border: 1px solid #28243c;
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.sh-info-card-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sh-info-card-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #9e9cb8;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.sh-bio-text {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #f5f7ff;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+
+.sh-bio-empty {
+  color: #726f8d;
+  font-style: italic;
+}
+
+.sh-info-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.07);
+  margin: 14px 0;
+}
+
+.sh-joined-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: #f5f7ff;
+  margin: 0;
 }
 
 .sh-other-profile-page .sh-profile-card {

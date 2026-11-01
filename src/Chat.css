@@ -840,12 +840,22 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  padding: 4px 8px;
+  padding: 2px 8px;
   border-radius: 6px;
   position: relative;
   transition: background 0.12s ease;
   user-select: none;
   -webkit-user-select: none;
+  background: transparent;
+}
+
+.shc-dc-group-start {
+  margin-top: 10px;
+  padding-top: 4px;
+}
+
+.shc-dc-group-consecutive {
+  margin-top: 1px;
 }
 
 .shc-dc-msg:hover {
@@ -856,6 +866,35 @@
   background: rgba(88, 101, 242, 0.12) !important;
   border-left: 2px solid #5865f2;
   border-radius: 0 6px 6px 0;
+}
+
+.shc-dc-gutter-col {
+  width: 40px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  height: 22px;
+  user-select: none;
+}
+
+.shc-dc-gutter-time {
+  font-size: 10px;
+  color: var(--muted, #949ba4);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  white-space: nowrap;
+}
+
+.shc-dc-msg:hover .shc-dc-gutter-time,
+.shc-dc-msg:active .shc-dc-gutter-time {
+  opacity: 0.65;
+}
+
+@media (max-width: 600px) {
+  .shc-dc-msg:active .shc-dc-gutter-time {
+    opacity: 0.8;
+  }
 }
 
 /* Discord Reply Spine */
@@ -1014,7 +1053,7 @@
 
 .shc-msg-swipe-own .shc-msg-bubble-wrap,
 .shc-msg-own .shc-msg-bubble-wrap {
-  align-items: flex-end;
+  align-items: flex-start;
 }
 
 .shc-msg-swipe-card .shc-msg-bubble-wrap,

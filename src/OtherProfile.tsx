@@ -9,7 +9,7 @@ import {
   serverTimestamp,
   setDoc,
 } from 'firebase/firestore';
-import { Clock3, Ellipsis, MessageCircle, Phone, UserPlus, UserRound } from 'lucide-react';
+import { ArrowLeft, Clock3, Ellipsis, MessageCircle, Phone, UserPlus, UserRound } from 'lucide-react';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { auth, db } from './firebaseConfig';
 import { useDriveStore } from './driveStore';
@@ -25,21 +25,28 @@ import './Profile.css';
 type AnyRecord = Record<string, any>;
 
 function dateLabel(value: any): string {
-  if (!value) return 'A Shinzi member';
+  if (!value) return 'October 2026';
 
-  const date =
-    typeof value.toDate === 'function'
-      ? value.toDate()
-      : typeof value.seconds === 'number'
-        ? new Date(value.seconds * 1000)
-        : null;
+  let date: Date | null = null;
+  if (typeof value.toDate === 'function') {
+    date = value.toDate();
+  } else if (typeof value.seconds === 'number') {
+    date = new Date(value.seconds * 1000);
+  } else if (value instanceof Date) {
+    date = value;
+  } else if (typeof value === 'number') {
+    date = new Date(value);
+  } else if (typeof value === 'string') {
+    const parsed = new Date(value);
+    if (!isNaN(parsed.getTime())) date = parsed;
+  }
 
   return date
-    ? date.toLocaleDateString(undefined, {
+    ? date.toLocaleDateString('en-US', {
         month: 'long',
         year: 'numeric',
       })
-    : 'A Shinzi member';
+    : 'October 2026';
 }
 
 function errorText(error: unknown): string {
@@ -50,8 +57,10 @@ function errorText(error: unknown): string {
 
 export default function OtherProfile({
   targetUid: targetUidProp,
+  onClose,
 }: {
   targetUid?: string;
+  onClose?: () => void;
 }) {
   const drive = useDriveStore();
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(
@@ -109,37 +118,45 @@ export default function OtherProfile({
   const [isDragging, setIsDragging] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const containerRef = useRef<HTMLElement | null>(null);
+  const handleRef = useRef<HTMLSpanElement | null>(null);
 
+  const handleClose = useCallback(() => {
+    setIsClosing(true);
+    setTimeout(() => {
+      if (onClose) {
+        onClose();
+        return;
+      }
+      if (typeof window !== 'undefined' && window.history.length > 1) {
+        window.history.back();
+      } else {
+        navigateTo('/chat');
+      }
+    }, 150);
+  }, [onClose]);
+
+  // Pull-down gesture specifically bound to the drag handle area so content scrolls freely!
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
+    const handleEl = handleRef.current;
+    if (!handleEl) return;
 
     let touchStartY: number | null = null;
 
     const onTouchStart = (e: TouchEvent) => {
-      const pageTop = document.scrollingElement?.scrollTop ?? window.scrollY;
-      if (pageTop <= 2) {
-        touchStartY = e.touches[0]?.clientY ?? null;
-      } else {
-        touchStartY = null;
-      }
+      touchStartY = e.touches[0]?.clientY ?? null;
     };
 
     const onTouchMove = (e: TouchEvent) => {
       if (touchStartY === null) return;
       const currentY = e.touches[0]?.clientY ?? touchStartY;
       const deltaY = currentY - touchStartY;
-      const pageTop = document.scrollingElement?.scrollTop ?? window.scrollY;
 
-      if (pageTop <= 2 && deltaY > 0) {
-        // Blocks Chrome's pull-to-refresh completely so sheet pull-down is buttery smooth
-        if (e.cancelable) {
-          e.preventDefault();
-        }
+      if (deltaY > 0) {
+        if (e.cancelable) e.preventDefault();
         setIsDragging(true);
         const damping = deltaY > 160 ? 160 + (deltaY - 160) * 0.45 : deltaY;
         setDragY(Math.max(0, damping));
-      } else if (deltaY < 0) {
+      } else {
         setDragY(0);
         setIsDragging(false);
       }
@@ -149,34 +166,26 @@ export default function OtherProfile({
       touchStartY = null;
       setIsDragging(false);
       setDragY((prev) => {
-        if (prev > 100) {
-          setIsClosing(true);
-          const exitDistance = typeof window !== 'undefined' ? window.innerHeight : 800;
-          setTimeout(() => {
-            if (typeof window !== 'undefined' && window.history.length > 1) {
-              window.history.back();
-            } else {
-              navigateTo('/profile');
-            }
-          }, 200);
-          return exitDistance;
+        if (prev > 80) {
+          handleClose();
+          return typeof window !== 'undefined' ? window.innerHeight : 800;
         }
         return 0;
       });
     };
 
-    el.addEventListener('touchstart', onTouchStart, { passive: true });
-    el.addEventListener('touchmove', onTouchMove, { passive: false });
-    el.addEventListener('touchend', onTouchEnd, { passive: true });
-    el.addEventListener('touchcancel', onTouchEnd, { passive: true });
+    handleEl.addEventListener('touchstart', onTouchStart, { passive: true });
+    handleEl.addEventListener('touchmove', onTouchMove, { passive: false });
+    handleEl.addEventListener('touchend', onTouchEnd, { passive: true });
+    handleEl.addEventListener('touchcancel', onTouchEnd, { passive: true });
 
     return () => {
-      el.removeEventListener('touchstart', onTouchStart);
-      el.removeEventListener('touchmove', onTouchMove);
-      el.removeEventListener('touchend', onTouchEnd);
-      el.removeEventListener('touchcancel', onTouchEnd);
+      handleEl.removeEventListener('touchstart', onTouchStart);
+      handleEl.removeEventListener('touchmove', onTouchMove);
+      handleEl.removeEventListener('touchend', onTouchEnd);
+      handleEl.removeEventListener('touchcancel', onTouchEnd);
     };
-  }, []);
+  }, [handleClose]);
 
   useEffect(() => {
     if (!currentUser || !targetUid || currentUser.uid === targetUid) {
@@ -522,12 +531,27 @@ export default function OtherProfile({
   };
 
   const openMessage = () => {
+    if (onClose) {
+      onClose();
+      return;
+    }
     navigateTo(`/chat?user=${encodeURIComponent(targetUid)}`);
   };
 
   if (loading) {
     return (
       <main className="sh-profile-page sh-other-profile-page">
+        <div className="sh-profile-banner" style={{ height: 60 }}>
+          <button
+            type="button"
+            className="sh-banner-back-button"
+            title="Back"
+            aria-label="Back"
+            onClick={handleClose}
+          >
+            <ArrowLeft size={20} />
+          </button>
+        </div>
         <div className="sh-profile-state">
           Loading profile…
         </div>
@@ -538,6 +562,17 @@ export default function OtherProfile({
   if (!userData) {
     return (
       <main className="sh-profile-page sh-other-profile-page">
+        <div className="sh-profile-banner" style={{ height: 60 }}>
+          <button
+            type="button"
+            className="sh-banner-back-button"
+            title="Back"
+            aria-label="Back"
+            onClick={handleClose}
+          >
+            <ArrowLeft size={20} />
+          </button>
+        </div>
         <div className="sh-profile-state">
           {error || 'Profile unavailable.'}
 
@@ -589,7 +624,16 @@ export default function OtherProfile({
           }
         >
           {!banner && <div className="sh-banner-glow" />}
-          <span className="sh-profile-sheet-handle" aria-hidden="true" />
+          <span ref={handleRef} className="sh-profile-sheet-handle" aria-hidden="true" />
+          <button
+            type="button"
+            className="sh-banner-back-button"
+            title="Back to conversation"
+            aria-label="Back to conversation"
+            onClick={handleClose}
+          >
+            <ArrowLeft size={20} />
+          </button>
           <button
             type="button"
             className="sh-banner-settings-button"
@@ -705,20 +749,25 @@ export default function OtherProfile({
         )}
 
         <div className="sh-profile-content">
-            <section className="sh-info-section">
-              <h3>About me</h3>
-
-              <p className="sh-bio">
-                {userData.bio ||
-                  'This user has not added a bio yet.'}
+          <div className="sh-profile-info-card">
+            <div className="sh-info-card-section">
+              <h3 className="sh-info-card-label">BIO</h3>
+              <p className="sh-bio-text">
+                {userData.bio ? (
+                  userData.bio
+                ) : (
+                  <span className="sh-bio-empty">No bio added yet.</span>
+                )}
               </p>
-            </section>
+            </div>
 
-            <section className="sh-info-section">
-              <h3>Member since</h3>
-              <p>{dateLabel(userData.createdAt)}</p>
-            </section>
+            <div className="sh-info-divider" />
 
+            <div className="sh-info-card-section">
+              <h3 className="sh-info-card-label">JOINED SHINZI</h3>
+              <p className="sh-joined-text">{dateLabel(userData.createdAt)}</p>
+            </div>
+          </div>
         </div>
 
         <div className="sh-profile-footer-actions">

@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   lazy,
   useMemo,
   useRef,
@@ -79,6 +80,7 @@ import {
   loadEmojiPickerData,
   saveRecentEmoji,
 } from './emojiData';
+import OtherProfile from './OtherProfile';
 import './Chat.css';
 
 const EmojiPicker = lazy(() => import('emoji-picker-react'));
@@ -984,6 +986,35 @@ export default function Chat({ onNavigate }: ChatProps) {
     originalUrl: string;
     fileName?: string;
   } | null>(null);
+  const [viewingProfileUid, setViewingProfileUid] = useState<string | null>(null);
+  const pendingCaretRef = useRef<number | null>(null);
+  const lastCaretPosRef = useRef<number>(0);
+
+  // Caret restoration layoutEffect: sets selection synchronously after React commits the messageText update
+  useLayoutEffect(() => {
+    if (pendingCaretRef.current !== null && inputRef.current) {
+      const pos = pendingCaretRef.current;
+      pendingCaretRef.current = null;
+      inputRef.current.focus({ preventScroll: true });
+      inputRef.current.setSelectionRange(pos, pos);
+    }
+  }, [messageText]);
+
+  // Sync popstate for profile overlay so browser/Android back button closes overlay seamlessly
+  useEffect(() => {
+    const handlePop = () => {
+      if (typeof window === 'undefined') return;
+      const params = new URLSearchParams(window.location.search);
+      const targetUid = params.get('uid');
+      if (window.location.pathname.toLowerCase() === '/profile' && targetUid && targetUid !== uid) {
+        setViewingProfileUid(targetUid);
+      } else {
+        setViewingProfileUid(null);
+      }
+    };
+    window.addEventListener('popstate', handlePop);
+    return () => window.removeEventListener('popstate', handlePop);
+  }, [uid]);
   const [showEmojiPicker, setShowEmojiPicker] = useState<boolean>(false);
   const [recentEmojis, setRecentEmojis] = useState<string[]>(() => getRecentEmojis());
   const [toastMessage, setToastMessage] = useState<string>('');
@@ -1784,7 +1815,8 @@ const handleSearchMessage = async (target: Rec) => {
 
   const checkMentionToken = (text: string, textarea?: HTMLTextAreaElement | null) => {
     const el = textarea || inputRef.current;
-    const cursor = el ? el.selectionStart : text.length;
+    const cursor = el && typeof el.selectionStart === 'number' ? el.selectionStart : text.length;
+    lastCaretPosRef.current = cursor;
     const textBefore = text.slice(0, cursor);
     const match = textBefore.match(/(?:^|\s)@([a-zA-Z0-9_]*)$/);
 
@@ -1798,7 +1830,13 @@ const handleSearchMessage = async (target: Rec) => {
 
   const insertMention = (handle: string) => {
     const el = inputRef.current;
-    const cursor = el ? el.selectionStart : messageText.length;
+    // Determine the caret position: use active element's selectionStart if focused,
+    // otherwise fallback to the accurately saved lastCaretPosRef
+    const cursor =
+      el && document.activeElement === el && typeof el.selectionStart === 'number'
+        ? el.selectionStart
+        : lastCaretPosRef.current || messageText.length;
+
     const textBefore = messageText.slice(0, cursor);
     const textAfter = messageText.slice(cursor);
 
@@ -1813,13 +1851,16 @@ const handleSearchMessage = async (target: Rec) => {
     const nextText = textBefore.slice(0, atIndex) + inserted + textAfter;
     const newCursor = atIndex + inserted.length;
 
+    pendingCaretRef.current = newCursor;
+    lastCaretPosRef.current = newCursor;
+
     setMessageText(nextText);
     setMentionQuery(null);
 
     if (el) {
       el.value = nextText;
-      el.setSelectionRange(newCursor, newCursor);
       el.focus({ preventScroll: true });
+      el.setSelectionRange(newCursor, newCursor);
     }
   };
 
@@ -3105,10 +3146,15 @@ const handleSearchMessage = async (target: Rec) => {
 
   const openUserProfile = (profileUid?: string) => {
     if (!profileUid) return;
-    navigateToUrl(
-      profileUid === uid
-        ? '/profile'
-        : `/profile?uid=${encodeURIComponent(profileUid)}`,
+    if (profileUid === uid) {
+      navigateToUrl('/profile');
+      return;
+    }
+    setViewingProfileUid(profileUid);
+    window.history.pushState(
+      { profileUid },
+      '',
+      `/profile?uid=${encodeURIComponent(profileUid)}`,
     );
   };
 
@@ -3273,6 +3319,37 @@ const handleSearchMessage = async (target: Rec) => {
     const replyId = item.replyToMessageId || item.replyTo?.id;
     const original = replyId ? messageList.find((m) => m.id === replyId) : null;
 
+    const isSpecial =
+      Boolean(item.deleted) ||
+      item.type === 'poll' ||
+      item.type === 'event' ||
+      item.type === 'voice' ||
+      Boolean(item.isCallRecord) ||
+      Boolean(item.isSystem);
+
+    const prevSpecial =
+      Boolean(previous) &&
+      (Boolean(previous.deleted) ||
+        previous.type === 'poll' ||
+        previous.type === 'event' ||
+        previous.type === 'voice' ||
+        Boolean(previous.isCallRecord) ||
+        Boolean(previous.isSystem));
+
+    const timeGap =
+      previous && item.createdAt && previous.createdAt
+        ? Math.abs(millis(item.createdAt) - millis(previous.createdAt)) > 5 * 60 * 1000
+        : true;
+
+    const isFirstInGroup =
+      !previous ||
+      showDay ||
+      previous.senderId !== item.senderId ||
+      timeGap ||
+      Boolean(replyId) ||
+      isSpecial ||
+      Boolean(prevSpecial);
+
     let quotedSender = 'User';
     let quotedText = 'Original message unavailable';
     let quotedSenderId = '';
@@ -3417,7 +3494,9 @@ const handleSearchMessage = async (target: Rec) => {
 
     const messageContent = (
       <div
-        className={`shc-dc-msg ${mentionedMe ? 'shc-dc-msg-highlight' : ''}`}
+        className={`shc-dc-msg ${
+          isFirstInGroup ? 'shc-dc-group-start' : 'shc-dc-group-consecutive'
+        } ${mentionedMe ? 'shc-dc-msg-highlight' : ''}`}
         onDoubleClick={() => !item.deleted && startReply(item)}
       >
         {replyId && (
@@ -3446,43 +3525,51 @@ const handleSearchMessage = async (target: Rec) => {
         )}
 
         <div className="shc-dc-main">
-          <button
-            type="button"
-            className="shc-dc-avatar-col shc-profile-trigger"
-            onClick={(event) => {
-              event.stopPropagation();
-              openUserProfile(item.senderId);
-            }}
-            onDoubleClick={(event) => event.stopPropagation()}
-            aria-label={`Open ${authorName}'s profile`}
-          >
-            <UserAvatar
-              uid={item.senderId}
-              name={authorName}
-              photoURL={item.senderPhotoURL}
-              profileAssetId={item.senderProfileAssetId}
-              size="md"
-            />
-          </button>
+          {isFirstInGroup ? (
+            <button
+              type="button"
+              className="shc-dc-avatar-col shc-profile-trigger"
+              onClick={(event) => {
+                event.stopPropagation();
+                openUserProfile(item.senderId);
+              }}
+              onDoubleClick={(event) => event.stopPropagation()}
+              aria-label={`Open ${authorName}'s profile`}
+            >
+              <UserAvatar
+                uid={item.senderId}
+                name={authorName}
+                photoURL={item.senderPhotoURL}
+                profileAssetId={item.senderProfileAssetId}
+                size="md"
+              />
+            </button>
+          ) : (
+            <div className="shc-dc-gutter-col" aria-hidden="true">
+              <span className="shc-dc-gutter-time">{formatTime(item.createdAt)}</span>
+            </div>
+          )}
 
           <div className="shc-dc-body-col">
-            <div className="shc-dc-header">
-              <button
-                type="button"
-                className={`shc-dc-author shc-profile-trigger ${own ? 'shc-dc-author-me' : ''}`}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  openUserProfile(item.senderId);
-                }}
-                onDoubleClick={(event) => event.stopPropagation()}
-                aria-label={`Open ${authorName}'s profile`}
-              >
-                {authorName}
-              </button>
-              <span className="shc-dc-timestamp">
-                {formatDiscordTimestamp(item.createdAt)}
-              </span>
-            </div>
+            {isFirstInGroup && (
+              <div className="shc-dc-header">
+                <button
+                  type="button"
+                  className={`shc-dc-author shc-profile-trigger ${own ? 'shc-dc-author-me' : ''}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openUserProfile(item.senderId);
+                  }}
+                  onDoubleClick={(event) => event.stopPropagation()}
+                  aria-label={`Open ${authorName}'s profile`}
+                >
+                  {authorName}
+                </button>
+                <span className="shc-dc-timestamp">
+                  {formatDiscordTimestamp(item.createdAt)}
+                </span>
+              </div>
+            )}
 
             <div className="shc-dc-content">
               {contentNode}
@@ -3492,7 +3579,6 @@ const handleSearchMessage = async (target: Rec) => {
             </div>
             {renderReactions(item)}
           </div>
-
         </div>
       </div>
     );
@@ -4174,8 +4260,11 @@ const handleSearchMessage = async (target: Rec) => {
                   className={`shc-mention-item ${
                     idx === mentionSelectedIndex ? 'shc-mention-item-active' : ''
                   }`}
+                  onTouchStart={(e) => {
+                    // Prevent blur so mobile keyboard stays open and caret isn't lost!
+                    e.preventDefault();
+                  }}
                   onPointerDown={(e) => {
-                    // Prevent blur so mobile keyboard stays open!
                     e.preventDefault();
                   }}
                   onMouseDown={(e) => {
@@ -4232,6 +4321,9 @@ const handleSearchMessage = async (target: Rec) => {
                 value={messageText}
                 maxLength={MAX_MESSAGE_LENGTH}
                 onChange={(e) => handleMessageChange(e.target.value, e.target)}
+                onSelect={(e) => {
+                  lastCaretPosRef.current = e.currentTarget.selectionStart;
+                }}
                 onKeyDown={onComposerKey}
                 onClick={(e) => checkMentionToken(messageText, e.currentTarget)}
                 onKeyUp={(e) => checkMentionToken(messageText, e.currentTarget)}
@@ -4899,6 +4991,22 @@ const handleSearchMessage = async (target: Rec) => {
             />
           </div>
         </div>
+      )}
+
+      {viewingProfileUid && (
+        <OtherProfile
+          targetUid={viewingProfileUid}
+          onClose={() => {
+            setViewingProfileUid(null);
+            if (window.location.pathname.toLowerCase() === '/profile') {
+              if (window.history.length > 1) {
+                window.history.back();
+              } else {
+                navigateToUrl('/chat');
+              }
+            }
+          }}
+        />
       )}
     </>
   );

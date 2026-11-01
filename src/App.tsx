@@ -218,7 +218,18 @@ if (currentPath === '/chat') {
       targetUid &&
       targetUid !== user.uid
     ) {
-      return <OtherProfile targetUid={targetUid} />;
+      return (
+        <OtherProfile
+          targetUid={targetUid}
+          onClose={() => {
+            if (window.history.length > 1) {
+              window.history.back();
+            } else {
+              navigateTo('/chat');
+            }
+          }}
+        />
+      );
     }
 
     // Your own profile

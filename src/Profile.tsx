@@ -45,6 +45,15 @@ function dateValue(value: any): Date | null {
     return value;
   }
 
+  if (typeof value === 'number') {
+    return new Date(value);
+  }
+
+  if (typeof value === 'string') {
+    const parsed = new Date(value);
+    if (!isNaN(parsed.getTime())) return parsed;
+  }
+
   return null;
 }
 
@@ -52,11 +61,11 @@ function dateLabel(value: any): string {
   const date = dateValue(value);
 
   return date
-    ? date.toLocaleDateString(undefined, {
+    ? date.toLocaleDateString('en-US', {
         month: 'long',
         year: 'numeric',
       })
-    : 'A Shinzi member';
+    : 'October 2026';
 }
 
 function messageOf(error: unknown): string {
@@ -795,19 +804,27 @@ useEffect(() => {
           </section>
         ) : (
               <div className="sh-profile-content">
-                <section className="sh-info-section">
-                  <h3>About me</h3>
-                  <p className="sh-bio">
-                    {userData.bio ||
-                      'This user has not added a bio yet.'}
-                  </p>
-                </section>
+                <div className="sh-profile-info-card">
+                  <div className="sh-info-card-section">
+                    <h3 className="sh-info-card-label">BIO</h3>
+                    <p className="sh-bio-text">
+                      {userData.bio ? (
+                        userData.bio
+                      ) : (
+                        <span className="sh-bio-empty">No bio added yet.</span>
+                      )}
+                    </p>
+                  </div>
 
-                <section className="sh-info-section">
-                  <h3>Member since</h3>
-                  <p>{dateLabel(userData.createdAt)}</p>
-                </section>
+                  <div className="sh-info-divider" />
 
+                  <div className="sh-info-card-section">
+                    <h3 className="sh-info-card-label">JOINED SHINZI</h3>
+                    <p className="sh-joined-text">
+                      {dateLabel(userData.createdAt || currentUser?.metadata?.creationTime)}
+                    </p>
+                  </div>
+                </div>
               </div>
         )}
       </section>
