@@ -266,6 +266,25 @@ const renderFormattedText = (text: string) => {
   });
 };
 
+const renderMentionColoredText = (text: string) => {
+  if (!text) return null;
+  const displayText = text.endsWith('\n') ? text + ' ' : text;
+  const parts = displayText.split(/((?:^|\s)[@#][a-zA-Z0-9_-]+(?![a-zA-Z0-9_-]))/g);
+  return parts.map((part, i) => {
+    const match = part.match(/^(\s*)([@#][a-zA-Z0-9_-]+)$/);
+    if (match) {
+      const [, space, mention] = match;
+      return (
+        <span key={i}>
+          {space}
+          <span className="shc-composer-mention-text">{mention}</span>
+        </span>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
+};
+
 const blobToDataUri = (blob: Blob): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -4031,6 +4050,7 @@ const handleSearchMessage = async (target: Rec) => {
       : username
         ? `Message @${username}`
         : `Message @${name}`;
+    const hasMentions = Boolean(messageText && /[@#][a-zA-Z0-9_-]+/.test(messageText));
 
     return (
       <>
@@ -4269,33 +4289,44 @@ const handleSearchMessage = async (target: Rec) => {
                 <Plus size={22} />
               </button>
 
-              <textarea
-                ref={inputRef}
-                value={messageText}
-                onChange={(e) => handleMessageChange(e.target.value, e.target)}
-                onSelect={(e) => {
-                  const target = e.target as HTMLTextAreaElement;
-                  const ctx = getMentionContext(target.value, target.selectionStart ?? target.value.length);
-                  if (ctx) {
-                    setMentionQuery(ctx.query);
-                    setMentionSelectedIndex(0);
-                  } else {
-                    setMentionQuery(null);
-                  }
-                }}
-                placeholder={composerPlaceholder}
-                maxLength={MAX_MESSAGE_LENGTH}
-                onKeyDown={onComposerKey}
-                rows={1}
-                className="shc-composer-textarea"
-                onFocus={() => {
-                  window.requestAnimationFrame(() => {
-                    if (scrollRef.current) {
-                      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+              <div className={`shc-composer-text-wrap ${hasMentions ? 'shc-composer-has-mentions' : ''}`}>
+                {hasMentions && (
+                  <div ref={backdropRef} className="shc-composer-backdrop" aria-hidden="true">
+                    {renderMentionColoredText(messageText)}
+                  </div>
+                )}
+                <textarea
+                  ref={inputRef}
+                  value={messageText}
+                  onChange={(e) => {
+                    handleMessageChange(e.target.value, e.target);
+                    syncBackdropScroll();
+                  }}
+                  onScroll={syncBackdropScroll}
+                  onSelect={(e) => {
+                    const target = e.target as HTMLTextAreaElement;
+                    const ctx = getMentionContext(target.value, target.selectionStart ?? target.value.length);
+                    if (ctx) {
+                      setMentionQuery(ctx.query);
+                      setMentionSelectedIndex(0);
+                    } else {
+                      setMentionQuery(null);
                     }
-                  });
-                }}
-              />
+                  }}
+                  placeholder={composerPlaceholder}
+                  maxLength={MAX_MESSAGE_LENGTH}
+                  onKeyDown={onComposerKey}
+                  rows={1}
+                  className="shc-composer-textarea"
+                  onFocus={() => {
+                    window.requestAnimationFrame(() => {
+                      if (scrollRef.current) {
+                        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+                      }
+                    });
+                  }}
+                />
+              </div>
 
               <button
                 type="button"

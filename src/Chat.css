@@ -1700,11 +1700,61 @@
   color: #9333ea !important;
 }
 
+.shc-composer-text-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.shc-composer-backdrop {
+  position: absolute;
+  inset: 0;
+  padding: 8px 6px;
+  margin: 0;
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
+  pointer-events: none;
+  color: #f1f2f4;
+  box-sizing: border-box;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  vertical-align: middle;
+}
+
+/* Mention text in typebox: pure purple text color, NO background box, NO border, NO padding */
+.shc-composer-mention-text {
+  color: #c084fc !important;
+  font-weight: 600 !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  box-shadow: none !important;
+}
+
+.shc-composer-has-mentions textarea {
+  color: transparent !important;
+  caret-color: #a855f7 !important;
+}
+
+.shc-composer-has-mentions textarea::selection {
+  background: rgba(147, 51, 234, 0.45);
+  color: transparent;
+}
+
 .shc-composer-textarea,
 .shc-composer textarea {
   position: relative;
   flex: 1;
   min-width: 0;
+  width: 100%;
   border: none !important;
   outline: none !important;
   background: transparent !important;
