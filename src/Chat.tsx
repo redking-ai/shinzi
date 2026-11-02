@@ -43,6 +43,7 @@ import {
   FileText,
   Flag,
   Gamepad2,
+  Hash,
   Image as ImageIcon,
   Megaphone,
   MessageCircle,
@@ -81,6 +82,9 @@ import {
   saveRecentEmoji,
 } from './emojiData';
 import OtherProfile from './OtherProfile';
+import MuiAvatar from '@mui/material/Avatar';
+import { Mention } from 'primereact/mention';
+import 'primereact/resources/primereact.min.css';
 import './Chat.css';
 
 const EmojiPicker = lazy(() => import('emoji-picker-react'));
@@ -229,42 +233,13 @@ const formatDiscordTimestamp = (value: any) => {
   return `${month}/${day}/${year} ${timeStr}`;
 };
 
-const isSingleEmoji = (text?: string): boolean => {
+const EMOJI_ONLY_REGEX = /^(?:\s*(?:(?:\p{Extended_Pictographic}|\p{Regional_Indicator}{2}|[0-9#*]\uFE0F?\u20E3)(?:\uFE0F|\uFE0E)?(?:\p{Emoji_Modifier})?(?:\u200D(?:\p{Extended_Pictographic}|\p{Regional_Indicator}{2}|[0-9#*]\uFE0F?\u20E3)(?:\uFE0F|\uFE0E)?(?:\p{Emoji_Modifier})?)*)\s*)+$/u;
+
+const isEmojiOnly = (text?: string): boolean => {
   if (!text) return false;
   const trimmed = text.trim();
   if (!trimmed) return false;
-
-  if (typeof Intl !== 'undefined' && (Intl as any).Segmenter) {
-    try {
-      const segmenter = new (Intl as any).Segmenter('en', { granularity: 'grapheme' });
-      const segments = Array.from(segmenter.segment(trimmed)) as Array<{ segment: string }>;
-      if (segments.length === 1) {
-        return /^\p{Extended_Pictographic}$/u.test(segments[0].segment);
-      }
-      return false;
-    } catch {}
-  }
-
-  const regex = /^(\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?(?:\p{Emoji_Modifier})?)$/u;
-  return regex.test(trimmed);
-};
-
-const renderComposerFormattedText = (text: string) => {
-  if (!text) return null;
-  const parts = text.split(/((?:^|\s)@[a-zA-Z0-9_]+(?![a-zA-Z0-9_]))/g);
-  return parts.map((part, i) => {
-    const match = part.match(/^(\s*)(@[a-zA-Z0-9_]+)$/);
-    if (match) {
-      const [, space, mention] = match;
-      return (
-        <span key={i}>
-          {space}
-          <span className="shc-composer-mention-token">{mention}</span>
-        </span>
-      );
-    }
-    return <span key={i}>{part}</span>;
-  });
+  return EMOJI_ONLY_REGEX.test(trimmed);
 };
 
 const isMentioned = (text: string, username?: string, displayName?: string) => {
@@ -280,15 +255,16 @@ const isMentioned = (text: string, username?: string, displayName?: string) => {
 
 const renderFormattedText = (text: string) => {
   if (!text) return null;
-  const parts = text.split(/((?:^|\s)@[a-zA-Z0-9_]+(?![a-zA-Z0-9_]))/g);
+  const parts = text.split(/((?:^|\s)[@#][a-zA-Z0-9_-]+(?![a-zA-Z0-9_-]))/g);
   return parts.map((part, i) => {
-    const match = part.match(/^(\s*)(@[a-zA-Z0-9_]+)$/);
+    const match = part.match(/^(\s*)([@#][a-zA-Z0-9_-]+)$/);
     if (match) {
       const [, space, mention] = match;
+      const isChannel = mention.startsWith('#');
       return (
         <span key={i}>
           {space}
-          <span className="shc-mention">{mention}</span>
+          <span className={isChannel ? 'shc-channel-mention' : 'shc-mention'}>{mention}</span>
         </span>
       );
     }
@@ -370,27 +346,13 @@ const testImageLoad = (url: string): Promise<boolean> =>
     img.src = url;
   });
 
-function UserAvatar({
-  uid: targetUid,
-  name,
-  photoURL,
-  profileAssetId,
-  size = 'md',
+function useResolvedAvatarUri(
+  targetUid?: string | null,
+  photoURL?: string,
+  profileAssetId?: string,
   group = false,
-  small = false,
-  className = '',
-}: {
-  uid?: string | null;
-  name?: string;
-  photoURL?: string;
-  profileAssetId?: string;
-  size?: 'xs' | 'sm' | 'md' | 'nav';
-  group?: boolean;
-  small?: boolean;
-  className?: string;
-}) {
+) {
   const drive = useDriveStore();
-  const effectiveSize = small ? 'sm' : size;
 
   const [imageUri, setImageUri] = useState<string | null>(() => {
     if (photoURL && (photoURL.startsWith('http') || photoURL.startsWith('data:'))) {
@@ -629,6 +591,36 @@ function UserAvatar({
     };
   }, [targetUid, photoURL, profileAssetId, group, drive.hasActiveSession]);
 
+  return { imageUri, loading, setImageUri };
+}
+
+function UserAvatar({
+  uid: targetUid,
+  name,
+  photoURL,
+  profileAssetId,
+  size = 'md',
+  group = false,
+  small = false,
+  className = '',
+}: {
+  uid?: string | null;
+  name?: string;
+  photoURL?: string;
+  profileAssetId?: string;
+  size?: 'xs' | 'sm' | 'md' | 'nav';
+  group?: boolean;
+  small?: boolean;
+  className?: string;
+}) {
+  const effectiveSize = small ? 'sm' : size;
+  const { imageUri, loading, setImageUri } = useResolvedAvatarUri(
+    targetUid,
+    photoURL,
+    profileAssetId,
+    group,
+  );
+
   const sizeClass =
     effectiveSize === 'xs'
       ? 'shc-avatar-xs'
@@ -655,6 +647,59 @@ function UserAvatar({
         <span>{initials(name || 'User')}</span>
       )}
     </div>
+  );
+}
+
+// FIX 3: MUI Avatar strictly for chat messages
+function ChatMessageAvatar({
+  uid: targetUid,
+  name,
+  photoURL,
+  profileAssetId,
+  size = 36,
+}: {
+  uid?: string | null;
+  name?: string;
+  photoURL?: string;
+  profileAssetId?: string;
+  size?: number;
+}) {
+  const { imageUri } = useResolvedAvatarUri(
+    targetUid,
+    photoURL,
+    profileAssetId,
+    false,
+  );
+  const fallbackLetter = initials(name || 'User');
+
+  return (
+    <MuiAvatar
+      src={imageUri || undefined}
+      alt={name || 'Avatar'}
+      slotProps={{
+        img: {
+          loading: 'lazy',
+          style: { objectFit: 'cover' },
+        },
+      }}
+      sx={{
+        width: size,
+        height: size,
+        minWidth: size,
+        minHeight: size,
+        maxWidth: size,
+        maxHeight: size,
+        flexShrink: 0,
+        borderRadius: '50%',
+        bgcolor: '#252238',
+        color: '#d8b4fe',
+        fontSize: Math.round(size * 0.42),
+        fontWeight: 600,
+        border: '1px solid rgba(255, 255, 255, 0.12)',
+      }}
+    >
+      {fallbackLetter}
+    </MuiAvatar>
   );
 }
 
@@ -1019,8 +1064,7 @@ export default function Chat({ onNavigate }: ChatProps) {
   const [recentEmojis, setRecentEmojis] = useState<string[]>(() => getRecentEmojis());
   const [toastMessage, setToastMessage] = useState<string>('');
   const toastMessageTimer = useRef<number | null>(null);
-  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
-  const [mentionSelectedIndex, setMentionSelectedIndex] = useState(0);
+  const [mentionSuggestionsList, setMentionSuggestionsList] = useState<any[]>([]);
   const [sending, setSending] = useState(false);
   const sendingRef = useRef(false);
   const [loadingChats, setLoadingChats] = useState(true);
@@ -1470,22 +1514,6 @@ export default function Chat({ onNavigate }: ChatProps) {
     return list;
   }, [selectedConversation, uid]);
 
-  const filteredMentionSuggestions = useMemo(() => {
-    if (mentionQuery === null) return [];
-    const q = mentionQuery.toLowerCase();
-    return mentionSuggestions.filter(
-      (s) =>
-        s.handle.toLowerCase().includes(q) ||
-        s.name.toLowerCase().includes(q),
-    );
-  }, [mentionQuery, mentionSuggestions]);
-
-  const activeComposerMentions = useMemo(() => {
-    if (!messageText) return [];
-    const matches = messageText.match(/(?:^|\s)@[a-zA-Z0-9_]+(?![a-zA-Z0-9_])/g) || [];
-    return Array.from(new Set(matches.map((m) => m.trim())));
-  }, [messageText]);
-
   const isFavorite = (conversation: Rec | null | undefined) => {
     if (!conversation?.id || !me) return false;
     if (conversation.id in optimisticFavorites) {
@@ -1576,18 +1604,6 @@ export default function Chat({ onNavigate }: ChatProps) {
   }, [activeImageViewer]);
 
   // Clear mention suggestions whenever switching conversations, screens, or when text is empty
-  useEffect(() => {
-    setMentionQuery(null);
-    setMentionSelectedIndex(0);
-  }, [screen, selected?.id]);
-
-  useEffect(() => {
-    if (!messageText) {
-      setMentionQuery(null);
-      setMentionSelectedIndex(0);
-    }
-  }, [messageText]);
-
   const openConversation = async (conversation: Rec) => {
     if (!conversation?.id) return;
 
@@ -1601,8 +1617,6 @@ export default function Chat({ onNavigate }: ChatProps) {
         : '';
     setMessageText(savedDraft);
     setReplyTarget(null);
-    setMentionQuery(null);
-    setMentionSelectedIndex(0);
     await markRead(conversation);
 
     setTimeout(() => {
@@ -1751,7 +1765,6 @@ export default function Chat({ onNavigate }: ChatProps) {
       setScreen('conversation');
       setMessageText('');
       setReplyTarget(null);
-      setMentionQuery(null);
     } catch (error) {
       console.error('Unable to open message request preview:', error);
       notify('Unable to open chat', messageOf(error));
@@ -1813,55 +1826,61 @@ const handleSearchMessage = async (target: Rec) => {
     }
   };
 
-  const checkMentionToken = (text: string, textarea?: HTMLTextAreaElement | null) => {
-    const el = textarea || inputRef.current;
-    const cursor = el && typeof el.selectionStart === 'number' ? el.selectionStart : text.length;
-    lastCaretPosRef.current = cursor;
-    const textBefore = text.slice(0, cursor);
-    const match = textBefore.match(/(?:^|\s)@([a-zA-Z0-9_]*)$/);
+  const onMentionSearch = (event: { trigger: string; query: string }) => {
+    const { trigger, query } = event;
+    const q = (query || '').toLowerCase();
 
-    if (match) {
-      setMentionQuery(match[1]);
-      setMentionSelectedIndex(0);
-    } else {
-      setMentionQuery(null);
+    if (trigger === '@') {
+      const results = mentionSuggestions.filter((item) => {
+        return (
+          item.handle.toLowerCase().includes(q) ||
+          (item.name && item.name.toLowerCase().includes(q))
+        );
+      });
+      setMentionSuggestionsList(results);
+    } else if (trigger === '#') {
+      // Step 4: Prepare #channel mentions architecture
+      // Only enabled when a real server/channel context exists.
+      // In ordinary DMs or groups without server channels, suggestions are empty.
+      const serverContext = (selectedConversation as any)?.serverChannels;
+      if (Array.isArray(serverContext) && serverContext.length > 0) {
+        const results = serverContext
+          .filter((ch: any) => ch.name.toLowerCase().includes(q))
+          .map((ch: any) => ({
+            id: ch.id || ch.name,
+            handle: ch.name,
+            name: ch.description || `#${ch.name}`,
+            isChannel: true,
+          }));
+        setMentionSuggestionsList(results);
+      } else {
+        setMentionSuggestionsList([]);
+      }
     }
   };
 
-  const insertMention = (handle: string) => {
-    const el = inputRef.current;
-    // Determine the caret position: use active element's selectionStart if focused,
-    // otherwise fallback to the accurately saved lastCaretPosRef
-    const cursor =
-      el && document.activeElement === el && typeof el.selectionStart === 'number'
-        ? el.selectionStart
-        : lastCaretPosRef.current || messageText.length;
-
-    const textBefore = messageText.slice(0, cursor);
-    const textAfter = messageText.slice(cursor);
-
-    const match = textBefore.match(/(?:^|\s)@([a-zA-Z0-9_]*)$/);
-    if (!match) {
-      setMentionQuery(null);
-      return;
-    }
-
-    const atIndex = match.index! + match[0].lastIndexOf('@');
-    const inserted = `@${handle} `;
-    const nextText = textBefore.slice(0, atIndex) + inserted + textAfter;
-    const newCursor = atIndex + inserted.length;
-
-    pendingCaretRef.current = newCursor;
-    lastCaretPosRef.current = newCursor;
-
-    setMessageText(nextText);
-    setMentionQuery(null);
-
-    if (el) {
-      el.value = nextText;
-      el.focus({ preventScroll: true });
-      el.setSelectionRange(newCursor, newCursor);
-    }
+  const mentionItemTemplate = (suggestion: any) => {
+    return (
+      <div className="shc-mention-item-inner">
+        <span className="shc-mention-item-badge">
+          {suggestion.isHere ? (
+            <Megaphone size={14} />
+          ) : suggestion.isChannel ? (
+            <Hash size={14} />
+          ) : (
+            <AtSign size={14} />
+          )}
+        </span>
+        <div className="shc-mention-item-details">
+          <span className="shc-mention-item-handle">
+            {suggestion.isChannel ? `#${suggestion.handle}` : `@${suggestion.handle}`}
+          </span>
+          {suggestion.name && suggestion.name !== suggestion.handle && (
+            <span className="shc-mention-item-desc">{suggestion.name}</span>
+          )}
+        </div>
+      </div>
+    );
   };
 
   const handleMessageChange = (text: string, el?: HTMLTextAreaElement) => {
@@ -1874,7 +1893,6 @@ const handleSearchMessage = async (target: Rec) => {
     }
 
     setMessageText(text);
-    checkMentionToken(text, el);
 
     if (selected?.id) {
       try {
@@ -1888,9 +1906,8 @@ const handleSearchMessage = async (target: Rec) => {
 
     if (el) {
       el.style.height = 'auto';
-      el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
+      el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
     }
-    syncBackdropScroll();
 
     if (!selected?.id || !uid) return;
 
@@ -2062,7 +2079,6 @@ const handleSearchMessage = async (target: Rec) => {
           setPendingDmMessages((previous) => [...previous, queuedMessage]);
           setMessageText('');
           setReplyTarget(null);
-          setMentionQuery(null);
         } catch (error) {
           console.error('Queue pending DM error:', error);
           notify('Message not saved', messageOf(error, 'Unable to queue this message.'));
@@ -2115,7 +2131,6 @@ const handleSearchMessage = async (target: Rec) => {
             setPendingDmMessages([queuedMessage]);
             setMessageText('');
             setReplyTarget(null);
-            setMentionQuery(null);
           }
         } finally {
           sendingRef.current = false;
@@ -2196,7 +2211,6 @@ const handleSearchMessage = async (target: Rec) => {
 
       setMessageText('');
       setReplyTarget(null);
-      setMentionQuery(null);
       if (inputRef.current) {
         inputRef.current.style.height = 'auto';
         if (screen === 'conversation' && selected?.id) {
@@ -2214,35 +2228,6 @@ const handleSearchMessage = async (target: Rec) => {
   };
 
   const onComposerKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (mentionQuery !== null && filteredMentionSuggestions.length > 0) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setMentionSelectedIndex(
-          (prev) => (prev + 1) % filteredMentionSuggestions.length,
-        );
-        return;
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setMentionSelectedIndex(
-          (prev) =>
-            (prev - 1 + filteredMentionSuggestions.length) %
-            filteredMentionSuggestions.length,
-        );
-        return;
-      }
-      if (e.key === 'Enter' || e.key === 'Tab') {
-        e.preventDefault();
-        insertMention(filteredMentionSuggestions[mentionSelectedIndex].handle);
-        return;
-      }
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        setMentionQuery(null);
-        return;
-      }
-    }
-
     // Enter sends on desktop; on touch screens it adds a new line.
     if (
       e.key === 'Enter' &&
@@ -3165,8 +3150,6 @@ const handleSearchMessage = async (target: Rec) => {
       setScreen('main');
       setMessageText('');
       setReplyTarget(null);
-      setMentionQuery(null);
-      setMentionSelectedIndex(0);
       setPanel(null);
       setShowAttach(false);
       return;
@@ -3309,46 +3292,100 @@ const handleSearchMessage = async (target: Rec) => {
     );
   };
 
-  const renderMessage = (item: Rec, index: number, messageList: Rec[] = messages) => {
-    const own = item.senderId === uid;
-    const previous = messageList[index - 1];
-    const showDay =
-      millis(item.createdAt) > 0 &&
-      (!previous || dayKey(previous.createdAt) !== dayKey(item.createdAt));
+  interface MessageGroupItem {
+    id: string;
+    senderId: string;
+    senderName: string;
+    senderPhotoURL?: string;
+    senderProfileAssetId?: string;
+    createdAt: any;
+    own: boolean;
+    showDay: boolean;
+    items: Rec[];
+  }
 
+  const buildMessageGroups = (
+    messageList: Rec[],
+    currentUid: string | null,
+    myProfileName?: string,
+  ): MessageGroupItem[] => {
+    const groups: MessageGroupItem[] = [];
+    let currentGroup: MessageGroupItem | null = null;
+
+    for (let i = 0; i < messageList.length; i++) {
+      const item = messageList[i];
+      const prev = messageList[i - 1];
+      const own = item.senderId === currentUid;
+      const showDay =
+        millis(item.createdAt) > 0 &&
+        (!prev || dayKey(prev.createdAt) !== dayKey(item.createdAt));
+
+      const replyId = item.replyToMessageId || item.replyTo?.id;
+      const isSpecial =
+        Boolean(item.deleted) ||
+        item.type === 'poll' ||
+        item.type === 'event' ||
+        item.type === 'voice' ||
+        Boolean(item.isCallRecord) ||
+        Boolean(item.isSystem);
+
+      const prevSpecial =
+        Boolean(prev) &&
+        (Boolean(prev.deleted) ||
+          prev.type === 'poll' ||
+          prev.type === 'event' ||
+          prev.type === 'voice' ||
+          Boolean(prev.isCallRecord) ||
+          Boolean(prev.isSystem));
+
+      const timeGap =
+        prev && item.createdAt && prev.createdAt
+          ? Math.abs(millis(item.createdAt) - millis(prev.createdAt)) > 5 * 60 * 1000
+          : true;
+
+      const startsNewGroup =
+        !currentGroup ||
+        showDay ||
+        currentGroup.senderId !== item.senderId ||
+        timeGap ||
+        Boolean(replyId) ||
+        isSpecial ||
+        Boolean(prevSpecial);
+
+      const authorName = own
+        ? myProfileName || 'You'
+        : item.senderName || item.senderUsername || 'User';
+
+      if (startsNewGroup) {
+        currentGroup = {
+          id: item.id || `group-${i}`,
+          senderId: item.senderId,
+          senderName: authorName,
+          senderPhotoURL: item.senderPhotoURL,
+          senderProfileAssetId: item.senderProfileAssetId,
+          createdAt: item.createdAt,
+          own,
+          showDay,
+          items: [item],
+        };
+        groups.push(currentGroup);
+      } else if (currentGroup) {
+        currentGroup.items.push(item);
+      }
+    }
+
+    return groups;
+  };
+
+  const renderGroupMessageItem = (
+    item: Rec,
+    itemIdx: number,
+    group: MessageGroupItem,
+    messageList: Rec[],
+  ) => {
+    const own = group.own;
     const replyId = item.replyToMessageId || item.replyTo?.id;
-    const original = replyId ? messageList.find((m) => m.id === replyId) : null;
-
-    const isSpecial =
-      Boolean(item.deleted) ||
-      item.type === 'poll' ||
-      item.type === 'event' ||
-      item.type === 'voice' ||
-      Boolean(item.isCallRecord) ||
-      Boolean(item.isSystem);
-
-    const prevSpecial =
-      Boolean(previous) &&
-      (Boolean(previous.deleted) ||
-        previous.type === 'poll' ||
-        previous.type === 'event' ||
-        previous.type === 'voice' ||
-        Boolean(previous.isCallRecord) ||
-        Boolean(previous.isSystem));
-
-    const timeGap =
-      previous && item.createdAt && previous.createdAt
-        ? Math.abs(millis(item.createdAt) - millis(previous.createdAt)) > 5 * 60 * 1000
-        : true;
-
-    const isFirstInGroup =
-      !previous ||
-      showDay ||
-      previous.senderId !== item.senderId ||
-      timeGap ||
-      Boolean(replyId) ||
-      isSpecial ||
-      Boolean(prevSpecial);
+    const original = replyId ? messageList.find((m: Rec) => m.id === replyId) : null;
 
     let quotedSender = 'User';
     let quotedText = 'Original message unavailable';
@@ -3385,10 +3422,6 @@ const handleSearchMessage = async (target: Rec) => {
         quotedText = item.replyTo.text || 'Original message unavailable';
       }
     }
-
-    const authorName = own
-      ? profile?.displayName || profile?.username || 'You'
-      : item.senderName || item.senderUsername || 'User';
 
     const mentionedMe =
       !own &&
@@ -3484,8 +3517,8 @@ const handleSearchMessage = async (target: Rec) => {
         </div>
       );
     } else {
-      const singleEmoji = isSingleEmoji(item.text);
-      contentNode = singleEmoji ? (
+      const emojiOnly = isEmojiOnly(item.text);
+      contentNode = emojiOnly ? (
         <span className="shc-dc-jumbo-emoji">{item.text.trim()}</span>
       ) : (
         <span className="shc-dc-text">{renderFormattedText(item.text)}</span>
@@ -3494,9 +3527,9 @@ const handleSearchMessage = async (target: Rec) => {
 
     const messageContent = (
       <div
-        className={`shc-dc-msg ${
-          isFirstInGroup ? 'shc-dc-group-start' : 'shc-dc-group-consecutive'
-        } ${mentionedMe ? 'shc-dc-msg-highlight' : ''}`}
+        className={`shc-dc-msg ${itemIdx > 0 ? 'shc-dc-group-consecutive' : ''} ${
+          mentionedMe ? 'shc-dc-msg-highlight' : ''
+        }`}
         onDoubleClick={() => !item.deleted && startReply(item)}
       >
         {replyId && (
@@ -3525,52 +3558,13 @@ const handleSearchMessage = async (target: Rec) => {
         )}
 
         <div className="shc-dc-main">
-          {isFirstInGroup ? (
-            <button
-              type="button"
-              className="shc-dc-avatar-col shc-profile-trigger"
-              onClick={(event) => {
-                event.stopPropagation();
-                openUserProfile(item.senderId);
-              }}
-              onDoubleClick={(event) => event.stopPropagation()}
-              aria-label={`Open ${authorName}'s profile`}
-            >
-              <UserAvatar
-                uid={item.senderId}
-                name={authorName}
-                photoURL={item.senderPhotoURL}
-                profileAssetId={item.senderProfileAssetId}
-                size="md"
-              />
-            </button>
-          ) : (
+          {itemIdx > 0 && (
             <div className="shc-dc-gutter-col" aria-hidden="true">
               <span className="shc-dc-gutter-time">{formatTime(item.createdAt)}</span>
             </div>
           )}
 
           <div className="shc-dc-body-col">
-            {isFirstInGroup && (
-              <div className="shc-dc-header">
-                <button
-                  type="button"
-                  className={`shc-dc-author shc-profile-trigger ${own ? 'shc-dc-author-me' : ''}`}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    openUserProfile(item.senderId);
-                  }}
-                  onDoubleClick={(event) => event.stopPropagation()}
-                  aria-label={`Open ${authorName}'s profile`}
-                >
-                  {authorName}
-                </button>
-                <span className="shc-dc-timestamp">
-                  {formatDiscordTimestamp(item.createdAt)}
-                </span>
-              </div>
-            )}
-
             <div className="shc-dc-content">
               {contentNode}
               {item.editedAt && (
@@ -3585,7 +3579,6 @@ const handleSearchMessage = async (target: Rec) => {
 
     return (
       <div key={item.id} id={`shc-msg-${item.id}`}>
-        {showDay && <div className="shc-day">{dateLabel(item.createdAt)}</div>}
         <SwipeableMessage
           item={item}
           own={own}
@@ -3594,6 +3587,64 @@ const handleSearchMessage = async (target: Rec) => {
         >
           {messageContent}
         </SwipeableMessage>
+      </div>
+    );
+  };
+
+  const renderMessageGroup = (group: MessageGroupItem, messageList: Rec[]) => {
+    return (
+      <div key={group.id} className="shc-msg-group-wrapper">
+        {group.showDay && <div className="shc-day">{dateLabel(group.createdAt)}</div>}
+        <div
+          className={`message-group shc-msg-group ${
+            group.own ? 'shc-msg-group-own' : 'shc-msg-group-incoming'
+          }`}
+        >
+          <div className="shc-msg-group-header">
+            <button
+              type="button"
+              className="shc-msg-group-avatar-btn shc-profile-trigger"
+              onClick={(event) => {
+                event.stopPropagation();
+                openUserProfile(group.senderId);
+              }}
+              onDoubleClick={(event) => event.stopPropagation()}
+              aria-label={`Open ${group.senderName}'s profile`}
+            >
+              <ChatMessageAvatar
+                uid={group.senderId}
+                name={group.senderName}
+                photoURL={group.senderPhotoURL}
+                profileAssetId={group.senderProfileAssetId}
+                size={36}
+              />
+            </button>
+
+            <div className="shc-msg-group-meta">
+              <button
+                type="button"
+                className={`shc-dc-author shc-profile-trigger ${group.own ? 'shc-dc-author-me' : ''}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  openUserProfile(group.senderId);
+                }}
+                onDoubleClick={(event) => event.stopPropagation()}
+                aria-label={`Open ${group.senderName}'s profile`}
+              >
+                {group.senderName}
+              </button>
+              <span className="shc-dc-timestamp">
+                {formatDiscordTimestamp(group.createdAt)}
+              </span>
+            </div>
+          </div>
+
+          <div className="shc-msg-group-items">
+            {group.items.map((item, itemIdx) => {
+              return renderGroupMessageItem(item, itemIdx, group, messageList);
+            })}
+          </div>
+        </div>
       </div>
     );
   };
@@ -4042,6 +4093,11 @@ const handleSearchMessage = async (target: Rec) => {
       : (pendingDmMessages && pendingDmMessages.length > 0
           ? pendingDmMessages
           : messages);
+    const messageGroups = buildMessageGroups(
+      conversationMessages,
+      uid,
+      profile?.displayName || profile?.username,
+    );
     const hasFirstContactIntro = Boolean(
       targetUid && selectedConversation?.hasChatIntro && conversationMessages.length === 0
     );
@@ -4171,7 +4227,7 @@ const handleSearchMessage = async (target: Rec) => {
               />
             )
           ) : (
-            conversationMessages.map((item, index) => renderMessage(item, index, conversationMessages))
+            messageGroups.map((group) => renderMessageGroup(group, conversationMessages))
           )}
         </div>
 
@@ -4245,47 +4301,6 @@ const handleSearchMessage = async (target: Rec) => {
         )}
 
         <div className="shc-composer-wrap">
-          {mentionQuery !== null && filteredMentionSuggestions.length > 0 && (
-            <div
-              className="shc-mention-panel"
-              role="listbox"
-              aria-label="Mention suggestions"
-            >
-              {filteredMentionSuggestions.map((item, idx) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  role="option"
-                  aria-selected={idx === mentionSelectedIndex}
-                  className={`shc-mention-item ${
-                    idx === mentionSelectedIndex ? 'shc-mention-item-active' : ''
-                  }`}
-                  onTouchStart={(e) => {
-                    // Prevent blur so mobile keyboard stays open and caret isn't lost!
-                    e.preventDefault();
-                  }}
-                  onPointerDown={(e) => {
-                    e.preventDefault();
-                  }}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                  }}
-                  onClick={() => insertMention(item.handle)}
-                >
-                  <span className="shc-mention-item-badge">
-                    {item.isHere ? <Megaphone size={14} /> : <AtSign size={14} />}
-                  </span>
-                  <div className="shc-mention-item-details">
-                    <span className="shc-mention-item-handle">@{item.handle}</span>
-                    {item.isHere && item.name && (
-                      <span className="shc-mention-item-desc">{item.name}</span>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-
           <div
             className={
               isKeyboardOpen ? 'shc-composer shc-composer-kb' : 'shc-composer'
@@ -4300,34 +4315,32 @@ const handleSearchMessage = async (target: Rec) => {
               <Plus size={26} />
             </button>
 
-            <div
-              className={`shc-composer-input-box ${
-                activeComposerMentions.length > 0
-                  ? 'shc-composer-has-mentions'
-                  : ''
-              }`}
-            >
-              <div
-                className="shc-composer-backdrop"
-                aria-hidden="true"
-                ref={backdropRef}
-              >
-                {renderComposerFormattedText(messageText)}
-              </div>
-              <textarea
-                ref={inputRef}
-                rows={1}
-                placeholder={composerPlaceholder}
+            <div className="shc-composer-input-box">
+              <Mention
                 value={messageText}
+                onChange={(e: any) => handleMessageChange(e.target?.value || '', e.target as any)}
+                suggestions={mentionSuggestionsList}
+                onSearch={onMentionSearch}
+                field="handle"
+                trigger={['@', '#']}
+                itemTemplate={mentionItemTemplate}
+                placeholder={composerPlaceholder}
                 maxLength={MAX_MESSAGE_LENGTH}
-                onChange={(e) => handleMessageChange(e.target.value, e.target)}
-                onSelect={(e) => {
-                  lastCaretPosRef.current = e.currentTarget.selectionStart;
-                }}
                 onKeyDown={onComposerKey}
-                onClick={(e) => checkMentionToken(messageText, e.currentTarget)}
-                onKeyUp={(e) => checkMentionToken(messageText, e.currentTarget)}
-                onScroll={syncBackdropScroll}
+                inputRef={inputRef as any}
+                autoResize={false}
+                rows={1}
+                className="shc-primereact-mention"
+                inputClassName="shc-composer-textarea"
+                panelClassName="shc-primereact-mention-panel"
+                scrollHeight="220px"
+                onSelect={() => {
+                  if (inputRef.current) {
+                    const pos = inputRef.current.selectionStart;
+                    pendingCaretRef.current = pos;
+                    lastCaretPosRef.current = pos;
+                  }
+                }}
                 onFocus={() => {
                   window.requestAnimationFrame(() => {
                     if (scrollRef.current) {

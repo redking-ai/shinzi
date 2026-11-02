@@ -1,5 +1,5 @@
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   deleteDoc,
   doc,
@@ -9,7 +9,7 @@ import {
   serverTimestamp,
   setDoc,
 } from 'firebase/firestore';
-import { ArrowLeft, Clock3, Ellipsis, MessageCircle, Phone, UserPlus, UserRound } from 'lucide-react';
+import { Clock3, Ellipsis, MessageCircle, Phone, UserPlus, UserRound } from 'lucide-react';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { auth, db } from './firebaseConfig';
 import { useDriveStore } from './driveStore';
@@ -114,78 +114,6 @@ export default function OtherProfile({
     incoming: false,
   });
   const [friendActionBusy, setFriendActionBusy] = useState(false);
-  const [dragY, setDragY] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
-  const [isClosing, setIsClosing] = useState(false);
-  const containerRef = useRef<HTMLElement | null>(null);
-  const handleRef = useRef<HTMLSpanElement | null>(null);
-
-  const handleClose = useCallback(() => {
-    setIsClosing(true);
-    setTimeout(() => {
-      if (onClose) {
-        onClose();
-        return;
-      }
-      if (typeof window !== 'undefined' && window.history.length > 1) {
-        window.history.back();
-      } else {
-        navigateTo('/chat');
-      }
-    }, 150);
-  }, [onClose]);
-
-  // Pull-down gesture specifically bound to the drag handle area so content scrolls freely!
-  useEffect(() => {
-    const handleEl = handleRef.current;
-    if (!handleEl) return;
-
-    let touchStartY: number | null = null;
-
-    const onTouchStart = (e: TouchEvent) => {
-      touchStartY = e.touches[0]?.clientY ?? null;
-    };
-
-    const onTouchMove = (e: TouchEvent) => {
-      if (touchStartY === null) return;
-      const currentY = e.touches[0]?.clientY ?? touchStartY;
-      const deltaY = currentY - touchStartY;
-
-      if (deltaY > 0) {
-        if (e.cancelable) e.preventDefault();
-        setIsDragging(true);
-        const damping = deltaY > 160 ? 160 + (deltaY - 160) * 0.45 : deltaY;
-        setDragY(Math.max(0, damping));
-      } else {
-        setDragY(0);
-        setIsDragging(false);
-      }
-    };
-
-    const onTouchEnd = () => {
-      touchStartY = null;
-      setIsDragging(false);
-      setDragY((prev) => {
-        if (prev > 80) {
-          handleClose();
-          return typeof window !== 'undefined' ? window.innerHeight : 800;
-        }
-        return 0;
-      });
-    };
-
-    handleEl.addEventListener('touchstart', onTouchStart, { passive: true });
-    handleEl.addEventListener('touchmove', onTouchMove, { passive: false });
-    handleEl.addEventListener('touchend', onTouchEnd, { passive: true });
-    handleEl.addEventListener('touchcancel', onTouchEnd, { passive: true });
-
-    return () => {
-      handleEl.removeEventListener('touchstart', onTouchStart);
-      handleEl.removeEventListener('touchmove', onTouchMove);
-      handleEl.removeEventListener('touchend', onTouchEnd);
-      handleEl.removeEventListener('touchcancel', onTouchEnd);
-    };
-  }, [handleClose]);
 
   useEffect(() => {
     if (!currentUser || !targetUid || currentUser.uid === targetUid) {
@@ -541,17 +469,7 @@ export default function OtherProfile({
   if (loading) {
     return (
       <main className="sh-profile-page sh-other-profile-page">
-        <div className="sh-profile-banner" style={{ height: 60 }}>
-          <button
-            type="button"
-            className="sh-banner-back-button"
-            title="Back"
-            aria-label="Back"
-            onClick={handleClose}
-          >
-            <ArrowLeft size={20} />
-          </button>
-        </div>
+        <div className="sh-profile-banner" style={{ height: 60 }} />
         <div className="sh-profile-state">
           Loading profile…
         </div>
@@ -562,17 +480,7 @@ export default function OtherProfile({
   if (!userData) {
     return (
       <main className="sh-profile-page sh-other-profile-page">
-        <div className="sh-profile-banner" style={{ height: 60 }}>
-          <button
-            type="button"
-            className="sh-banner-back-button"
-            title="Back"
-            aria-label="Back"
-            onClick={handleClose}
-          >
-            <ArrowLeft size={20} />
-          </button>
-        </div>
+        <div className="sh-profile-banner" style={{ height: 60 }} />
         <div className="sh-profile-state">
           {error || 'Profile unavailable.'}
 
@@ -588,16 +496,7 @@ export default function OtherProfile({
   }
 
   return (
-    <main
-      ref={containerRef}
-      className="sh-profile-page sh-other-profile-page"
-      style={{
-        transform: dragY > 0 || isClosing ? `translateY(${dragY}px)` : undefined,
-        transition: isDragging ? 'none' : 'transform 0.22s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease',
-        opacity: isClosing ? 0 : 1,
-        willChange: 'transform',
-      }}
-    >
+    <main className="sh-profile-page sh-other-profile-page">
       {error && (
         <div className="sh-profile-alert" role="alert">
           <span>{error}</span>
@@ -624,16 +523,6 @@ export default function OtherProfile({
           }
         >
           {!banner && <div className="sh-banner-glow" />}
-          <span ref={handleRef} className="sh-profile-sheet-handle" aria-hidden="true" />
-          <button
-            type="button"
-            className="sh-banner-back-button"
-            title="Back to conversation"
-            aria-label="Back to conversation"
-            onClick={handleClose}
-          >
-            <ArrowLeft size={20} />
-          </button>
           <button
             type="button"
             className="sh-banner-settings-button"
