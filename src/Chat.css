@@ -835,95 +835,12 @@
   justify-content: flex-start;
 }
 
-/* Message Box Layout and Spacing (FIX 1) */
-.shc-msg-group-wrapper {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.message-group,
-.shc-msg-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 100%;
-  margin-bottom: 12px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  box-sizing: border-box;
-  position: relative;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-
-.shc-msg-group-incoming {
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-}
-
-.shc-msg-group-incoming:hover {
-  background: rgba(255, 255, 255, 0.048);
-  border-color: rgba(255, 255, 255, 0.1);
-}
-
-.shc-msg-group-own {
-  background: rgba(147, 51, 234, 0.08);
-  border: 1px solid rgba(168, 85, 247, 0.18);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-}
-
-.shc-msg-group-own:hover {
-  background: rgba(147, 51, 234, 0.11);
-  border-color: rgba(168, 85, 247, 0.26);
-}
-
-.shc-msg-group-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 2px;
-}
-
-.shc-msg-group-avatar-btn {
-  border: 0;
-  padding: 0;
-  background: transparent;
-  cursor: pointer;
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.shc-msg-group-meta {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  flex: 1;
-  min-width: 0;
-}
-
-.shc-msg-group-items {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: 100%;
-  padding-left: 46px;
-}
-
-@media (max-width: 600px) {
-  .shc-msg-group-items {
-    padding-left: 0;
-  }
-}
-
 /* Discord-style Message Rows */
 .shc-dc-msg {
   display: flex;
   flex-direction: column;
   width: 100%;
-  padding: 2px 4px;
+  padding: 2px 8px;
   border-radius: 6px;
   position: relative;
   transition: background 0.12s ease;

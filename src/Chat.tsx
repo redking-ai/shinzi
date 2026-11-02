@@ -3292,100 +3292,46 @@ const handleSearchMessage = async (target: Rec) => {
     );
   };
 
-  interface MessageGroupItem {
-    id: string;
-    senderId: string;
-    senderName: string;
-    senderPhotoURL?: string;
-    senderProfileAssetId?: string;
-    createdAt: any;
-    own: boolean;
-    showDay: boolean;
-    items: Rec[];
-  }
+  const renderMessage = (item: Rec, index: number, messageList: Rec[] = messages) => {
+    const own = item.senderId === uid;
+    const previous = messageList[index - 1];
+    const showDay =
+      millis(item.createdAt) > 0 &&
+      (!previous || dayKey(previous.createdAt) !== dayKey(item.createdAt));
 
-  const buildMessageGroups = (
-    messageList: Rec[],
-    currentUid: string | null,
-    myProfileName?: string,
-  ): MessageGroupItem[] => {
-    const groups: MessageGroupItem[] = [];
-    let currentGroup: MessageGroupItem | null = null;
-
-    for (let i = 0; i < messageList.length; i++) {
-      const item = messageList[i];
-      const prev = messageList[i - 1];
-      const own = item.senderId === currentUid;
-      const showDay =
-        millis(item.createdAt) > 0 &&
-        (!prev || dayKey(prev.createdAt) !== dayKey(item.createdAt));
-
-      const replyId = item.replyToMessageId || item.replyTo?.id;
-      const isSpecial =
-        Boolean(item.deleted) ||
-        item.type === 'poll' ||
-        item.type === 'event' ||
-        item.type === 'voice' ||
-        Boolean(item.isCallRecord) ||
-        Boolean(item.isSystem);
-
-      const prevSpecial =
-        Boolean(prev) &&
-        (Boolean(prev.deleted) ||
-          prev.type === 'poll' ||
-          prev.type === 'event' ||
-          prev.type === 'voice' ||
-          Boolean(prev.isCallRecord) ||
-          Boolean(prev.isSystem));
-
-      const timeGap =
-        prev && item.createdAt && prev.createdAt
-          ? Math.abs(millis(item.createdAt) - millis(prev.createdAt)) > 5 * 60 * 1000
-          : true;
-
-      const startsNewGroup =
-        !currentGroup ||
-        showDay ||
-        currentGroup.senderId !== item.senderId ||
-        timeGap ||
-        Boolean(replyId) ||
-        isSpecial ||
-        Boolean(prevSpecial);
-
-      const authorName = own
-        ? myProfileName || 'You'
-        : item.senderName || item.senderUsername || 'User';
-
-      if (startsNewGroup) {
-        currentGroup = {
-          id: item.id || `group-${i}`,
-          senderId: item.senderId,
-          senderName: authorName,
-          senderPhotoURL: item.senderPhotoURL,
-          senderProfileAssetId: item.senderProfileAssetId,
-          createdAt: item.createdAt,
-          own,
-          showDay,
-          items: [item],
-        };
-        groups.push(currentGroup);
-      } else if (currentGroup) {
-        currentGroup.items.push(item);
-      }
-    }
-
-    return groups;
-  };
-
-  const renderGroupMessageItem = (
-    item: Rec,
-    itemIdx: number,
-    group: MessageGroupItem,
-    messageList: Rec[],
-  ) => {
-    const own = group.own;
     const replyId = item.replyToMessageId || item.replyTo?.id;
-    const original = replyId ? messageList.find((m: Rec) => m.id === replyId) : null;
+    const original = replyId ? messageList.find((m) => m.id === replyId) : null;
+
+    const isSpecial =
+      Boolean(item.deleted) ||
+      item.type === 'poll' ||
+      item.type === 'event' ||
+      item.type === 'voice' ||
+      Boolean(item.isCallRecord) ||
+      Boolean(item.isSystem);
+
+    const prevSpecial =
+      Boolean(previous) &&
+      (Boolean(previous.deleted) ||
+        previous.type === 'poll' ||
+        previous.type === 'event' ||
+        previous.type === 'voice' ||
+        Boolean(previous.isCallRecord) ||
+        Boolean(previous.isSystem));
+
+    const timeGap =
+      previous && item.createdAt && previous.createdAt
+        ? Math.abs(millis(item.createdAt) - millis(previous.createdAt)) > 5 * 60 * 1000
+        : true;
+
+    const isFirstInGroup =
+      !previous ||
+      showDay ||
+      previous.senderId !== item.senderId ||
+      timeGap ||
+      Boolean(replyId) ||
+      isSpecial ||
+      Boolean(prevSpecial);
 
     let quotedSender = 'User';
     let quotedText = 'Original message unavailable';
@@ -3422,6 +3368,10 @@ const handleSearchMessage = async (target: Rec) => {
         quotedText = item.replyTo.text || 'Original message unavailable';
       }
     }
+
+    const authorName = own
+      ? profile?.displayName || profile?.username || 'You'
+      : item.senderName || item.senderUsername || 'User';
 
     const mentionedMe =
       !own &&
@@ -3527,9 +3477,9 @@ const handleSearchMessage = async (target: Rec) => {
 
     const messageContent = (
       <div
-        className={`shc-dc-msg ${itemIdx > 0 ? 'shc-dc-group-consecutive' : ''} ${
-          mentionedMe ? 'shc-dc-msg-highlight' : ''
-        }`}
+        className={`shc-dc-msg ${
+          isFirstInGroup ? 'shc-dc-group-start' : 'shc-dc-group-consecutive'
+        } ${mentionedMe ? 'shc-dc-msg-highlight' : ''}`}
         onDoubleClick={() => !item.deleted && startReply(item)}
       >
         {replyId && (
@@ -3558,13 +3508,52 @@ const handleSearchMessage = async (target: Rec) => {
         )}
 
         <div className="shc-dc-main">
-          {itemIdx > 0 && (
+          {isFirstInGroup ? (
+            <button
+              type="button"
+              className="shc-dc-avatar-col shc-profile-trigger"
+              onClick={(event) => {
+                event.stopPropagation();
+                openUserProfile(item.senderId);
+              }}
+              onDoubleClick={(event) => event.stopPropagation()}
+              aria-label={`Open ${authorName}'s profile`}
+            >
+              <ChatMessageAvatar
+                uid={item.senderId}
+                name={authorName}
+                photoURL={item.senderPhotoURL}
+                profileAssetId={item.senderProfileAssetId}
+                size={36}
+              />
+            </button>
+          ) : (
             <div className="shc-dc-gutter-col" aria-hidden="true">
               <span className="shc-dc-gutter-time">{formatTime(item.createdAt)}</span>
             </div>
           )}
 
           <div className="shc-dc-body-col">
+            {isFirstInGroup && (
+              <div className="shc-dc-header">
+                <button
+                  type="button"
+                  className={`shc-dc-author shc-profile-trigger ${own ? 'shc-dc-author-me' : ''}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openUserProfile(item.senderId);
+                  }}
+                  onDoubleClick={(event) => event.stopPropagation()}
+                  aria-label={`Open ${authorName}'s profile`}
+                >
+                  {authorName}
+                </button>
+                <span className="shc-dc-timestamp">
+                  {formatDiscordTimestamp(item.createdAt)}
+                </span>
+              </div>
+            )}
+
             <div className="shc-dc-content">
               {contentNode}
               {item.editedAt && (
@@ -3579,6 +3568,7 @@ const handleSearchMessage = async (target: Rec) => {
 
     return (
       <div key={item.id} id={`shc-msg-${item.id}`}>
+        {showDay && <div className="shc-day">{dateLabel(item.createdAt)}</div>}
         <SwipeableMessage
           item={item}
           own={own}
@@ -3587,64 +3577,6 @@ const handleSearchMessage = async (target: Rec) => {
         >
           {messageContent}
         </SwipeableMessage>
-      </div>
-    );
-  };
-
-  const renderMessageGroup = (group: MessageGroupItem, messageList: Rec[]) => {
-    return (
-      <div key={group.id} className="shc-msg-group-wrapper">
-        {group.showDay && <div className="shc-day">{dateLabel(group.createdAt)}</div>}
-        <div
-          className={`message-group shc-msg-group ${
-            group.own ? 'shc-msg-group-own' : 'shc-msg-group-incoming'
-          }`}
-        >
-          <div className="shc-msg-group-header">
-            <button
-              type="button"
-              className="shc-msg-group-avatar-btn shc-profile-trigger"
-              onClick={(event) => {
-                event.stopPropagation();
-                openUserProfile(group.senderId);
-              }}
-              onDoubleClick={(event) => event.stopPropagation()}
-              aria-label={`Open ${group.senderName}'s profile`}
-            >
-              <ChatMessageAvatar
-                uid={group.senderId}
-                name={group.senderName}
-                photoURL={group.senderPhotoURL}
-                profileAssetId={group.senderProfileAssetId}
-                size={36}
-              />
-            </button>
-
-            <div className="shc-msg-group-meta">
-              <button
-                type="button"
-                className={`shc-dc-author shc-profile-trigger ${group.own ? 'shc-dc-author-me' : ''}`}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  openUserProfile(group.senderId);
-                }}
-                onDoubleClick={(event) => event.stopPropagation()}
-                aria-label={`Open ${group.senderName}'s profile`}
-              >
-                {group.senderName}
-              </button>
-              <span className="shc-dc-timestamp">
-                {formatDiscordTimestamp(group.createdAt)}
-              </span>
-            </div>
-          </div>
-
-          <div className="shc-msg-group-items">
-            {group.items.map((item, itemIdx) => {
-              return renderGroupMessageItem(item, itemIdx, group, messageList);
-            })}
-          </div>
-        </div>
       </div>
     );
   };
@@ -4093,11 +4025,6 @@ const handleSearchMessage = async (target: Rec) => {
       : (pendingDmMessages && pendingDmMessages.length > 0
           ? pendingDmMessages
           : messages);
-    const messageGroups = buildMessageGroups(
-      conversationMessages,
-      uid,
-      profile?.displayName || profile?.username,
-    );
     const hasFirstContactIntro = Boolean(
       targetUid && selectedConversation?.hasChatIntro && conversationMessages.length === 0
     );
@@ -4227,7 +4154,7 @@ const handleSearchMessage = async (target: Rec) => {
               />
             )
           ) : (
-            messageGroups.map((group) => renderMessageGroup(group, conversationMessages))
+            conversationMessages.map((item, index) => renderMessage(item, index, conversationMessages))
           )}
         </div>
 
