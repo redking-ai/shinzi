@@ -1511,9 +1511,9 @@
 .shc-composer {
   flex-shrink: 0;
   display: flex;
-  align-items: flex-end;
-  gap: 4px;
-  padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
+  align-items: center;
+  gap: 0;
+  padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
   background: var(--bg);
 }
 
@@ -1598,143 +1598,138 @@
 .shc-composer-input-box {
   position: relative;
   flex: 1;
+  width: 100%;
   min-width: 0;
-  min-height: 42px;
+  min-height: 44px;
   max-height: 140px;
-  border: 1px solid var(--line);
-  border-radius: 21px;
-  background: var(--surface);
+  border: 1px solid #2d2446;
+  border-radius: 24px;
+  background: #140e24;
   display: flex;
-  overflow: hidden;
-  transition: border-color 0.15s ease;
+  align-items: center;
+  padding: 3px 6px;
+  box-sizing: border-box;
+  gap: 2px;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .shc-composer-input-box:focus-within {
-  border-color: #5865f2;
+  border-color: #762bff;
+  background: #17102b;
 }
 
-.shc-composer-backdrop {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 10px 15px;
-  margin: 0;
-  font-family: inherit;
-  font-size: 15px;
-  line-height: 1.35;
-  white-space: pre-wrap;
-  word-break: break-word;
-  pointer-events: none;
-  color: var(--text);
-  box-sizing: border-box;
-  overflow: hidden;
-}
-
-.shc-composer-mention-token {
-  background: rgba(118, 43, 255, 0.25);
-  color: #d8b4fe;
-  border-radius: 4px;
-  padding: 1px 5px;
-  font-weight: 600;
-}
-
-.shc-attach-btn,
-.shc-composer .shc-attach-btn {
-  width: 36px !important;
-  height: 36px !important;
-  min-width: 36px !important;
-  min-height: 36px !important;
-  border-radius: 50% !important;
-  background: #17102a !important;
-  border: 1px solid #39265d !important;
-  color: #d8b4fe !important;
+.shc-composer-icon-btn {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
-  flex-shrink: 0 !important;
+  align-self: center !important;
+  width: 36px !important;
+  min-width: 36px !important;
+  height: 36px !important;
+  min-height: 36px !important;
   padding: 0 !important;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  margin: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  color: #9d94b8 !important;
+  cursor: pointer !important;
+  flex-shrink: 0 !important;
+  line-height: 1 !important;
+  transition: color 0.15s ease, transform 0.1s ease !important;
 }
 
-.shc-attach-btn:hover,
-.shc-composer .shc-attach-btn:hover {
-  background: #23183d !important;
-  border-color: #762bff !important;
+.shc-composer-icon-btn svg {
+  display: block !important;
+  margin: auto !important;
 }
 
+.shc-composer-icon-btn:hover {
+  color: #d8b4fe !important;
+}
+
+.shc-composer-icon-btn:active {
+  transform: scale(0.92) !important;
+}
+
+.shc-composer-attach-btn {
+  color: #b8b0cf !important;
+}
+
+.shc-composer-attach-btn:hover {
+  color: #ffffff !important;
+}
+
+/* Emoji icon centered vertically, not pushed up */
 .shc-composer-emoji-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  min-width: 38px;
-  height: 100%;
-  padding: 0 8px;
-  background: transparent;
-  border: none;
-  color: #949ba4;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: color 0.15s ease;
+  color: #9d94b8 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  align-self: center !important;
+  line-height: 1 !important;
+  margin: 0 !important;
 }
 
 .shc-composer-emoji-btn:hover {
-  color: #d8b4fe;
+  color: #d8b4fe !important;
 }
 
+.shc-composer-voice-btn {
+  color: #9d94b8 !important;
+}
+
+.shc-composer-voice-btn.shc-rec-on {
+  color: #ef4444 !important;
+}
+
+.shc-composer-send-btn {
+  color: #554a72 !important;
+  opacity: 0.35 !important;
+  cursor: default !important;
+}
+
+.shc-composer-send-btn.shc-send-active {
+  color: #762bff !important;
+  opacity: 1 !important;
+  cursor: pointer !important;
+}
+
+.shc-composer-send-btn.shc-send-active:hover {
+  color: #9333ea !important;
+}
+
+.shc-composer-textarea,
 .shc-composer textarea {
   position: relative;
-  width: 100%;
-  border: none;
-  outline: none;
-  background: transparent;
-  padding: 10px 15px;
+  flex: 1;
+  min-width: 0;
+  border: none !important;
+  outline: none !important;
+  background: transparent !important;
+  padding: 8px 6px;
   margin: 0;
   font-family: inherit;
   font-size: 15px;
   line-height: 1.35;
-  caret-color: #ffffff;
+  color: #f1f2f4 !important;
+  caret-color: #a855f7;
   resize: none;
   box-sizing: border-box;
-  min-height: 42px;
-  max-height: 140px;
-  color: var(--text);
+  min-height: 36px;
+  max-height: 120px;
+  vertical-align: middle;
 }
 
+.shc-composer-textarea::placeholder,
+.shc-composer textarea::placeholder {
+  color: #787090 !important;
+}
+
+.shc-composer-textarea:focus,
 .shc-composer textarea:focus {
-  outline: none;
-}
-
-.shc-composer-has-mentions textarea {
-  color: transparent !important;
-}
-
-.shc-composer-has-mentions textarea::placeholder {
-  color: var(--muted) !important;
-}
-
-.shc-send {
-  flex-shrink: 0;
-  width: 42px;
-  height: 42px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 50%;
-  background: #5865F2;
-  color: #fff;
-  transition: background 0.15s ease, transform 0.1s ease;
-}
-
-.shc-send:hover {
-  background: #4752c4;
-}
-
-.shc-send:active {
-  transform: scale(0.95);
+  outline: none !important;
 }
 
 .shc-counter {

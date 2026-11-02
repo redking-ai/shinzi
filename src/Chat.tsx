@@ -266,24 +266,6 @@ const renderFormattedText = (text: string) => {
   });
 };
 
-const renderComposerMentionBackdrop = (text: string) => {
-  if (!text) return null;
-  const parts = text.split(/((?:^|\s)[@#][a-zA-Z0-9_-]+(?![a-zA-Z0-9_-]))/g);
-  return parts.map((part, i) => {
-    const match = part.match(/^(\s*)([@#][a-zA-Z0-9_-]+)$/);
-    if (match) {
-      const [, space, mention] = match;
-      return (
-        <span key={i}>
-          {space}
-          <span className="shc-composer-mention-token">{mention}</span>
-        </span>
-      );
-    }
-    return <span key={i}>{part}</span>;
-  });
-};
-
 const blobToDataUri = (blob: Blob): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -4272,99 +4254,90 @@ const handleSearchMessage = async (target: Rec) => {
             </div>
           )}
 
-          {(() => {
-            const hasComposerMentions = Boolean(messageText && /[@#][a-zA-Z0-9_-]+/.test(messageText));
-            return (
-              <div
-                className={
-                  isKeyboardOpen ? 'shc-composer shc-composer-kb' : 'shc-composer'
-                }
+          <div
+            className={
+              isKeyboardOpen ? 'shc-composer shc-composer-kb' : 'shc-composer'
+            }
+          >
+            <div className="shc-composer-input-box">
+              <button
+                type="button"
+                className="shc-composer-icon-btn shc-composer-attach-btn"
+                onClick={() => setShowAttach(true)}
+                aria-label="Attach"
               >
-                <button
-                  type="button"
-                  className="shc-icon-btn shc-accent-btn shc-attach-btn"
-                  onClick={() => setShowAttach(true)}
-                  aria-label="Attach"
-                >
-                  <Plus size={20} />
-                </button>
+                <Plus size={22} />
+              </button>
 
-                <div className={`shc-composer-input-box ${hasComposerMentions ? 'shc-composer-has-mentions' : ''}`}>
-                  {hasComposerMentions && (
-                    <div className="shc-composer-backdrop" aria-hidden="true">
-                      {renderComposerMentionBackdrop(messageText)}
-                    </div>
-                  )}
-                  <textarea
-                    ref={inputRef}
-                    value={messageText}
-                    onChange={(e) => handleMessageChange(e.target.value, e.target)}
-                    onSelect={(e) => {
-                      const target = e.target as HTMLTextAreaElement;
-                      const ctx = getMentionContext(target.value, target.selectionStart ?? target.value.length);
-                      if (ctx) {
-                        setMentionQuery(ctx.query);
-                        setMentionSelectedIndex(0);
-                      } else {
-                        setMentionQuery(null);
-                      }
-                    }}
-                    placeholder={composerPlaceholder}
-                    maxLength={MAX_MESSAGE_LENGTH}
-                    onKeyDown={onComposerKey}
-                    rows={1}
-                    className="shc-composer-textarea"
-                    onFocus={() => {
-                      window.requestAnimationFrame(() => {
-                        if (scrollRef.current) {
-                          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-                        }
-                      });
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="shc-composer-emoji-btn"
-                    onClick={() => {
-                      setActionMessage(null);
-                      setShowEmojiPicker((p) => !p);
-                    }}
-                    aria-label="Toggle emoji picker"
-                  >
-                    <Smile size={20} />
-                  </button>
-                </div>
+              <textarea
+                ref={inputRef}
+                value={messageText}
+                onChange={(e) => handleMessageChange(e.target.value, e.target)}
+                onSelect={(e) => {
+                  const target = e.target as HTMLTextAreaElement;
+                  const ctx = getMentionContext(target.value, target.selectionStart ?? target.value.length);
+                  if (ctx) {
+                    setMentionQuery(ctx.query);
+                    setMentionSelectedIndex(0);
+                  } else {
+                    setMentionQuery(null);
+                  }
+                }}
+                placeholder={composerPlaceholder}
+                maxLength={MAX_MESSAGE_LENGTH}
+                onKeyDown={onComposerKey}
+                rows={1}
+                className="shc-composer-textarea"
+                onFocus={() => {
+                  window.requestAnimationFrame(() => {
+                    if (scrollRef.current) {
+                      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+                    }
+                  });
+                }}
+              />
 
-                <button
-                  type="button"
-                  className={recording ? 'shc-icon-btn shc-rec-on' : 'shc-icon-btn'}
-                  onClick={toggleRecordingUI}
-                  aria-label={recording ? 'Stop recording' : 'Record voice message'}
-                >
-                  {recording ? <Square size={22} /> : <Mic size={23} />}
-                </button>
+              <button
+                type="button"
+                className="shc-composer-icon-btn shc-composer-emoji-btn"
+                onClick={() => {
+                  setActionMessage(null);
+                  setShowEmojiPicker((p) => !p);
+                }}
+                aria-label="Toggle emoji picker"
+              >
+                <Smile size={21} />
+              </button>
 
-                <button
-                  type="button"
-                  className="shc-send"
-                  disabled={!messageText.trim() || sending || (Boolean(targetUid) && dmRequestState === 'incoming')}
-                  onPointerDown={(e) => {
-                    // Crucial for mobile virtual keyboards:
-                    // Calling preventDefault on pointerdown stops the button tap from blurring the textarea,
-                    // keeping the mobile keyboard open.
-                    e.preventDefault();
-                  }}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                  }}
-                  onClick={() => void sendMessage()}
-                  aria-label="Send"
-                >
-                  {sending ? <span className="shc-spinner shc-spinner-sm" /> : <Send size={19} />}
-                </button>
-              </div>
-            );
-          })()}
+              <button
+                type="button"
+                className={`shc-composer-icon-btn shc-composer-voice-btn ${recording ? 'shc-rec-on' : ''}`}
+                onClick={toggleRecordingUI}
+                aria-label={recording ? 'Stop recording' : 'Record voice message'}
+              >
+                {recording ? <Square size={20} /> : <Mic size={21} />}
+              </button>
+
+              <button
+                type="button"
+                className={`shc-composer-icon-btn shc-composer-send-btn ${messageText.trim() ? 'shc-send-active' : ''}`}
+                disabled={!messageText.trim() || sending || (Boolean(targetUid) && dmRequestState === 'incoming')}
+                onPointerDown={(e) => {
+                  // Crucial for mobile virtual keyboards:
+                  // Calling preventDefault on pointerdown stops the button tap from blurring the textarea,
+                  // keeping the mobile keyboard open.
+                  e.preventDefault();
+                }}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                }}
+                onClick={() => void sendMessage()}
+                aria-label="Send"
+              >
+                {sending ? <span className="shc-spinner shc-spinner-sm" /> : <Send size={20} />}
+              </button>
+            </div>
+          </div>
 
           {messageText.length > MAX_MESSAGE_LENGTH * 0.85 && (
             <div className="shc-counter">

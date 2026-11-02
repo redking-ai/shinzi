@@ -1,5 +1,5 @@
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   deleteDoc,
   doc,
@@ -9,7 +9,7 @@ import {
   serverTimestamp,
   setDoc,
 } from 'firebase/firestore';
-import { ArrowLeft, Ban, Clock3, Ellipsis, FileText, MessageCircle, Phone, UserPlus, UserRound, VolumeX } from 'lucide-react';
+import { ArrowLeft, Ban, Clock3, Ellipsis, MessageCircle, Phone, UserPlus, UserRound, VolumeX } from 'lucide-react';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { auth, db } from './firebaseConfig';
 import { useDriveStore } from './driveStore';
@@ -148,61 +148,6 @@ export default function OtherProfile({
     blocked: false,
     muted: false,
   });
-
-  const [noteText, setNoteText] = useState('');
-  const [noteSaved, setNoteSaved] = useState(false);
-  const noteSaveTimer = useRef<number | null>(null);
-
-  // Private note loading with localStorage fallback
-  useEffect(() => {
-    if (!currentUser || !targetUid) {
-      setNoteText('');
-      return;
-    }
-    const localKey = `shinzi_note_${currentUser.uid}_${targetUid}`;
-    try {
-      const localVal = localStorage.getItem(localKey);
-      if (localVal !== null) setNoteText(localVal);
-    } catch {}
-
-    getDoc(doc(db, 'users', currentUser.uid, 'notes', targetUid))
-      .then((snap) => {
-        if (snap.exists()) {
-          const val = String(snap.data()?.noteText ?? '');
-          setNoteText(val);
-          try {
-            localStorage.setItem(localKey, val);
-          } catch {}
-        }
-      })
-      .catch((err) => {
-        console.error('[NOTE] Error loading note:', err);
-      });
-  }, [currentUser, targetUid]);
-
-  const handleNoteChange = (val: string) => {
-    const text = val.slice(0, 250);
-    setNoteText(text);
-    if (!currentUser || !targetUid) return;
-    const localKey = `shinzi_note_${currentUser.uid}_${targetUid}`;
-    try {
-      localStorage.setItem(localKey, text);
-    } catch {}
-
-    if (noteSaveTimer.current) window.clearTimeout(noteSaveTimer.current);
-    noteSaveTimer.current = window.setTimeout(async () => {
-      try {
-        await setDoc(doc(db, 'users', currentUser.uid, 'notes', targetUid), {
-          noteText: text,
-          updatedAt: serverTimestamp(),
-        });
-        setNoteSaved(true);
-        setTimeout(() => setNoteSaved(false), 2000);
-      } catch (err) {
-        console.error('[NOTE] Error saving note:', err);
-      }
-    }, 600);
-  };
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -702,26 +647,6 @@ export default function OtherProfile({
               <h3 className="sh-info-card-label">Joined Shinzi</h3>
               <p className="sh-joined-text">{dateLabel(userData.createdAt)}</p>
             </div>
-
-            {currentUser && currentUser.uid !== targetUid && (
-              <div className="sh-info-card-section sh-profile-note-section">
-                <div className="sh-profile-note-header">
-                  <h3 className="sh-info-card-label">Note (only visible to you)</h3>
-                  {noteSaved && <span className="sh-note-saved-badge">Saved</span>}
-                </div>
-                <div className="sh-profile-note-box">
-                  <textarea
-                    className="sh-profile-note-input"
-                    placeholder="Click to add a note"
-                    maxLength={250}
-                    rows={2}
-                    value={noteText}
-                    onChange={(e) => handleNoteChange(e.target.value)}
-                  />
-                  <FileText size={16} className="sh-profile-note-icon" aria-hidden="true" />
-                </div>
-              </div>
-            )}
           </div>
         </div>
 

@@ -1126,67 +1126,6 @@ body {
   margin: 0;
 }
 
-/* Note (only visible to you) */
-.sh-profile-note-section {
-  margin-top: 4px;
-}
-
-.sh-profile-note-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 6px;
-}
-
-.sh-note-saved-badge {
-  font-size: 11px;
-  color: #a855f7;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-.sh-profile-note-box {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  background: #141022;
-  border: 1px solid #2d2246;
-  border-radius: 12px;
-  padding: 10px 12px;
-  box-sizing: border-box;
-  transition: border-color 0.15s ease;
-}
-
-.sh-profile-note-box:focus-within {
-  border-color: #762bff;
-}
-
-.sh-profile-note-input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: #f1f2f4;
-  font-family: inherit;
-  font-size: 13.5px;
-  line-height: 1.45;
-  resize: none;
-  min-height: 38px;
-  padding: 0;
-  margin: 0;
-  box-sizing: border-box;
-}
-
-.sh-profile-note-input::placeholder {
-  color: #6e6486;
-}
-
-.sh-profile-note-icon {
-  color: #6e6486;
-  margin-top: 2px;
-  flex-shrink: 0;
-}
-
 .sh-other-profile-page .sh-profile-card {
   border: 0;
   border-radius: 0;
