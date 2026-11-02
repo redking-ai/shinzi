@@ -269,9 +269,9 @@ const renderFormattedText = (text: string) => {
 const renderMentionColoredText = (text: string) => {
   if (!text) return null;
   const displayText = text.endsWith('\n') ? text + ' ' : text;
-  const parts = displayText.split(/((?:^|\s)[@#][a-zA-Z0-9_-]+(?![a-zA-Z0-9_-]))/g);
+  const parts = displayText.split(/((?:^|\s)[@#][a-zA-Z0-9_-]*(?![a-zA-Z0-9_-]))/g);
   return parts.map((part, i) => {
-    const match = part.match(/^(\s*)([@#][a-zA-Z0-9_-]+)$/);
+    const match = part.match(/^(\s*)([@#][a-zA-Z0-9_-]*)$/);
     if (match) {
       const [, space, mention] = match;
       return (
@@ -4050,7 +4050,7 @@ const handleSearchMessage = async (target: Rec) => {
       : username
         ? `Message @${username}`
         : `Message @${name}`;
-    const hasMentions = Boolean(messageText && /[@#][a-zA-Z0-9_-]+/.test(messageText));
+    const hasMentions = Boolean(messageText && /[@#]/.test(messageText));
 
     return (
       <>
