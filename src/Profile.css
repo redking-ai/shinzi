@@ -441,9 +441,12 @@
   filter: brightness(1.12);
 }
 
-.sh-button:disabled {
-  opacity: 0.55;
-  cursor: wait;
+.sh-button:disabled,
+.sh-button.sh-button-disabled {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+  filter: grayscale(0.6) !important;
 }
 
 .sh-button-muted {
@@ -816,125 +819,88 @@ body {
 }
 
 
-/* Profile status thought bubble — below avatar, above Edit Profile */
-.sh-profile-bubble {
-  order: 3;
-  align-self: flex-start;
+/* ===== Avatar & Thought Bubble Row (Discord-style) ===== */
+.sh-avatar-thought-row {
+  display: flex;
+  align-items: center;
   position: relative;
-  z-index: 5;
-  width: fit-content;
-  max-width: calc(100% - 78px);
-  margin: 12px 26px 0 52px;
-  margin: -6px 26px 0 52px;
-  padding: 8px 16px;
-  border: 1px solid var(--sh-line-strong);
+  width: 100%;
+  gap: 14px;
+}
+
+.sh-profile-bubble {
+  position: relative;
+  margin: 0;
+  align-self: center;
+  background: #11101d;
+  border: 1px solid #2f2a48;
   border-radius: 18px;
-  background: var(--sh-surface-2);
-  color: var(--sh-text);
-  font-size: 14px;
+  padding: 6px 14px;
+  color: #f1f2f4;
+  font-size: 13.5px;
   font-weight: 500;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-  box-shadow:
-    0 6px 16px rgba(0, 0, 0, 0.38),
-    0 0 12px rgba(118, 43, 255, 0.14);
+  max-width: calc(100% - 110px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  display: inline-flex;
+  align-items: center;
+  white-space: pre-wrap;
+  word-break: break-word;
+  z-index: 5;
 }
 
-/* Smallest thought dot near the avatar's lower curve */
-.sh-profile-bubble::before {
-  content: "";
-  position: absolute;
-  left: -18px;
-  top: -7px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--sh-surface-2);
-  border: 1px solid var(--sh-line-strong);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-}
-
-/* Medium thought dot leading into the bubble */
+/* Dots flow DOWNWARD and LEFT toward the avatar (Discord-style) */
 .sh-profile-bubble::after {
   content: "";
   position: absolute;
-  left: -10px;
-  top: 2px;
-  width: 11px;
-  height: 11px;
+  left: -8px;
+  bottom: 6px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
-  background: var(--sh-surface-2);
-  border: 1px solid var(--sh-line-strong);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  background: #11101d;
+  border: 1px solid #2f2a48;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
-@media (max-width: 600px) {
-  .sh-profile-edit-action {
-    padding: 16px 15px 0;
-  }
-
-  .sh-profile-bubble {
-    margin: 10px 15px 0 38px;
-   margin: -6px 15px 0 38px;
-    max-width: calc(100% - 53px);
-    padding: 7px 14px;
-    font-size: 13.5px;
-  }
-}
-
-
-/* ===== Thought bubble: top-right of avatar (like image 2) ===== */
-.sh-profile-bubble {
-  position: absolute;
-  order: 0;
-  z-index: 6;
-  margin: 0;
-  /* desktop: banner 210 - avatar overlap 52 = avatar top at 158 */
-  top: 124px;
-  left: 168px;
-  width: fit-content;
-  max-width: calc(100% - 190px);
-  padding: 7px 15px;
-  white-space: pre-wrap;
-}
-
-/* dots go from the bubble down-left toward the avatar */
 .sh-profile-bubble::before {
-  left: -22px;
-  top: auto;
-  bottom: -9px;
+  content: "";
+  position: absolute;
+  left: -16px;
+  bottom: 0px;
   width: 6px;
   height: 6px;
-}
-
-.sh-profile-bubble::after {
-  left: -12px;
-  top: auto;
-  bottom: -4px;
-  width: 10px;
-  height: 10px;
+  border-radius: 50%;
+  background: #11101d;
+  border: 1px solid #2f2a48;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 @media (max-width: 600px) {
-  .sh-profile-bubble {
-    /* mobile: banner 160 - overlap 43 = avatar top at 117 */
-    top: 84px;
-    left: 118px;
-    max-width: calc(100% - 135px);
-    padding: 6px 13px;
-    font-size: 13px;
+  .sh-avatar-thought-row {
+    gap: 12px;
   }
 
-  .sh-profile-bubble::before {
-    left: -19px;
-    bottom: -8px;
+  .sh-profile-bubble {
+    font-size: 13px;
+    padding: 5px 12px;
+    max-width: calc(100% - 95px);
   }
 
   .sh-profile-bubble::after {
-    left: -10px;
-    bottom: -4px;
+    left: -7px;
+    bottom: 5px;
+    width: 8px;
+    height: 8px;
+  }
+
+  .sh-profile-bubble::before {
+    left: -14px;
+    bottom: 0px;
+    width: 5px;
+    height: 5px;
   }
 }
+
 /* ===== Discord-style layout ===== */
 
 /* avatar on top, name block goes UNDER it */
@@ -969,50 +935,6 @@ body {
   content: "•";
   margin-right: 8px;
   color: var(--sh-muted);
-}
-
-/* bubble: BELOW the banner line, right of the avatar */
-.sh-profile-bubble {
-  position: absolute;
-  order: 0;
-  margin: 0;
-  top: 220px;     /* banner 210 + 10 */
-  left: 168px;
-  max-width: calc(100% - 190px);
-  padding: 7px 15px;
-}
-
-/* dots between avatar and bubble */
-.sh-profile-bubble::before {
-  left: -22px;
-  top: 55%;
-  width: 6px;
-  height: 6px;
-}
-
-.sh-profile-bubble::after {
-  left: -12px;
-  top: 30%;
-  width: 10px;
-  height: 10px;
-}
-
-@media (max-width: 600px) {
-  .sh-profile-bubble {
-    top: 168px;   /* banner 160 + 8 */
-    left: 124px;
-    max-width: calc(100% - 140px);
-    padding: 6px 13px;
-    font-size: 13px;
-  }
-
-  .sh-profile-bubble::before {
-    left: -19px;
-  }
-
-  .sh-profile-bubble::after {
-    left: -10px;
-  }
 }
 /* "+ Add thought" bubble (view) and inline input (edit) */
 .sh-profile-bubble.sh-bubble-add,
@@ -1143,16 +1065,17 @@ body {
   box-sizing: border-box;
 }
 
-/* Contained Profile Info Card (Discord-inspired) */
+/* Profile Info Section (Clean Discord-style, no boxes or grid lines) */
 .sh-profile-info-card {
-  background: #141320;
-  border: 1px solid #28243c;
-  border-radius: 12px;
-  padding: 16px;
-  margin-top: 14px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  margin-top: 18px;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  gap: 16px;
+  box-shadow: none;
 }
 
 .sh-info-card-section {
@@ -1164,8 +1087,8 @@ body {
 .sh-info-card-label {
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.05em;
-  color: #9e9cb8;
+  letter-spacing: 0.04em;
+  color: var(--sh-muted, #949ba4);
   text-transform: uppercase;
   margin: 0;
 }
@@ -1173,7 +1096,7 @@ body {
 .sh-bio-text {
   font-size: 14px;
   line-height: 1.5;
-  color: #f5f7ff;
+  color: #dbdee1;
   white-space: pre-wrap;
   word-break: break-word;
   margin: 0;
@@ -1185,15 +1108,13 @@ body {
 }
 
 .sh-info-divider {
-  height: 1px;
-  background: rgba(255, 255, 255, 0.07);
-  margin: 14px 0;
+  display: none !important;
 }
 
 .sh-joined-text {
   font-size: 14px;
   font-weight: 500;
-  color: #f5f7ff;
+  color: #dbdee1;
   margin: 0;
 }
 

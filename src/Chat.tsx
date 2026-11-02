@@ -30,7 +30,6 @@ import {
 import {
   AlertCircle,
   ArrowLeft,
-  AtSign,
   Ban,
   BarChart3,
   Bell,
@@ -43,9 +42,7 @@ import {
   FileText,
   Flag,
   Gamepad2,
-  Hash,
   Image as ImageIcon,
-  Megaphone,
   MessageCircle,
   MessagesSquare,
   Mic,
@@ -83,8 +80,6 @@ import {
 } from './emojiData';
 import OtherProfile from './OtherProfile';
 import MuiAvatar from '@mui/material/Avatar';
-import { Mention } from 'primereact/mention';
-import 'primereact/resources/primereact.min.css';
 import './Chat.css';
 
 const EmojiPicker = lazy(() => import('emoji-picker-react'));
@@ -1033,7 +1028,6 @@ export default function Chat({ onNavigate }: ChatProps) {
   } | null>(null);
   const [viewingProfileUid, setViewingProfileUid] = useState<string | null>(null);
   const pendingCaretRef = useRef<number | null>(null);
-  const lastCaretPosRef = useRef<number>(0);
 
   // Caret restoration layoutEffect: sets selection synchronously after React commits the messageText update
   useLayoutEffect(() => {
@@ -1064,7 +1058,8 @@ export default function Chat({ onNavigate }: ChatProps) {
   const [recentEmojis, setRecentEmojis] = useState<string[]>(() => getRecentEmojis());
   const [toastMessage, setToastMessage] = useState<string>('');
   const toastMessageTimer = useRef<number | null>(null);
-  const [mentionSuggestionsList, setMentionSuggestionsList] = useState<any[]>([]);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionSelectedIndex, setMentionSelectedIndex] = useState(0);
   const [sending, setSending] = useState(false);
   const sendingRef = useRef(false);
   const [loadingChats, setLoadingChats] = useState(true);
@@ -1479,7 +1474,15 @@ export default function Chat({ onNavigate }: ChatProps) {
 
   const mentionSuggestions = useMemo(() => {
     if (!selectedConversation) return [];
-    const list: { id: string; handle: string; name: string; isHere?: boolean }[] = [];
+    const list: {
+      id: string;
+      handle: string;
+      name: string;
+      isHere?: boolean;
+      photoURL?: string;
+      profileAssetId?: string;
+      uid?: string;
+    }[] = [];
 
     if (selectedConversation.type === 'group') {
       const ids: string[] = selectedConversation.memberIds || [];
@@ -1491,7 +1494,14 @@ export default function Chat({ onNavigate }: ChatProps) {
           prof?.displayName?.toLowerCase().replace(/\s+/g, '_') ||
           'user';
         const name = prof?.displayName || prof?.username || 'User';
-        list.push({ id: memberId, handle, name });
+        list.push({
+          id: memberId,
+          handle,
+          name,
+          photoURL: prof?.photoURL,
+          profileAssetId: prof?.profileAssetId,
+          uid: memberId,
+        });
       });
     } else {
       const otherId = otherMemberId(selectedConversation);
@@ -1501,18 +1511,36 @@ export default function Chat({ onNavigate }: ChatProps) {
         otherProf?.displayName?.toLowerCase().replace(/\s+/g, '_') ||
         'user';
       const name = otherProf?.displayName || otherProf?.username || 'User';
-      list.push({ id: otherId || 'other', handle, name });
+      list.push({
+        id: otherId || 'other',
+        handle,
+        name,
+        photoURL: otherProf?.photoURL,
+        profileAssetId: otherProf?.profileAssetId,
+        uid: otherId,
+      });
     }
 
+    // In down: @here (no description needed per user request)
     list.push({
       id: 'here',
       handle: 'here',
-      name: 'Notify all members in this conversation',
+      name: '',
       isHere: true,
     });
 
     return list;
   }, [selectedConversation, uid]);
+
+  const filteredMentionSuggestions = useMemo(() => {
+    if (mentionQuery === null) return [];
+    const q = mentionQuery.toLowerCase();
+    return mentionSuggestions.filter(
+      (s) =>
+        s.handle.toLowerCase().includes(q) ||
+        (s.name && s.name.toLowerCase().includes(q)),
+    );
+  }, [mentionQuery, mentionSuggestions]);
 
   const isFavorite = (conversation: Rec | null | undefined) => {
     if (!conversation?.id || !me) return false;
@@ -1826,61 +1854,48 @@ const handleSearchMessage = async (target: Rec) => {
     }
   };
 
-  const onMentionSearch = (event: { trigger: string; query: string }) => {
-    const { trigger, query } = event;
-    const q = (query || '').toLowerCase();
-
-    if (trigger === '@') {
-      const results = mentionSuggestions.filter((item) => {
-        return (
-          item.handle.toLowerCase().includes(q) ||
-          (item.name && item.name.toLowerCase().includes(q))
-        );
-      });
-      setMentionSuggestionsList(results);
-    } else if (trigger === '#') {
-      // Step 4: Prepare #channel mentions architecture
-      // Only enabled when a real server/channel context exists.
-      // In ordinary DMs or groups without server channels, suggestions are empty.
-      const serverContext = (selectedConversation as any)?.serverChannels;
-      if (Array.isArray(serverContext) && serverContext.length > 0) {
-        const results = serverContext
-          .filter((ch: any) => ch.name.toLowerCase().includes(q))
-          .map((ch: any) => ({
-            id: ch.id || ch.name,
-            handle: ch.name,
-            name: ch.description || `#${ch.name}`,
-            isChannel: true,
-          }));
-        setMentionSuggestionsList(results);
-      } else {
-        setMentionSuggestionsList([]);
-      }
+  const getMentionContext = (text: string, cursor: number) => {
+    const before = text.slice(0, cursor);
+    const match = before.match(/(?:^|\s)@([a-zA-Z0-9_]*)$/);
+    if (match) {
+      const atOffset = match[0].startsWith(' ') ? 1 : 0;
+      return {
+        query: match[1],
+        startIndex: match.index! + atOffset,
+        endIndex: cursor,
+      };
     }
+    return null;
   };
 
-  const mentionItemTemplate = (suggestion: any) => {
-    return (
-      <div className="shc-mention-item-inner">
-        <span className="shc-mention-item-badge">
-          {suggestion.isHere ? (
-            <Megaphone size={14} />
-          ) : suggestion.isChannel ? (
-            <Hash size={14} />
-          ) : (
-            <AtSign size={14} />
-          )}
-        </span>
-        <div className="shc-mention-item-details">
-          <span className="shc-mention-item-handle">
-            {suggestion.isChannel ? `#${suggestion.handle}` : `@${suggestion.handle}`}
-          </span>
-          {suggestion.name && suggestion.name !== suggestion.handle && (
-            <span className="shc-mention-item-desc">{suggestion.name}</span>
-          )}
-        </div>
-      </div>
-    );
+  const insertMention = (handle: string) => {
+    const input = inputRef.current;
+    const cursor = input ? (input.selectionStart ?? messageText.length) : messageText.length;
+    const ctx = getMentionContext(messageText, cursor);
+
+    let newText: string;
+    let newCursor: number;
+    if (ctx) {
+      const before = messageText.slice(0, ctx.startIndex);
+      const after = messageText.slice(ctx.endIndex);
+      const mentionStr = `@${handle} `;
+      newText = before + mentionStr + after;
+      newCursor = before.length + mentionStr.length;
+    } else {
+      newText = messageText + `@${handle} `;
+      newCursor = newText.length;
+    }
+
+    pendingCaretRef.current = newCursor;
+    setMessageText(newText);
+    setMentionQuery(null);
+
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus({ preventScroll: true });
+        inputRef.current.setSelectionRange(newCursor, newCursor);
+      }
+    }, 10);
   };
 
   const handleMessageChange = (text: string, el?: HTMLTextAreaElement) => {
@@ -1902,6 +1917,15 @@ const handleSearchMessage = async (target: Rec) => {
           localStorage.removeItem(`shinzi_draft_${selected.id}`);
         }
       } catch {}
+    }
+
+    const cursor = el ? (el.selectionStart ?? text.length) : text.length;
+    const ctx = getMentionContext(text, cursor);
+    if (ctx) {
+      setMentionQuery(ctx.query);
+      setMentionSelectedIndex(0);
+    } else {
+      setMentionQuery(null);
     }
 
     if (el) {
@@ -2228,6 +2252,31 @@ const handleSearchMessage = async (target: Rec) => {
   };
 
   const onComposerKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mentionQuery !== null && filteredMentionSuggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionSelectedIndex((prev) => (prev + 1) % filteredMentionSuggestions.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionSelectedIndex(
+          (prev) => (prev - 1 + filteredMentionSuggestions.length) % filteredMentionSuggestions.length,
+        );
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        insertMention(filteredMentionSuggestions[mentionSelectedIndex].handle);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setMentionQuery(null);
+        return;
+      }
+    }
+
     // Enter sends on desktop; on touch screens it adds a new line.
     if (
       e.key === 'Enter' &&
@@ -4228,6 +4277,46 @@ const handleSearchMessage = async (target: Rec) => {
         )}
 
         <div className="shc-composer-wrap">
+          {mentionQuery !== null && filteredMentionSuggestions.length > 0 && (
+            <div className="shc-mention-panel" role="listbox" aria-label="Mention suggestions">
+              {filteredMentionSuggestions.map((item, idx) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="option"
+                  aria-selected={idx === mentionSelectedIndex}
+                  className={`shc-mention-item ${
+                    idx === mentionSelectedIndex ? 'shc-mention-item-active' : ''
+                  }`}
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    insertMention(item.handle);
+                  }}
+                >
+                  <div className="shc-mention-item-inner">
+                    {item.isHere ? (
+                      <span className="shc-mention-item-badge">@</span>
+                    ) : (
+                      <UserAvatar
+                        uid={item.uid}
+                        name={item.name}
+                        photoURL={item.photoURL}
+                        profileAssetId={item.profileAssetId}
+                        size="xs"
+                      />
+                    )}
+                    <span className="shc-mention-item-handle">
+                      {item.isHere ? '@here' : `@${item.handle}`}
+                    </span>
+                    {!item.isHere && item.name && item.name !== item.handle && (
+                      <span className="shc-mention-item-name">{item.name}</span>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
           <div
             className={
               isKeyboardOpen ? 'shc-composer shc-composer-kb' : 'shc-composer'
@@ -4243,31 +4332,25 @@ const handleSearchMessage = async (target: Rec) => {
             </button>
 
             <div className="shc-composer-input-box">
-              <Mention
+              <textarea
+                ref={inputRef}
                 value={messageText}
-                onChange={(e: any) => handleMessageChange(e.target?.value || '', e.target as any)}
-                suggestions={mentionSuggestionsList}
-                onSearch={onMentionSearch}
-                field="handle"
-                trigger={['@', '#']}
-                itemTemplate={mentionItemTemplate}
+                onChange={(e) => handleMessageChange(e.target.value, e.target)}
+                onSelect={(e) => {
+                  const target = e.target as HTMLTextAreaElement;
+                  const ctx = getMentionContext(target.value, target.selectionStart ?? target.value.length);
+                  if (ctx) {
+                    setMentionQuery(ctx.query);
+                    setMentionSelectedIndex(0);
+                  } else {
+                    setMentionQuery(null);
+                  }
+                }}
                 placeholder={composerPlaceholder}
                 maxLength={MAX_MESSAGE_LENGTH}
                 onKeyDown={onComposerKey}
-                inputRef={inputRef as any}
-                autoResize={false}
                 rows={1}
-                className="shc-primereact-mention"
-                inputClassName="shc-composer-textarea"
-                panelClassName="shc-primereact-mention-panel"
-                scrollHeight="220px"
-                onSelect={() => {
-                  if (inputRef.current) {
-                    const pos = inputRef.current.selectionStart;
-                    pendingCaretRef.current = pos;
-                    lastCaretPosRef.current = pos;
-                  }
-                }}
+                className="shc-composer-textarea"
                 onFocus={() => {
                   window.requestAnimationFrame(() => {
                     if (scrollRef.current) {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   doc,
   getDoc,
@@ -156,6 +156,29 @@ useEffect(() => {
       pronouns: String(data.pronouns ?? ''),
     });
   }, []);
+
+  const hasChanges = useMemo(() => {
+    if (!userData) return false;
+    const currentDisplayName = String(userData.displayName ?? '').trim();
+    const currentUsername = String(userData.username ?? '').trim().toLowerCase();
+    const currentBio = String(userData.bio ?? '').trim();
+    const currentPronouns = String(userData.pronouns ?? '').trim();
+    const currentBubble = String(userData.bubleText ?? '').trim().replace(/^\+\s*/, '');
+
+    const newDisplayName = editForm.displayName.trim();
+    const newUsername = editForm.username.trim().toLowerCase();
+    const newBio = editForm.bio.trim();
+    const newPronouns = editForm.pronouns.trim();
+    const newBubble = editForm.bubleText.trim().replace(/^\+\s*/, '');
+
+    return (
+      newDisplayName !== currentDisplayName ||
+      newUsername !== currentUsername ||
+      newBio !== currentBio ||
+      newPronouns !== currentPronouns ||
+      newBubble !== currentBubble
+    );
+  }, [editForm, userData]);
 
   const loadProfile = useCallback(async () => {
     if (!currentUser) {
@@ -619,29 +642,66 @@ useEffect(() => {
         )}
 
         <div className="sh-profile-identity">
-          <div className="sh-avatar-wrap">
-            {assetLoading && !profileImageUri ? (
-              <div className="sh-avatar sh-avatar-skeleton" />
-            ) : profileImageUri ? (
-              <img
-                className="sh-avatar"
-                src={profileImageUri}
-                alt="Profile"
-                loading="eager"
-                decoding="async"
-                onError={() => {
-                  console.error(
-                    '[PROFILE IMAGE] Browser could not render the profile image.',
-                  );
-                  setProfileImageUri('');
-                }}
-              />
-            ) : (
-              <div className="sh-avatar sh-avatar-fallback">
-                {String(userData.displayName ?? '?')
-                  .slice(0, 1)
-                  .toUpperCase()}
+          <div className="sh-avatar-thought-row">
+            <div className="sh-avatar-wrap">
+              {assetLoading && !profileImageUri ? (
+                <div className="sh-avatar sh-avatar-skeleton" />
+              ) : profileImageUri ? (
+                <img
+                  className="sh-avatar"
+                  src={profileImageUri}
+                  alt="Profile"
+                  loading="eager"
+                  decoding="async"
+                  onError={() => {
+                    console.error(
+                      '[PROFILE IMAGE] Browser could not render the profile image.',
+                    );
+                    setProfileImageUri('');
+                  }}
+                />
+              ) : (
+                <div className="sh-avatar sh-avatar-fallback">
+                  {String(userData.displayName ?? '?')
+                    .slice(0, 1)
+                    .toUpperCase()}
+                </div>
+              )}
+            </div>
+
+            {isEditing ? (
+              <div className="sh-profile-bubble sh-bubble-editing">
+                {!editForm.bubleText && <Plus size={16} aria-hidden="true" />}
+                <input
+                  className="sh-bubble-input"
+                  aria-label="Thought"
+                  placeholder="Add thought"
+                  maxLength={100}
+                  value={editForm.bubleText}
+                  onChange={(e) =>
+                    setEditForm((v) => ({
+                      ...v,
+                      bubleText: e.target.value.replace(/^\+\s*/, ''),
+                    }))
+                  }
+                />
               </div>
+            ) : userData.bubleText ? (
+              <div className="sh-profile-bubble">
+                {String(userData.bubleText).replace(/^\+\s*/, '')}
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="sh-profile-bubble sh-bubble-add"
+                onClick={() => {
+                  setError('');
+                  setIsEditing(true);
+                }}
+              >
+                <Plus size={16} aria-hidden="true" />
+                <span>Add thought</span>
+              </button>
             )}
           </div>
 
@@ -650,7 +710,7 @@ useEffect(() => {
             <p className="sh-username">
               @{userData.username || 'username'}
             </p>
-                        {userData.pronouns && (
+            {userData.pronouns && (
               <p className="sh-pronouns">
                 {String(userData.pronouns)}
               </p>
@@ -672,41 +732,6 @@ useEffect(() => {
               <span>Edit Profile</span>
             </button>
           </div>
-        )}
-
-                {isEditing ? (
-          <div className="sh-profile-bubble sh-bubble-editing">
-            {!editForm.bubleText && <Plus size={16} aria-hidden="true" />}
-            <input
-              className="sh-bubble-input"
-              aria-label="Thought"
-              placeholder="Add thought"
-              maxLength={100}
-              value={editForm.bubleText}
-              onChange={(e) =>
-                setEditForm((v) => ({
-                  ...v,
-                  bubleText: e.target.value.replace(/^\+\s*/, ''),
-                }))
-              }
-            />
-          </div>
-        ) : userData.bubleText ? (
-          <div className="sh-profile-bubble">
-            {String(userData.bubleText).replace(/^\+\s*/, '')}
-          </div>
-        ) : (
-          <button
-            type="button"
-            className="sh-profile-bubble sh-bubble-add"
-            onClick={() => {
-              setError('');
-              setIsEditing(true);
-            }}
-          >
-            <Plus size={16} aria-hidden="true" />
-            <span>Add thought</span>
-          </button>
         )}
      
 
@@ -789,9 +814,12 @@ useEffect(() => {
 
               <button
                 type="button"
-                className="sh-button"
-                disabled={saving}
-                onClick={() => void saveProfile()}
+                className={`sh-button ${!hasChanges || saving ? 'sh-button-disabled' : ''}`}
+                disabled={!hasChanges || saving}
+                onClick={() => {
+                  if (!hasChanges || saving) return;
+                  void saveProfile();
+                }}
               >
                 {saving ? 'Saving…' : 'Save changes'}
               </button>
@@ -806,7 +834,7 @@ useEffect(() => {
               <div className="sh-profile-content">
                 <div className="sh-profile-info-card">
                   <div className="sh-info-card-section">
-                    <h3 className="sh-info-card-label">BIO</h3>
+                    <h3 className="sh-info-card-label">Bio</h3>
                     <p className="sh-bio-text">
                       {userData.bio ? (
                         userData.bio
@@ -816,10 +844,8 @@ useEffect(() => {
                     </p>
                   </div>
 
-                  <div className="sh-info-divider" />
-
                   <div className="sh-info-card-section">
-                    <h3 className="sh-info-card-label">JOINED SHINZI</h3>
+                    <h3 className="sh-info-card-label">Joined Shinzi</h3>
                     <p className="sh-joined-text">
                       {dateLabel(userData.createdAt || currentUser?.metadata?.creationTime)}
                     </p>

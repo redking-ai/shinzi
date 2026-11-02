@@ -777,17 +777,18 @@
 }
 
 .shc-chat-avatar-trigger {
-  width: 44px;
-  height: 44px;
+  width: 34px;
+  height: 34px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 
+.shc-chat-avatar-trigger .shc-avatar,
 .shc-chat-avatar-trigger .shc-avatar-sm {
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
 }
 
 .shc-chat-title span {
@@ -846,6 +847,7 @@
   transition: background 0.12s ease;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
   background: transparent;
 }
 
@@ -858,8 +860,14 @@
   margin-top: 1px;
 }
 
-.shc-dc-msg:hover {
-  background: rgba(255, 255, 255, 0.035);
+@media (hover: hover) and (pointer: fine) {
+  .shc-dc-msg:hover {
+    background: rgba(255, 255, 255, 0.035);
+  }
+}
+
+.shc-dc-msg:active {
+  background: transparent !important;
 }
 
 .shc-dc-msg-highlight {
@@ -879,22 +887,7 @@
 }
 
 .shc-dc-gutter-time {
-  font-size: 10px;
-  color: var(--muted, #949ba4);
-  opacity: 0;
-  transition: opacity 0.15s ease;
-  white-space: nowrap;
-}
-
-.shc-dc-msg:hover .shc-dc-gutter-time,
-.shc-dc-msg:active .shc-dc-gutter-time {
-  opacity: 0.65;
-}
-
-@media (max-width: 600px) {
-  .shc-dc-msg:active .shc-dc-gutter-time {
-    opacity: 0.8;
-  }
+  display: none !important;
 }
 
 /* Discord Reply Spine */
@@ -1735,7 +1728,80 @@
   letter-spacing: 0.5px;
 }
 
-/* PrimeReact Mention Integration (FIX 4) */
+/* Mention Suggestions Bar (FIX 1) */
+.shc-mention-panel {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 8px;
+  right: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  border-radius: 12px;
+  background: #141320;
+  border: 1px solid #2f2a48;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.65);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  gap: 2px;
+}
+
+.shc-mention-item {
+  display: flex;
+  align-items: center;
+  padding: 7px 10px;
+  border: none;
+  background: transparent;
+  color: #f1f2f4;
+  text-align: left;
+  border-radius: 8px;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.12s ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.shc-mention-item:hover,
+.shc-mention-item.shc-mention-item-active {
+  background: rgba(147, 51, 234, 0.25);
+}
+
+.shc-mention-item-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.shc-mention-item-badge {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(147, 51, 234, 0.35);
+  color: #d8b4fe;
+  font-weight: 700;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.shc-mention-item-handle {
+  font-size: 14px;
+  font-weight: 600;
+  color: #d8b4fe;
+}
+
+.shc-mention-item-name {
+  font-size: 12px;
+  color: var(--muted, #949ba4);
+  margin-left: 2px;
+}
+
+/* PrimeReact Mention Integration */
 .shc-primereact-mention {
   display: flex !important;
   flex: 1;

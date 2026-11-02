@@ -550,23 +550,31 @@ export default function OtherProfile({
         )}
 
         <div className="sh-profile-identity">
-          <div className="sh-avatar-wrap">
-            {avatar ? (
-              <img
-                className="sh-avatar"
-                src={avatar}
-                alt={`${userData.displayName || 'User'} profile`}
-                loading="eager"
-                decoding="async"
-                onError={() => setAvatar('')}
-              />
-            ) : (
-              <div className="sh-avatar sh-avatar-fallback">
-                {String(
-                  userData.displayName ?? '?'
-                )
-                  .slice(0, 1)
-                  .toUpperCase()}
+          <div className="sh-avatar-thought-row">
+            <div className="sh-avatar-wrap">
+              {avatar ? (
+                <img
+                  className="sh-avatar"
+                  src={avatar}
+                  alt={`${userData.displayName || 'User'} profile`}
+                  loading="eager"
+                  decoding="async"
+                  onError={() => setAvatar('')}
+                />
+              ) : (
+                <div className="sh-avatar sh-avatar-fallback">
+                  {String(
+                    userData.displayName ?? '?'
+                  )
+                    .slice(0, 1)
+                    .toUpperCase()}
+                </div>
+              )}
+            </div>
+
+            {userData.bubleText && (
+              <div className="sh-profile-bubble">
+                {String(userData.bubleText).replace(/^\+\s*/, '')}
               </div>
             )}
           </div>
@@ -588,12 +596,6 @@ export default function OtherProfile({
             )}
           </div>
         </div>
-
-        {userData.bubleText && (
-          <div className="sh-profile-bubble">
-            {String(userData.bubleText).replace(/^\+\s*/, '')}
-          </div>
-        )}
 
         {currentUser?.uid !== targetUid && (
           <div className="sh-other-profile-actions">
@@ -640,7 +642,7 @@ export default function OtherProfile({
         <div className="sh-profile-content">
           <div className="sh-profile-info-card">
             <div className="sh-info-card-section">
-              <h3 className="sh-info-card-label">BIO</h3>
+              <h3 className="sh-info-card-label">Bio</h3>
               <p className="sh-bio-text">
                 {userData.bio ? (
                   userData.bio
@@ -650,10 +652,8 @@ export default function OtherProfile({
               </p>
             </div>
 
-            <div className="sh-info-divider" />
-
             <div className="sh-info-card-section">
-              <h3 className="sh-info-card-label">JOINED SHINZI</h3>
+              <h3 className="sh-info-card-label">Joined Shinzi</h3>
               <p className="sh-joined-text">{dateLabel(userData.createdAt)}</p>
             </div>
           </div>
