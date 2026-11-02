@@ -728,7 +728,7 @@ useEffect(() => {
                 setIsEditing(true);
               }}
             >
-              <Pencil size={20} aria-hidden="true" />
+              <Pencil size={15} aria-hidden="true" />
               <span>Edit Profile</span>
             </button>
           </div>

@@ -59,7 +59,6 @@ import {
   SmilePlus,
   Sparkles,
   Square,
-  Star,
   Trash2,
   User,
   UserPlus,
@@ -260,6 +259,24 @@ const renderFormattedText = (text: string) => {
         <span key={i}>
           {space}
           <span className={isChannel ? 'shc-channel-mention' : 'shc-mention'}>{mention}</span>
+        </span>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
+};
+
+const renderComposerMentionBackdrop = (text: string) => {
+  if (!text) return null;
+  const parts = text.split(/((?:^|\s)[@#][a-zA-Z0-9_-]+(?![a-zA-Z0-9_-]))/g);
+  return parts.map((part, i) => {
+    const match = part.match(/^(\s*)([@#][a-zA-Z0-9_-]+)$/);
+    if (match) {
+      const [, space, mention] = match;
+      return (
+        <span key={i}>
+          {space}
+          <span className="shc-composer-mention-token">{mention}</span>
         </span>
       );
     }
@@ -1015,7 +1032,6 @@ export default function Chat({ onNavigate }: ChatProps) {
   const [searching, setSearching] = useState(false);
   const [sendingRequestId, setSendingRequestId] = useState<string | null>(null);
   const [sentRequestUids, setSentRequestUids] = useState<Set<string>>(() => new Set());
-  const [optimisticFavorites, setOptimisticFavorites] = useState<Record<string, boolean>>({});
 
   const [messageText, setMessageText] = useState('');
   const [replyTarget, setReplyTarget] = useState<Rec | null>(null);
@@ -1177,17 +1193,6 @@ export default function Chat({ onNavigate }: ChatProps) {
         );
 
         setConversations(rows);
-        setOptimisticFavorites((prev) => {
-          let changed = false;
-          const next = { ...prev };
-          rows.forEach((r) => {
-            if (r.id in next && r.favoriteBy?.[uid] === next[r.id]) {
-              delete next[r.id];
-              changed = true;
-            }
-          });
-          return changed ? next : prev;
-        });
         setLoadingChats(false);
       },
       (error) => {
@@ -1542,14 +1547,6 @@ export default function Chat({ onNavigate }: ChatProps) {
     );
   }, [mentionQuery, mentionSuggestions]);
 
-  const isFavorite = (conversation: Rec | null | undefined) => {
-    if (!conversation?.id || !me) return false;
-    if (conversation.id in optimisticFavorites) {
-      return optimisticFavorites[conversation.id];
-    }
-    return Boolean(conversation?.favoriteBy?.[me]);
-  };
-
   const isUrgent = (conversation: Rec | null | undefined) =>
     Boolean(conversation?.urgentFor?.[me]);
 
@@ -1570,17 +1567,12 @@ export default function Chat({ onNavigate }: ChatProps) {
     }
 
     rows.sort((a, b) => {
-      // 1. Starred / Favorite at the top
-      const favA = isFavorite(a) ? 1 : 0;
-      const favB = isFavorite(b) ? 1 : 0;
-      if (favA !== favB) return favB - favA;
-
-      // 2. Mentioned / Urgent right below starred
+      // 1. Mentioned / Urgent at top
       const urgA = isUrgent(a) ? 1 : 0;
       const urgB = isUrgent(b) ? 1 : 0;
       if (urgA !== urgB) return urgB - urgA;
 
-      // 3. Followed by newest message
+      // 2. Followed by newest message
       return (
         millis(b.lastMessageAt || b.updatedAt) -
         millis(a.lastMessageAt || a.updatedAt)
@@ -1588,7 +1580,7 @@ export default function Chat({ onNavigate }: ChatProps) {
     });
 
     return rows;
-  }, [conversations, chatFilter, uid, optimisticFavorites]);
+  }, [conversations, chatFilter, uid]);
 
   // ----------------------------------------------------------
   // CONVERSATION ACTIONS
@@ -2285,29 +2277,6 @@ const handleSearchMessage = async (target: Rec) => {
     ) {
       e.preventDefault();
       void sendMessage();
-    }
-  };
-
-  const toggleFavorite = async (conversation: Rec | null) => {
-    if (!uid || !conversation?.id) return;
-    const convId = conversation.id;
-    const nextVal = !isFavorite(conversation);
-
-    setOptimisticFavorites((prev) => ({ ...prev, [convId]: nextVal }));
-
-    try {
-      await updateDoc(doc(db, 'conversations', convId), {
-        [`favoriteBy.${uid}`]: nextVal,
-        updatedAt: serverTimestamp(),
-      });
-    } catch (error) {
-      setOptimisticFavorites((prev) => {
-        const copy = { ...prev };
-        delete copy[convId];
-        return copy;
-      });
-      console.error('Favorite update error:', error);
-      notify('Unable to update favorite', messageOf(error));
     }
   };
 
@@ -3777,7 +3746,6 @@ const handleSearchMessage = async (target: Rec) => {
                     </span>
 
                     <span className="shc-conv-icons">
-                      {isFavorite(item) && <Star size={15} className="shc-star" />}
                       {isUrgent(item) && <AlertCircle size={16} className="shc-urgent" />}
                       {unread && <span className="shc-unread-dot" />}
                     </span>
@@ -4065,7 +4033,6 @@ const handleSearchMessage = async (target: Rec) => {
     const name = getConversationName(selectedConversation);
     const username = getConversationUsername(selectedConversation);
     const isGroup = selectedConversation?.type === 'group';
-    const fav = isFavorite(selectedConversation);
     const targetUid = isGroup ? undefined : otherMemberId(selectedConversation);
     const targetProfile = targetUid ? selectedConversation?.memberProfiles?.[targetUid] : undefined;
     const dmRequestState = getDirectRequestState(selectedConversation);
@@ -4137,15 +4104,6 @@ const handleSearchMessage = async (target: Rec) => {
               <span>{`${selectedConversation?.memberIds?.length || 0} members`}</span>
             </div>
           )}
-
-          <button
-            type="button"
-            className="shc-icon-btn"
-            onClick={() => void toggleFavorite(selectedConversation)}
-            aria-label={fav ? 'Remove favorite' : 'Add favorite'}
-          >
-            <Star size={21} className={fav ? 'shc-star shc-star-on' : ''} />
-          </button>
 
           {!isGroup && (
             <>
@@ -4308,87 +4266,105 @@ const handleSearchMessage = async (target: Rec) => {
                     <span className="shc-mention-item-handle">
                       {item.isHere ? '@here' : `@${item.handle}`}
                     </span>
-                    {!item.isHere && item.name && item.name !== item.handle && (
-                      <span className="shc-mention-item-name">{item.name}</span>
-                    )}
                   </div>
                 </button>
               ))}
             </div>
           )}
 
-          <div
-            className={
-              isKeyboardOpen ? 'shc-composer shc-composer-kb' : 'shc-composer'
-            }
-          >
-            <button
-              type="button"
-              className="shc-icon-btn shc-accent-btn"
-              onClick={() => setShowAttach(true)}
-              aria-label="Attach"
-            >
-              <Plus size={26} />
-            </button>
+          {(() => {
+            const hasComposerMentions = Boolean(messageText && /[@#][a-zA-Z0-9_-]+/.test(messageText));
+            return (
+              <div
+                className={
+                  isKeyboardOpen ? 'shc-composer shc-composer-kb' : 'shc-composer'
+                }
+              >
+                <button
+                  type="button"
+                  className="shc-icon-btn shc-accent-btn shc-attach-btn"
+                  onClick={() => setShowAttach(true)}
+                  aria-label="Attach"
+                >
+                  <Plus size={20} />
+                </button>
 
-            <div className="shc-composer-input-box">
-              <textarea
-                ref={inputRef}
-                value={messageText}
-                onChange={(e) => handleMessageChange(e.target.value, e.target)}
-                onSelect={(e) => {
-                  const target = e.target as HTMLTextAreaElement;
-                  const ctx = getMentionContext(target.value, target.selectionStart ?? target.value.length);
-                  if (ctx) {
-                    setMentionQuery(ctx.query);
-                    setMentionSelectedIndex(0);
-                  } else {
-                    setMentionQuery(null);
-                  }
-                }}
-                placeholder={composerPlaceholder}
-                maxLength={MAX_MESSAGE_LENGTH}
-                onKeyDown={onComposerKey}
-                rows={1}
-                className="shc-composer-textarea"
-                onFocus={() => {
-                  window.requestAnimationFrame(() => {
-                    if (scrollRef.current) {
-                      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-                    }
-                  });
-                }}
-              />
-            </div>
+                <div className={`shc-composer-input-box ${hasComposerMentions ? 'shc-composer-has-mentions' : ''}`}>
+                  {hasComposerMentions && (
+                    <div className="shc-composer-backdrop" aria-hidden="true">
+                      {renderComposerMentionBackdrop(messageText)}
+                    </div>
+                  )}
+                  <textarea
+                    ref={inputRef}
+                    value={messageText}
+                    onChange={(e) => handleMessageChange(e.target.value, e.target)}
+                    onSelect={(e) => {
+                      const target = e.target as HTMLTextAreaElement;
+                      const ctx = getMentionContext(target.value, target.selectionStart ?? target.value.length);
+                      if (ctx) {
+                        setMentionQuery(ctx.query);
+                        setMentionSelectedIndex(0);
+                      } else {
+                        setMentionQuery(null);
+                      }
+                    }}
+                    placeholder={composerPlaceholder}
+                    maxLength={MAX_MESSAGE_LENGTH}
+                    onKeyDown={onComposerKey}
+                    rows={1}
+                    className="shc-composer-textarea"
+                    onFocus={() => {
+                      window.requestAnimationFrame(() => {
+                        if (scrollRef.current) {
+                          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+                        }
+                      });
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="shc-composer-emoji-btn"
+                    onClick={() => {
+                      setActionMessage(null);
+                      setShowEmojiPicker((p) => !p);
+                    }}
+                    aria-label="Toggle emoji picker"
+                  >
+                    <Smile size={20} />
+                  </button>
+                </div>
 
-            <button
-              type="button"
-              className={recording ? 'shc-icon-btn shc-rec-on' : 'shc-icon-btn'}
-              onClick={toggleRecordingUI}
-              aria-label={recording ? 'Stop recording' : 'Record voice message'}
-            >
-              {recording ? <Square size={22} /> : <Mic size={23} />}
-            </button>
+                <button
+                  type="button"
+                  className={recording ? 'shc-icon-btn shc-rec-on' : 'shc-icon-btn'}
+                  onClick={toggleRecordingUI}
+                  aria-label={recording ? 'Stop recording' : 'Record voice message'}
+                >
+                  {recording ? <Square size={22} /> : <Mic size={23} />}
+                </button>
 
-            <button
-              type="button"
-              className="shc-send"
-              disabled={!messageText.trim() || sending || (Boolean(targetUid) && dmRequestState === 'incoming')}
-              onPointerDown={(e) => {
-                // Crucial for mobile virtual keyboards:
-                // Calling preventDefault on pointerdown stops the button tap from blurring the textarea,
-                // keeping the mobile keyboard open.
-                e.preventDefault();
-              }}
-              onMouseDown={(e) => {
-                e.preventDefault();
-              }}
-              onClick={() => void sendMessage()}
-              aria-label="Send"
-            >
-              {sending ? <span className="shc-spinner shc-spinner-sm" /> : <Send size={19} />}
-            </button>
-          </div>
+                <button
+                  type="button"
+                  className="shc-send"
+                  disabled={!messageText.trim() || sending || (Boolean(targetUid) && dmRequestState === 'incoming')}
+                  onPointerDown={(e) => {
+                    // Crucial for mobile virtual keyboards:
+                    // Calling preventDefault on pointerdown stops the button tap from blurring the textarea,
+                    // keeping the mobile keyboard open.
+                    e.preventDefault();
+                  }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                  }}
+                  onClick={() => void sendMessage()}
+                  aria-label="Send"
+                >
+                  {sending ? <span className="shc-spinner shc-spinner-sm" /> : <Send size={19} />}
+                </button>
+              </div>
+            );
+          })()}
 
           {messageText.length > MAX_MESSAGE_LENGTH * 0.85 && (
             <div className="shc-counter">

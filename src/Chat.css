@@ -168,6 +168,9 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: auto;
+  transform: translateZ(0);
   border-radius: 50%;
   display: block;
 }
@@ -431,19 +434,23 @@
 }
 
 .shc-conv {
-  width: 100%;
-  min-height: 72px;
+  width: calc(100% - 16px);
+  margin: 2px 8px;
+  min-height: 68px;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 9px 8px;
+  padding: 10px 12px;
   border: 0;
-  border-bottom: 1px solid var(--line);
+  border-radius: 12px;
   background: transparent;
   text-align: left;
+  box-sizing: border-box;
+  transition: background 0.15s ease;
 }
 
-.shc-conv:hover {
+.shc-conv:hover,
+.shc-conv:focus-visible {
   background: var(--surface);
 }
 
@@ -1004,9 +1011,24 @@
 
 .shc-dc-jumbo-emoji {
   font-size: 42px;
-  line-height: 1.35;
+  line-height: 1.15;
   display: inline-block;
-  margin: 2px 0;
+  margin: 2px 0 0 0;
+  background: transparent !important;
+}
+
+.shc-dc-content:has(.shc-dc-jumbo-emoji) + .shc-dc-reactions,
+.shc-dc-content:has(.shc-dc-jumbo-emoji) ~ .shc-dc-reactions {
+  margin-top: 2px !important;
+}
+
+/* Ensure standard Unicode emojis (like 📉) never show a white box */
+.shc-dc-emoji,
+.shc-dc-jumbo-emoji,
+.shc-emoji,
+.shc-reaction-emoji,
+.shc-dc-text span:not(.shc-mention):not(.shc-channel-mention) {
+  background: transparent !important;
 }
 
 /* Swipe-to-reply container and indicators */
@@ -1611,11 +1633,55 @@
 }
 
 .shc-composer-mention-token {
-  color: #79c0ff;
-  background: rgba(88, 101, 242, 0.32);
+  background: rgba(118, 43, 255, 0.25);
+  color: #d8b4fe;
   border-radius: 4px;
-  padding: 1px 4px;
+  padding: 1px 5px;
   font-weight: 600;
+}
+
+.shc-attach-btn,
+.shc-composer .shc-attach-btn {
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  border-radius: 50% !important;
+  background: #17102a !important;
+  border: 1px solid #39265d !important;
+  color: #d8b4fe !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+  padding: 0 !important;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.shc-attach-btn:hover,
+.shc-composer .shc-attach-btn:hover {
+  background: #23183d !important;
+  border-color: #762bff !important;
+}
+
+.shc-composer-emoji-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  min-width: 38px;
+  height: 100%;
+  padding: 0 8px;
+  background: transparent;
+  border: none;
+  color: #949ba4;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 0.15s ease;
+}
+
+.shc-composer-emoji-btn:hover {
+  color: #d8b4fe;
 }
 
 .shc-composer textarea {
@@ -1683,11 +1749,11 @@
 /* Mention chip badge - Shinzi purple */
 .shc-mention {
   display: inline-block;
-  padding: 1px 6px;
+  padding: 1px 5px;
   margin: 0 1px;
-  border-radius: 5px;
-  background: rgba(147, 51, 234, 0.25);
-  border: 1px solid rgba(168, 85, 247, 0.45);
+  border-radius: 4px;
+  background: rgba(118, 43, 255, 0.25);
+  border: none;
   color: #d8b4fe;
   font-weight: 600;
   vertical-align: baseline;
@@ -1695,19 +1761,19 @@
 
 .shc-channel-mention {
   display: inline-block;
-  padding: 1px 6px;
+  padding: 1px 5px;
   margin: 0 1px;
-  border-radius: 5px;
-  background: rgba(147, 51, 234, 0.18);
-  border: 1px solid rgba(168, 85, 247, 0.35);
+  border-radius: 4px;
+  background: rgba(118, 43, 255, 0.2);
+  border: none;
   color: #c084fc;
   font-weight: 600;
   vertical-align: baseline;
 }
 
 .shc-bubble-own .shc-mention {
-  background: rgba(147, 51, 234, 0.35);
-  border-color: rgba(168, 85, 247, 0.55);
+  background: rgba(118, 43, 255, 0.35);
+  border: none;
   color: #e9d5ff;
 }
 
@@ -2625,12 +2691,12 @@ button {
   --epr-search-input-bg-color-active: #09090c;
   --epr-picker-border-color: #292930;
   --epr-text-color: #e4e4e7;
-  --epr-highlight-color: #5865f2;
-  --epr-category-icon-active-color: #5865f2;
+  --epr-highlight-color: #762bff;
+  --epr-category-icon-active-color: #762bff;
   --epr-category-icon-inactive-color: #b5bac1;
   --epr-hover-bg-color: #1c1c22;
   --epr-focus-bg-color: #24242d;
-  --epr-emoji-size: 27px;
+  --epr-emoji-size: 28px;
 }
 
 /* Category state is shown on the icon only, without a focus circle. */
@@ -2640,13 +2706,50 @@ button {
 }
 
 .shc-emoji-picker .shc-emoji-category-tab[aria-selected='true'] {
-  color: #5865f2;
+  color: #762bff;
 }
 
 .shc-emoji-picker .shc-emoji-category-tab:focus,
 .shc-emoji-picker .shc-emoji-category-tab:focus-visible {
   outline: none;
   box-shadow: none;
+}
+
+/* Mobile & desktop 7-column emoji grid with 28px emojis */
+.shc-emoji-picker .epr-emoji-category-content {
+  display: grid !important;
+  grid-template-columns: repeat(7, 1fr) !important;
+  justify-items: center !important;
+  gap: 4px !important;
+  padding: 0 4px !important;
+}
+
+.shc-emoji-picker button.epr-emoji {
+  width: 36px !important;
+  height: 36px !important;
+  max-width: 36px !important;
+  max-height: 36px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 28px !important;
+  border-radius: 6px !important;
+}
+
+/* Search input with sleek purple border instead of harsh cyan */
+.shc-emoji-picker .epr-search-container input,
+.shc-emoji-picker .epr-search-input {
+  border: 1px solid #762bff !important;
+  outline: none !important;
+  box-shadow: none !important;
+  border-radius: 8px !important;
+}
+
+.shc-emoji-picker .epr-search-container input:focus,
+.shc-emoji-picker .epr-search-input:focus {
+  border-color: #9333ea !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(118, 43, 255, 0.25) !important;
 }
 
 .shc-emoji-picker-loading {
