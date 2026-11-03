@@ -586,8 +586,8 @@ const styles: Record<
   container: {
     minHeight: '100vh',
     width: '100%',
-    backgroundColor: '#111214',
-    color: '#F2F3F5',
+    backgroundColor: '#000000',
+    color: '#FFFFFF',
     boxSizing: 'border-box',
   },
 
@@ -608,7 +608,7 @@ const styles: Record<
   backButton: {
     border: 'none',
     background: 'transparent',
-    color: '#5865F2',
+    color: '#FFFFFF',
     fontSize: 30,
     fontWeight: 400,
     padding: 0,
@@ -643,7 +643,7 @@ const styles: Record<
   },
 
   welcomeTitle: {
-    color: '#F2F3F5',
+    color: '#FFFFFF',
     fontSize: 26,
     fontWeight: 800,
     letterSpacing: -0.3,
@@ -652,7 +652,7 @@ const styles: Record<
   },
 
   welcomeSubtitle: {
-    color: '#A1A4AA',
+    color: '#888888',
     fontSize: 15,
     fontWeight: 400,
     lineHeight: 1.45,
@@ -669,7 +669,7 @@ const styles: Record<
 
   inputLabel: {
     display: 'block',
-    color: '#F2F3F5',
+    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: 600,
     marginBottom: 8,
@@ -682,9 +682,9 @@ const styles: Record<
   // ====================================================
 
  inputBox: {
-  backgroundColor: '#222428',
+  backgroundColor: '#000000',
   borderRadius: 12,
-  border: '1px solid #303238',
+  border: '1px solid #282828',
   marginBottom: 0,
   overflow: 'hidden',
 }, 
@@ -695,7 +695,7 @@ const styles: Record<
     border: 'none',
     outline: 'none',
     backgroundColor: 'transparent',
-    color: '#F2F3F5',
+    color: '#FFFFFF',
 
     paddingLeft: 16,
     paddingRight: 16,
@@ -726,7 +726,7 @@ const styles: Record<
     alignSelf: 'flex-start',
     border: 'none',
     background: 'transparent',
-    color: '#5865F2',
+    color: '#888888',
     fontSize: 14,
     fontWeight: 600,
     marginBottom: 24,
@@ -741,9 +741,9 @@ const styles: Record<
 
   continueBtn: {
     width: '100%',
-    border: '1px solid #303238',
-    backgroundColor: '#171181',
-    color: '#FFFFFF',
+    border: '1px solid #FFFFFF',
+    backgroundColor: '#FFFFFF',
+    color: '#000000',
     boxShadow: 'none',
     borderRadius: 28,
 
@@ -770,9 +770,9 @@ const styles: Record<
   },
 
   disabledBtn: {
-  background: '#18191C',
-  border: '1px solid #303238',
-  color: '#A1A4AA',
+  background: '#000000',
+  border: '1px solid #282828',
+  color: '#777777',
   boxShadow: 'none',
   opacity: 1,
   cursor: 'not-allowed',
@@ -792,7 +792,7 @@ const styles: Record<
     inset: 0,
 
     backgroundColor:
-      'rgba(0, 0, 0, 0.8)',
+      'rgba(0, 0, 0, 0.85)',
 
     display: 'flex',
     justifyContent: 'flex-end',
@@ -810,8 +810,8 @@ const styles: Record<
   flexDirection: 'column',
   justifyContent: 'flex-start',
 
-  backgroundColor: '#222428',
-  border: '1px solid #303238',
+  backgroundColor: '#000000',
+  border: '1px solid #282828',
 
   borderTopLeftRadius: 24,
   borderTopRightRadius: 24,
@@ -825,7 +825,7 @@ const styles: Record<
 },
 
   modalTitle: {
-    color: '#F2F3F5',
+    color: '#FFFFFF',
     fontSize: 22,
     fontWeight: 700,
     marginBottom: 12,
@@ -833,7 +833,7 @@ const styles: Record<
   },
 
   modalSub: {
-  color: '#A1A4AA',
+  color: '#888888',
   fontSize: 14,
   textAlign: 'center',
   marginTop: 0,
@@ -846,7 +846,7 @@ const styles: Record<
     width: '100%',
     border: 'none',
     background: 'transparent',
-    color: '#A1A4AA',
+    color: '#888888',
 
     fontSize: 16,
     fontWeight: 600,
@@ -864,7 +864,7 @@ modalBackButton: {
   border: 'none',
   background: 'transparent',
 
-  color: '#5865F2',
+  color: '#FFFFFF',
 
   fontSize: 30,
   fontWeight: 400,
@@ -888,7 +888,7 @@ successContent: {
 },
 
 successText: {
-  color: '#A1A4AA',
+  color: '#888888',
   fontSize: 15,
   fontWeight: 400,
   lineHeight: 1.5,
@@ -901,9 +901,9 @@ successText: {
 doneButton: {
   width: '100%',
   flexShrink: 0,
-  border: '1px solid #303238',
-  backgroundColor: '#171181',
-  color: '#FFFFFF',
+  border: '1px solid #FFFFFF',
+  backgroundColor: '#FFFFFF',
+  color: '#000000',
   borderRadius: 28,
   padding: '16px 20px',
   fontSize: 16,

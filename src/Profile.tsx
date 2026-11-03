@@ -558,7 +558,7 @@ useEffect(() => {
             bannerImageUri
               ? {
                   backgroundImage:
-                    `linear-gradient(180deg, transparent, #11121499), url("${bannerImageUri}")`,
+                    `linear-gradient(180deg, transparent, #00000099), url("${bannerImageUri}")`,
                 }
               : undefined
           }

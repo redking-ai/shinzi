@@ -1506,15 +1506,15 @@ useEffect(() => {
         }
 
         .signup-page {
-          --su-bg: #111214;
---su-surface: #18191C;
---su-surface-2: #222428;
---su-line: #303238;
---su-line-strong: #303238;
---su-text: #F2F3F5;
---su-muted: #A1A4AA;
+          --su-bg: #000000;
+--su-surface: #000000;
+--su-surface-2: #0a0a0a;
+--su-line: #222222;
+--su-line-strong: #282828;
+--su-text: #FFFFFF;
+--su-muted: #888888;
 --su-accent: #5865F2;
---su-violet: #171181;
+--su-violet: #FFFFFF;
 --su-danger: #FF3366;
 
           width: 100%;
@@ -2022,13 +2022,13 @@ useEffect(() => {
         .signup-continue-button {
           width: 100%;
 
-          border: 1px solid #303238;
+          border: 1px solid #FFFFFF;
 
 border-radius: 28px;
 
-background: #171181;
+background: #FFFFFF;
 
-color: #FFFFFF;
+color: #000000;
 
 box-shadow: none;
 
@@ -2069,9 +2069,9 @@ box-shadow: none;
         }
 
         .signup-disabled-button {
-  background: #18191C;
-  border-color: #303238;
-  color: #A1A4AA;
+  background: #000000;
+  border-color: #282828;
+  color: #777777;
   box-shadow: none;
   cursor: not-allowed;
 }
@@ -2186,7 +2186,7 @@ box-shadow: none;
 
         .signup-modal-option:hover {
           background:
-            #222428;
+            #111111;
         }
 
         /* ==============================================
@@ -2200,7 +2200,7 @@ box-shadow: none;
           z-index: 2000;
 
           background:
-            #111214;
+            #000000;
 
           display: flex;
           flex-direction: column;

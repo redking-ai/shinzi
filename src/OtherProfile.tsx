@@ -500,7 +500,7 @@ export default function OtherProfile({
             banner
               ? {
                   backgroundImage:
-                    `linear-gradient(180deg, transparent, #11121499), url("${banner}")`,
+                    `linear-gradient(180deg, transparent, #00000099), url("${banner}")`,
                 }
               : undefined
           }

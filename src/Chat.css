@@ -6,19 +6,20 @@
 }
 
 .shc-page {
-  --bg: #111214;
-  --surface: #18191C;
-  --surface-2: #222428;
-  --line: #303238;
-  --line-strong: #303238;
-  --text: #F2F3F5;
-  --muted: #A1A4AA;
+  --bg: #000000;
+  --surface: #000000;
+  --surface-2: #0a0a0a;
+  --line: #222222;
+  --line-strong: #282828;
+  --text: #FFFFFF;
+  --muted: #888888;
   --accent: #5865F2;
   --violet: #5865F2;
   --danger: #ff3366;
   --green: #43d17a;
   --yellow: #ffd166;
-  --btn-primary: #171181;
+  --btn-primary: #FFFFFF;
+  --btn-primary-text: #000000;
 
   position: fixed;
   inset: 0;
@@ -569,8 +570,8 @@
   justify-content: space-around;
   min-height: 64px;
   padding: 0 4px env(safe-area-inset-bottom, 0px);
-  border-top: 1px solid var(--line);
-  background: #0c0818;
+  border-top: 1px solid #1a1a1a !important;
+  background: #000000 !important;
 }
 
 .shc-bottom button {
@@ -583,20 +584,41 @@
   justify-content: center;
   gap: 3px;
   padding: 0 8px;
-  border: 0;
+  border: 0 !important;
   border-radius: 14px;
-  background: transparent;
-  color: var(--muted);
+  background: transparent !important;
+  color: #555555 !important;
+}
+
+.shc-bottom button svg {
+  color: #555555 !important;
+  stroke: #555555 !important;
+  transition: color 0.15s ease, stroke 0.15s ease;
 }
 
 .shc-bottom button span {
   font-size: 10px;
   font-weight: 600;
+  color: #555555;
 }
 
-.shc-bottom .shc-bottom-active {
-  background: var(--surface);
-  color: var(--accent);
+.shc-bottom .shc-bottom-active,
+.shc-bottom button.shc-bottom-active {
+  background: transparent !important;
+  color: #FFFFFF !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.shc-bottom .shc-bottom-active svg,
+.shc-bottom button.shc-bottom-active svg {
+  color: #FFFFFF !important;
+  stroke: #FFFFFF !important;
+}
+
+.shc-bottom .shc-bottom-active span,
+.shc-bottom button.shc-bottom-active span {
+  color: #FFFFFF !important;
 }
 
 /* ===== Sub screens ===== */
@@ -1603,9 +1625,9 @@
   min-width: 0;
   min-height: 44px;
   max-height: 140px;
-  border: 1px solid #303238;
+  border: 1px solid #282828;
   border-radius: 24px;
-  background: #222428;
+  background: #000000;
   display: flex;
   align-items: center;
   padding: 3px 6px;
@@ -1615,8 +1637,8 @@
 }
 
 .shc-composer-input-box:focus-within {
-  border-color: #5865F2;
-  background: #222428;
+  border-color: #444444;
+  background: #000000;
 }
 
 .shc-composer-icon-btn {
@@ -1634,7 +1656,7 @@
   border: none !important;
   border-radius: 0 !important;
   box-shadow: none !important;
-  color: #A1A4AA !important;
+  color: #666666 !important;
   cursor: pointer !important;
   flex-shrink: 0 !important;
   line-height: 1 !important;
@@ -1647,7 +1669,7 @@
 }
 
 .shc-composer-icon-btn:hover {
-  color: #F2F3F5 !important;
+  color: #FFFFFF !important;
 }
 
 .shc-composer-icon-btn:active {
@@ -1655,7 +1677,7 @@
 }
 
 .shc-composer-attach-btn {
-  color: #A1A4AA !important;
+  color: #666666 !important;
 }
 
 .shc-composer-attach-btn:hover {
@@ -1664,7 +1686,7 @@
 
 /* Emoji icon centered vertically, not pushed up */
 .shc-composer-emoji-btn {
-  color: #A1A4AA !important;
+  color: #666666 !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -1674,11 +1696,11 @@
 }
 
 .shc-composer-emoji-btn:hover {
-  color: #F2F3F5 !important;
+  color: #FFFFFF !important;
 }
 
 .shc-composer-voice-btn {
-  color: #A1A4AA !important;
+  color: #666666 !important;
 }
 
 .shc-composer-voice-btn.shc-rec-on {
@@ -1686,19 +1708,19 @@
 }
 
 .shc-composer-send-btn {
-  color: #4e5058 !important;
-  opacity: 0.35 !important;
+  color: #333333 !important;
+  opacity: 0.5 !important;
   cursor: default !important;
 }
 
 .shc-composer-send-btn.shc-send-active {
-  color: #5865F2 !important;
+  color: #FFFFFF !important;
   opacity: 1 !important;
   cursor: pointer !important;
 }
 
 .shc-composer-send-btn.shc-send-active:hover {
-  color: #7983f5 !important;
+  color: #FFFFFF !important;
 }
 
 .shc-composer-text-wrap {
@@ -3130,16 +3152,16 @@ button {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
 }
 
-/* Primary Button - #171181 with white text */
+/* Primary / Active Button - Pure White with Black text */
 .shc-btn,
 .shc-btn-primary {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 10px 20px;
-  background: #171181 !important;
-  color: #FFFFFF !important;
-  border: 1px solid #303238 !important;
+  background: #FFFFFF !important;
+  color: #000000 !important;
+  border: 1px solid #FFFFFF !important;
   border-radius: 20px;
   font-weight: 700;
   font-size: 14px;
@@ -3155,4 +3177,12 @@ button {
 .shc-btn:active,
 .shc-btn-primary:active {
   transform: scale(0.98);
+}
+
+.shc-btn:disabled,
+.shc-btn-primary:disabled {
+  background: #000000 !important;
+  color: #777777 !important;
+  border: 1px solid #282828 !important;
+  cursor: not-allowed !important;
 }

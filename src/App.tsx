@@ -411,14 +411,14 @@ const styles: Record<string, CSSProperties> = {
     width: '100%',
     height: '100dvh',
     minHeight: 0,
-    backgroundColor: '#111214',
+    backgroundColor: '#000000',
     overflow: 'hidden',
   },
 
   background: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#111214',
+    backgroundColor: '#000000',
   },
 
   safeArea: {
@@ -458,7 +458,7 @@ const styles: Record<string, CSSProperties> = {
 
   title: {
     margin: 0,
-    color: '#F2F3F5',
+    color: '#FFFFFF',
     fontSize: 34,
     fontWeight: 900,
     textAlign: 'center',
@@ -469,7 +469,7 @@ const styles: Record<string, CSSProperties> = {
   description: {
     margin: 0,
     marginTop: 12,
-    color: '#A1A4AA',
+    color: '#888888',
     fontSize: 16,
     fontWeight: 400,
     textAlign: 'center',
@@ -491,15 +491,15 @@ const styles: Record<string, CSSProperties> = {
     width: '100%',
     boxSizing: 'border-box',
 
-    // Primary Button — #171181 with white text
-    backgroundColor: '#171181',
-    border: '1px solid #303238',
+    // Active/Primary Button — Pure White with Pure Black text
+    backgroundColor: '#FFFFFF',
+    border: '1px solid #FFFFFF',
     boxShadow: 'none',
 
     borderRadius: 28,
     paddingTop: 16,
     paddingBottom: 16,
-    color: '#FFFFFF',
+    color: '#000000',
     fontSize: 16,
     fontWeight: 700,
     cursor: 'pointer',
@@ -509,9 +509,9 @@ const styles: Record<string, CSSProperties> = {
     width: '100%',
     boxSizing: 'border-box',
 
-    // Log In — Raised surface #222428 / Secondary
-    backgroundColor: '#222428',
-    border: '1px solid #303238',
+    // Secondary Button — Pure Black with White text
+    backgroundColor: '#000000',
+    border: '1px solid #333333',
     boxShadow: 'none',
 
     borderRadius: 28,
@@ -580,7 +580,7 @@ desktopButton: {
   loadingContainer: {
     width: '100%',
     height: '100dvh',
-    backgroundColor: '#111214',
+    backgroundColor: '#000000',
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
@@ -592,8 +592,8 @@ desktopButton: {
   spinner: {
     width: 38,
     height: 38,
-    border: '4px solid #303238',
-    borderTop: '4px solid #5865F2',
+    border: '4px solid #222222',
+    borderTop: '4px solid #FFFFFF',
     borderRadius: '50%',
     animation: 'shinzi-spin 0.8s linear infinite',
   },
@@ -602,8 +602,8 @@ desktopButton: {
     width: '100%',
     height: '100dvh',
     boxSizing: 'border-box',
-    backgroundColor: '#111214',
-    color: '#F2F3F5',
+    backgroundColor: '#000000',
+    color: '#FFFFFF',
     display: 'flex',
     flexDirection: 'column',
     justifyContent: 'center',
@@ -616,8 +616,8 @@ desktopButton: {
     width: '100%',
     height: '100dvh',
     boxSizing: 'border-box',
-    backgroundColor: '#111214',
-    color: '#F2F3F5',
+    backgroundColor: '#000000',
+    color: '#FFFFFF',
     display: 'flex',
     flexDirection: 'column',
     justifyContent: 'center',
@@ -627,13 +627,13 @@ desktopButton: {
 
   placeholderTitle: {
     margin: 0,
-    color: '#F2F3F5',
+    color: '#FFFFFF',
     fontSize: 32,
     fontWeight: 800,
   },
 
   placeholderText: {
-    color: '#A1A4AA',
+    color: '#888888',
     fontSize: 15,
     marginTop: 10,
   },
@@ -641,10 +641,10 @@ desktopButton: {
   backButton: {
     marginTop: 20,
     padding: '12px 24px',
-    border: '1px solid #303238',
+    border: '1px solid #FFFFFF',
     borderRadius: 24,
-    backgroundColor: '#171181',
-    color: '#FFFFFF',
+    backgroundColor: '#FFFFFF',
+    color: '#000000',
     fontSize: 15,
     fontWeight: 700,
     cursor: 'pointer',
