@@ -155,12 +155,12 @@ export default function Terms() {
         }
 
         .terms-page {
-          --terms-bg: #080612;
-          --terms-surface: #17102A;
-          --terms-border: #39265D;
-          --terms-text: #FFFFFF;
-          --terms-muted: #A6A2B5;
-          --terms-accent: #20D9FF;
+          --terms-bg: #111214;
+          --terms-surface: #222428;
+          --terms-border: #303238;
+          --terms-text: #F2F3F5;
+          --terms-muted: #A1A4AA;
+          --terms-accent: #5865F2;
 
           width: 100%;
           min-height: 100vh;

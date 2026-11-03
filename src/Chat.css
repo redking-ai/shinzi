@@ -6,18 +6,19 @@
 }
 
 .shc-page {
-  --bg: #080612;
-  --surface: #17102a;
-  --surface-2: #211b30;
-  --line: #39265d;
-  --line-strong: #594080;
-  --text: #ffffff;
-  --muted: #a6a2b5;
-  --accent: #20d9ff;
-  --violet: #762bff;
+  --bg: #111214;
+  --surface: #18191C;
+  --surface-2: #222428;
+  --line: #303238;
+  --line-strong: #303238;
+  --text: #F2F3F5;
+  --muted: #A1A4AA;
+  --accent: #5865F2;
+  --violet: #5865F2;
   --danger: #ff3366;
   --green: #43d17a;
   --yellow: #ffd166;
+  --btn-primary: #171181;
 
   position: fixed;
   inset: 0;
@@ -1602,9 +1603,9 @@
   min-width: 0;
   min-height: 44px;
   max-height: 140px;
-  border: 1px solid #2d2446;
+  border: 1px solid #303238;
   border-radius: 24px;
-  background: #140e24;
+  background: #222428;
   display: flex;
   align-items: center;
   padding: 3px 6px;
@@ -1614,8 +1615,8 @@
 }
 
 .shc-composer-input-box:focus-within {
-  border-color: #762bff;
-  background: #17102b;
+  border-color: #5865F2;
+  background: #222428;
 }
 
 .shc-composer-icon-btn {
@@ -1633,7 +1634,7 @@
   border: none !important;
   border-radius: 0 !important;
   box-shadow: none !important;
-  color: #9d94b8 !important;
+  color: #A1A4AA !important;
   cursor: pointer !important;
   flex-shrink: 0 !important;
   line-height: 1 !important;
@@ -1646,7 +1647,7 @@
 }
 
 .shc-composer-icon-btn:hover {
-  color: #d8b4fe !important;
+  color: #F2F3F5 !important;
 }
 
 .shc-composer-icon-btn:active {
@@ -1654,7 +1655,7 @@
 }
 
 .shc-composer-attach-btn {
-  color: #b8b0cf !important;
+  color: #A1A4AA !important;
 }
 
 .shc-composer-attach-btn:hover {
@@ -1663,7 +1664,7 @@
 
 /* Emoji icon centered vertically, not pushed up */
 .shc-composer-emoji-btn {
-  color: #9d94b8 !important;
+  color: #A1A4AA !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -1673,11 +1674,11 @@
 }
 
 .shc-composer-emoji-btn:hover {
-  color: #d8b4fe !important;
+  color: #F2F3F5 !important;
 }
 
 .shc-composer-voice-btn {
-  color: #9d94b8 !important;
+  color: #A1A4AA !important;
 }
 
 .shc-composer-voice-btn.shc-rec-on {
@@ -1685,19 +1686,19 @@
 }
 
 .shc-composer-send-btn {
-  color: #554a72 !important;
+  color: #4e5058 !important;
   opacity: 0.35 !important;
   cursor: default !important;
 }
 
 .shc-composer-send-btn.shc-send-active {
-  color: #762bff !important;
+  color: #5865F2 !important;
   opacity: 1 !important;
   cursor: pointer !important;
 }
 
 .shc-composer-send-btn.shc-send-active:hover {
-  color: #9333ea !important;
+  color: #7983f5 !important;
 }
 
 .shc-composer-text-wrap {
@@ -1733,9 +1734,9 @@
   z-index: 1;
 }
 
-/* Mention text in typebox: pure purple text color, NO background box, NO border, NO padding */
+/* Mention text in typebox: pure blue text color, NO background box, NO border, NO padding */
 .shc-composer-mention-text {
-  color: #c084fc !important;
+  color: #5865F2 !important;
   font-weight: 600 !important;
   background: transparent !important;
   border: none !important;
@@ -1759,9 +1760,9 @@
   font-family: inherit;
   font-size: 15px;
   line-height: 1.35;
-  color: #f1f2f4;
-  -webkit-text-fill-color: #f1f2f4;
-  caret-color: #a855f7;
+  color: #F2F3F5;
+  -webkit-text-fill-color: #F2F3F5;
+  caret-color: #5865F2;
   resize: none;
   box-sizing: border-box;
   min-height: 36px;
@@ -1770,26 +1771,26 @@
   z-index: 2;
 }
 
-/* When mentions are typed, make textarea text transparent so backdrop shines through with purple mentions */
+/* When mentions are typed, make textarea text transparent so backdrop shines through with blue mentions */
 .shc-composer .shc-composer-has-mentions textarea,
 .shc-composer .shc-composer-has-mentions .shc-composer-textarea,
 .shc-composer-has-mentions textarea,
 .shc-composer-has-mentions .shc-composer-textarea {
   color: transparent !important;
   -webkit-text-fill-color: transparent !important;
-  caret-color: #a855f7 !important;
+  caret-color: #5865F2 !important;
 }
 
 .shc-composer .shc-composer-has-mentions textarea::selection,
 .shc-composer-has-mentions textarea::selection {
-  background: rgba(147, 51, 234, 0.45);
+  background: rgba(88, 101, 242, 0.45);
   color: transparent;
   -webkit-text-fill-color: transparent;
 }
 
 .shc-composer-textarea::placeholder,
 .shc-composer textarea::placeholder {
-  color: #787090 !important;
+  color: #A1A4AA !important;
 }
 
 .shc-composer-textarea:focus,
@@ -1806,15 +1807,15 @@
   text-align: right;
 }
 
-/* Mention chip badge - Shinzi purple */
+/* Mention chip badge - Shinzi blue */
 .shc-mention {
   display: inline-block;
   padding: 1px 5px;
   margin: 0 1px;
   border-radius: 4px;
-  background: rgba(118, 43, 255, 0.25);
+  background: rgba(88, 101, 242, 0.2);
   border: none;
-  color: #d8b4fe;
+  color: #5865F2;
   font-weight: 600;
   vertical-align: baseline;
 }
@@ -1824,17 +1825,17 @@
   padding: 1px 5px;
   margin: 0 1px;
   border-radius: 4px;
-  background: rgba(118, 43, 255, 0.2);
+  background: rgba(88, 101, 242, 0.2);
   border: none;
-  color: #c084fc;
+  color: #5865F2;
   font-weight: 600;
   vertical-align: baseline;
 }
 
 .shc-bubble-own .shc-mention {
-  background: rgba(118, 43, 255, 0.35);
+  background: rgba(88, 101, 242, 0.35);
   border: none;
-  color: #e9d5ff;
+  color: #FFFFFF;
 }
 
 .shc-composer-mentions {
@@ -1863,8 +1864,8 @@
   max-height: 200px;
   overflow-y: auto;
   border-radius: 12px;
-  background: #141320;
-  border: 1px solid #2f2a48;
+  background: #222428;
+  border: 1px solid #303238;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.65);
   z-index: 1000;
   display: flex;
@@ -1879,7 +1880,7 @@
   padding: 7px 10px;
   border: none;
   background: transparent;
-  color: #f1f2f4;
+  color: #F2F3F5;
   text-align: left;
   border-radius: 8px;
   cursor: pointer;
@@ -1891,7 +1892,7 @@
 
 .shc-mention-item:hover,
 .shc-mention-item.shc-mention-item-active {
-  background: rgba(147, 51, 234, 0.25);
+  background: rgba(88, 101, 242, 0.2);
 }
 
 .shc-mention-item-inner {
@@ -1905,8 +1906,8 @@
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: rgba(147, 51, 234, 0.35);
-  color: #d8b4fe;
+  background: rgba(88, 101, 242, 0.25);
+  color: #5865F2;
   font-weight: 700;
   font-size: 13px;
   display: flex;
@@ -1918,12 +1919,12 @@
 .shc-mention-item-handle {
   font-size: 14px;
   font-weight: 600;
-  color: #d8b4fe;
+  color: #5865F2;
 }
 
 .shc-mention-item-name {
   font-size: 12px;
-  color: var(--muted, #949ba4);
+  color: var(--muted, #A1A4AA);
   margin-left: 2px;
 }
 
@@ -1942,7 +1943,7 @@
   min-height: 38px;
   max-height: 120px;
   background: transparent !important;
-  color: #f5f7ff !important;
+  color: #F2F3F5 !important;
   border: 0 !important;
   outline: none !important;
   box-shadow: none !important;
@@ -1964,8 +1965,8 @@
   min-width: 240px !important;
   max-width: calc(100vw - 32px) !important;
   overflow-y: auto !important;
-  background: #141320 !important;
-  border: 1px solid #2f2a4a !important;
+  background: #222428 !important;
+  border: 1px solid #303238 !important;
   border-radius: 12px !important;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6) !important;
   padding: 6px !important;
@@ -1987,14 +1988,14 @@
   padding: 8px 10px !important;
   border-radius: 8px !important;
   cursor: pointer !important;
-  color: #e2e8f0 !important;
+  color: #F2F3F5 !important;
   font-size: 14px !important;
   transition: background 0.12s ease !important;
 }
 
 .p-mention-item:hover,
 .p-mention-item.p-highlight {
-  background: rgba(147, 51, 234, 0.28) !important;
+  background: rgba(88, 101, 242, 0.2) !important;
   color: #ffffff !important;
 }
 
@@ -2009,8 +2010,8 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: rgba(147, 51, 234, 0.22);
-  color: #d8b4fe;
+  background: rgba(88, 101, 242, 0.22);
+  color: #5865F2;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2027,7 +2028,7 @@
 .shc-mention-item-handle {
   font-size: 13px;
   font-weight: 700;
-  color: #d8b4fe;
+  color: #5865F2;
 }
 
 .shc-mention-item-desc {
@@ -2620,8 +2621,8 @@ button {
 }
 
 .shc-action-sheet {
-  background: #111317;
-  border-top: 1px solid #292c33;
+  background: #222428;
+  border-top: 1px solid #303238;
   border-radius: 20px 20px 0 0;
   padding: 12px 16px calc(20px + env(safe-area-inset-bottom, 0px));
   display: flex;
@@ -2646,8 +2647,8 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-around;
-  background: #17191f;
-  border: 1px solid #292c33;
+  background: #18191C;
+  border: 1px solid #303238;
   border-radius: 28px;
   padding: 6px 10px;
   gap: 6px;
@@ -2678,15 +2679,15 @@ button {
 }
 
 .shc-action-emoji-btn-more {
-  color: #a6a2b5;
+  color: #A1A4AA;
   background: rgba(255, 255, 255, 0.06);
 }
 
 .shc-action-menu {
   display: flex;
   flex-direction: column;
-  background: #17191f;
-  border: 1px solid #292c33;
+  background: #18191C;
+  border: 1px solid #303238;
   border-radius: 16px;
   overflow: hidden;
 }
@@ -2698,8 +2699,8 @@ button {
   padding: 14px 18px;
   background: transparent;
   border: none;
-  border-bottom: 1px solid #292c33;
-  color: #f4f4f5;
+  border-bottom: 1px solid #303238;
+  color: #F2F3F5;
   font-size: 15px;
   font-weight: 500;
   cursor: pointer;
@@ -2713,7 +2714,7 @@ button {
 }
 
 .shc-action-item:hover {
-  background: #22252c;
+  background: #222428;
 }
 
 .shc-action-item-danger {
@@ -2726,8 +2727,8 @@ button {
 
 /* Full Unicode emoji picker sheet */
 .shc-emoji-picker-sheet {
-  background: #101014;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: #222428;
+  border-top: 1px solid #303238;
   border-radius: 20px 20px 0 0;
   max-height: 80dvh;
   height: min(560px, 78dvh);
@@ -2745,28 +2746,28 @@ button {
   flex: 1;
   min-height: 0;
   width: 100%;
-  --epr-bg-color: #101014;
-  --epr-category-label-bg-color: #101014;
-  --epr-search-input-bg-color: #09090c;
-  --epr-search-input-bg-color-active: #09090c;
-  --epr-picker-border-color: #292930;
-  --epr-text-color: #e4e4e7;
-  --epr-highlight-color: #762bff;
-  --epr-category-icon-active-color: #762bff;
-  --epr-category-icon-inactive-color: #b5bac1;
-  --epr-hover-bg-color: #1c1c22;
-  --epr-focus-bg-color: #24242d;
+  --epr-bg-color: #222428;
+  --epr-category-label-bg-color: #222428;
+  --epr-search-input-bg-color: #18191C;
+  --epr-search-input-bg-color-active: #18191C;
+  --epr-picker-border-color: #303238;
+  --epr-text-color: #F2F3F5;
+  --epr-highlight-color: #5865F2;
+  --epr-category-icon-active-color: #5865F2;
+  --epr-category-icon-inactive-color: #A1A4AA;
+  --epr-hover-bg-color: rgba(255, 255, 255, 0.06);
+  --epr-focus-bg-color: rgba(255, 255, 255, 0.1);
   --epr-emoji-size: 28px;
 }
 
 /* Category state is shown on the icon only, without a focus circle. */
 .shc-emoji-picker .shc-emoji-category-tab {
-  color: #b5bac1;
+  color: #A1A4AA;
   transition: color 0.12s ease;
 }
 
 .shc-emoji-picker .shc-emoji-category-tab[aria-selected='true'] {
-  color: #762bff;
+  color: #5865F2;
 }
 
 .shc-emoji-picker .shc-emoji-category-tab:focus,
@@ -2796,20 +2797,21 @@ button {
   border-radius: 6px !important;
 }
 
-/* Search input with sleek purple border instead of harsh cyan */
+/* Search input with sleek blue border */
 .shc-emoji-picker .epr-search-container input,
 .shc-emoji-picker .epr-search-input {
-  border: 1px solid #762bff !important;
+  border: 1px solid #303238 !important;
   outline: none !important;
   box-shadow: none !important;
   border-radius: 8px !important;
+  color: #F2F3F5 !important;
 }
 
 .shc-emoji-picker .epr-search-container input:focus,
 .shc-emoji-picker .epr-search-input:focus {
-  border-color: #9333ea !important;
+  border-color: #5865F2 !important;
   outline: none !important;
-  box-shadow: 0 0 0 2px rgba(118, 43, 255, 0.25) !important;
+  box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.25) !important;
 }
 
 .shc-emoji-picker-loading {
@@ -3126,4 +3128,31 @@ button {
   object-fit: contain;
   border-radius: 6px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+/* Primary Button - #171181 with white text */
+.shc-btn,
+.shc-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 20px;
+  background: #171181 !important;
+  color: #FFFFFF !important;
+  border: 1px solid #303238 !important;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+}
+
+.shc-btn:hover,
+.shc-btn-primary:hover {
+  opacity: 0.9;
+}
+
+.shc-btn:active,
+.shc-btn-primary:active {
+  transform: scale(0.98);
 }

@@ -1506,15 +1506,15 @@ useEffect(() => {
         }
 
         .signup-page {
-          --su-bg: #080612;
---su-surface: #17102A;
---su-surface-2: #17102A;
---su-line: #39265D;
---su-line-strong: #594080;
---su-text: #FFFFFF;
---su-muted: #A6A2B5;
---su-accent: #20D9FF;
---su-violet: #39265D;
+          --su-bg: #111214;
+--su-surface: #18191C;
+--su-surface-2: #222428;
+--su-line: #303238;
+--su-line-strong: #303238;
+--su-text: #F2F3F5;
+--su-muted: #A1A4AA;
+--su-accent: #5865F2;
+--su-violet: #171181;
 --su-danger: #FF3366;
 
           width: 100%;
@@ -2022,20 +2022,15 @@ useEffect(() => {
         .signup-continue-button {
           width: 100%;
 
-          border: 1px solid rgba(118, 43, 255, 0.8);
+          border: 1px solid #303238;
 
 border-radius: 28px;
 
-background: linear-gradient(
-  90deg,
-  #3020A0,
-  #762BFF
-);
+background: #171181;
 
 color: #FFFFFF;
 
-box-shadow:
-  0 0 14px rgba(118, 43, 255, 0.22);
+box-shadow: none;
 
           padding: 16px;
 
@@ -2074,9 +2069,9 @@ box-shadow:
         }
 
         .signup-disabled-button {
-  background: #211B30;
-  border-color: #302641;
-  color: #777184;
+  background: #18191C;
+  border-color: #303238;
+  color: #A1A4AA;
   box-shadow: none;
   cursor: not-allowed;
 }
@@ -2090,8 +2085,8 @@ box-shadow:
         .signup-spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid rgba(32, 217, 255, 0.22);
-  border-top-color: #20D9FF;
+  border: 2px solid rgba(88, 101, 242, 0.22);
+  border-top-color: #5865F2;
   border-radius: 50%;
   animation: signup-spin 0.7s linear infinite;
   flex-shrink: 0;
@@ -2191,7 +2186,7 @@ box-shadow:
 
         .signup-modal-option:hover {
           background:
-            #1D1D28;
+            #222428;
         }
 
         /* ==============================================
@@ -2205,7 +2200,7 @@ box-shadow:
           z-index: 2000;
 
           background:
-            #080612;
+            #111214;
 
           display: flex;
           flex-direction: column;

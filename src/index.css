@@ -1,6 +1,17 @@
 /* ============================================================
-   SHINZI GLOBAL STYLES
+   SHINZI GLOBAL STYLES - DARK MODE THEME
    ============================================================ */
+
+:root {
+  --bg-page: #111214;
+  --bg-chat: #18191C;
+  --bg-raised: #222428;
+  --text-main: #F2F3F5;
+  --text-muted: #A1A4AA;
+  --border-color: #303238;
+  --link-blue: #5865F2;
+  --btn-primary: #171181;
+}
 
 * {
   box-sizing: border-box;
@@ -22,12 +33,14 @@ body,
 
 html {
   overflow: hidden;
+  background: #111214;
 }
 
 body {
   min-width: 0;
   min-height: 100%;
-  background: #000000;
+  background: #111214;
+  color: #F2F3F5;
   overflow: hidden;
   font-family: Arial, Helvetica, sans-serif;
 }

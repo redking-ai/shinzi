@@ -24,7 +24,6 @@ import Login from './Login';
 import Chat from './Chat';
 import { getCachedProfile, setCachedProfile, navigateTo } from './profileCache';
 
-import background from './assets/background.png';
 import logo from './assets/logo.png';
 
 type Screen = 'welcome' | 'signup' | 'login' | 'terms' | 'privacy';
@@ -348,12 +347,7 @@ if (currentPath === '/chat') {
 
   return (
     <div style={styles.container}>
-      <div
-        style={{
-          ...styles.background,
-          backgroundImage: `url(${background})`,
-        }}
-      >
+      <div style={styles.background}>
         <div style={safeAreaStyle}>
 
           {/* HERO */}
@@ -417,16 +411,14 @@ const styles: Record<string, CSSProperties> = {
     width: '100%',
     height: '100dvh',
     minHeight: 0,
-    backgroundColor: '#080612',
+    backgroundColor: '#111214',
     overflow: 'hidden',
   },
 
   background: {
     width: '100%',
     height: '100%',
-    backgroundSize: 'cover',
-    backgroundPosition: 'center',
-    backgroundRepeat: 'no-repeat',
+    backgroundColor: '#111214',
   },
 
   safeArea: {
@@ -466,7 +458,7 @@ const styles: Record<string, CSSProperties> = {
 
   title: {
     margin: 0,
-    color: '#FFFFFF',
+    color: '#F2F3F5',
     fontSize: 34,
     fontWeight: 900,
     textAlign: 'center',
@@ -477,7 +469,7 @@ const styles: Record<string, CSSProperties> = {
   description: {
     margin: 0,
     marginTop: 12,
-    color: '#A5A5BA',
+    color: '#A1A4AA',
     fontSize: 16,
     fontWeight: 400,
     textAlign: 'center',
@@ -499,10 +491,10 @@ const styles: Record<string, CSSProperties> = {
     width: '100%',
     boxSizing: 'border-box',
 
-    // Register — Deep Purple
-    backgroundColor: '#39265D',
-    border: '1px solid rgba(164, 104, 255, 0.65)',
-    boxShadow: '0 0 10px rgba(130, 65, 220, 0.16)',
+    // Primary Button — #171181 with white text
+    backgroundColor: '#171181',
+    border: '1px solid #303238',
+    boxShadow: 'none',
 
     borderRadius: 28,
     paddingTop: 16,
@@ -517,10 +509,10 @@ const styles: Record<string, CSSProperties> = {
     width: '100%',
     boxSizing: 'border-box',
 
-    // Log In — Blue-Purple Gradient
-    background: 'linear-gradient(110deg, #3020A0 0%, #762BFF 100%)',
-    border: '1px solid rgba(32, 217, 255, 0.55)',
-    boxShadow: '0 0 12px rgba(118, 43, 255, 0.24)',
+    // Log In — Raised surface #222428 / Secondary
+    backgroundColor: '#222428',
+    border: '1px solid #303238',
+    boxShadow: 'none',
 
     borderRadius: 28,
     paddingTop: 16,
@@ -588,7 +580,7 @@ desktopButton: {
   loadingContainer: {
     width: '100%',
     height: '100dvh',
-    backgroundColor: '#080612',
+    backgroundColor: '#111214',
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
@@ -600,8 +592,8 @@ desktopButton: {
   spinner: {
     width: 38,
     height: 38,
-    border: '4px solid #22222E',
-    borderTop: '4px solid #20D9FF',
+    border: '4px solid #303238',
+    borderTop: '4px solid #5865F2',
     borderRadius: '50%',
     animation: 'shinzi-spin 0.8s linear infinite',
   },
@@ -610,8 +602,8 @@ desktopButton: {
     width: '100%',
     height: '100dvh',
     boxSizing: 'border-box',
-    backgroundColor: '#000000',
-    color: '#FFFFFF',
+    backgroundColor: '#111214',
+    color: '#F2F3F5',
     display: 'flex',
     flexDirection: 'column',
     justifyContent: 'center',
@@ -624,8 +616,8 @@ desktopButton: {
     width: '100%',
     height: '100dvh',
     boxSizing: 'border-box',
-    backgroundColor: '#000000',
-    color: '#FFFFFF',
+    backgroundColor: '#111214',
+    color: '#F2F3F5',
     display: 'flex',
     flexDirection: 'column',
     justifyContent: 'center',
@@ -635,13 +627,13 @@ desktopButton: {
 
   placeholderTitle: {
     margin: 0,
-    color: '#FFFFFF',
+    color: '#F2F3F5',
     fontSize: 32,
     fontWeight: 800,
   },
 
   placeholderText: {
-    color: '#A5A5BA',
+    color: '#A1A4AA',
     fontSize: 15,
     marginTop: 10,
   },
@@ -649,10 +641,10 @@ desktopButton: {
   backButton: {
     marginTop: 20,
     padding: '12px 24px',
-    border: 'none',
+    border: '1px solid #303238',
     borderRadius: 24,
-    backgroundColor: '#FFFFFF',
-    color: '#000000',
+    backgroundColor: '#171181',
+    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: 700,
     cursor: 'pointer',

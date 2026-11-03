@@ -704,11 +704,11 @@ function ChatMessageAvatar({
         maxHeight: size,
         flexShrink: 0,
         borderRadius: '50%',
-        bgcolor: '#252238',
-        color: '#d8b4fe',
+        bgcolor: '#222428',
+        color: '#5865F2',
         fontSize: Math.round(size * 0.42),
         fontWeight: 600,
-        border: '1px solid rgba(255, 255, 255, 0.12)',
+        border: '1px solid #303238',
       }}
     >
       {fallbackLetter}

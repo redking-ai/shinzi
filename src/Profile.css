@@ -4,8 +4,8 @@
   height: 100dvh;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  background: #09090f;
-  color: #f5f7ff;
+  background: #111214;
+  color: #F2F3F5;
   padding: 0 0 calc(76px + env(safe-area-inset-bottom, 0px));
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   box-sizing: border-box;
@@ -22,8 +22,8 @@
   flex-direction: column;
   max-width: 900px;
   margin: 0 auto;
-  background: #101018;
-  border: 1px solid #242437;
+  background: #18191C;
+  border: 1px solid #303238;
   border-top: 0;
   border-radius: 0 0 22px 22px;
   overflow: hidden;
@@ -683,17 +683,17 @@ body {
   margin-bottom: 30px;
 }
 
-/* Shinzi profile — match SignUp.tsx colours */
+/* Shinzi profile — match global dark theme */
 .sh-profile-page {
-  --sh-bg: #080612;
-  --sh-surface: #17102a;
-  --sh-surface-2: #211b30;
-  --sh-line: #39265d;
-  --sh-line-strong: #594080;
-  --sh-text: #ffffff;
-  --sh-muted: #a6a2b5;
-  --sh-accent: #20d9ff;
-  --sh-violet: #762bff;
+  --sh-bg: #111214;
+  --sh-surface: #18191C;
+  --sh-surface-2: #222428;
+  --sh-line: #303238;
+  --sh-line-strong: #303238;
+  --sh-text: #F2F3F5;
+  --sh-muted: #A1A4AA;
+  --sh-accent: #5865F2;
+  --sh-violet: #5865F2;
   background: var(--sh-bg);
   color: var(--sh-text);
 }
@@ -703,17 +703,17 @@ body {
 }
 
 .sh-icon-button {
-  background: var(--sh-surface);
+  background: var(--sh-surface-2);
   border-color: var(--sh-line);
 }
 
 .sh-icon-button:hover {
   border-color: var(--sh-accent);
-  background: var(--sh-surface-2);
+  background: var(--sh-surface);
 }
 
 .sh-profile-card {
-  background: var(--sh-bg);
+  background: var(--sh-surface);
   border-color: var(--sh-line);
 }
 
@@ -753,16 +753,16 @@ body {
   justify-content: center;
   gap: 8px;
   padding: 8px 16px;
-  border: 1px solid rgba(118, 43, 255, 0.8);
+  border: 1px solid #303238;
   border-radius: 20px;
-  background: linear-gradient(90deg, #3020a0, #762bff);
-  color: #ffffff;
-  box-shadow: 0 0 14px rgba(118, 43, 255, 0.22);
+  background: #171181;
+  color: #FFFFFF;
+  box-shadow: none;
   font: inherit;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: filter 0.15s ease, transform 0.1s ease;
+  transition: opacity 0.15s ease, transform 0.1s ease;
 }
 
 .sh-profile-edit-button:hover {
@@ -783,32 +783,34 @@ body {
   cursor: not-allowed;
 }
 
-/* Edit fields use the same purple surfaces */
+/* Edit fields use the same surfaces */
 .sh-edit-panel input,
 .sh-edit-panel textarea {
-  background: var(--sh-surface);
+  background: var(--sh-surface-2);
   border-color: var(--sh-line);
 }
 
 .sh-edit-panel input:focus,
 .sh-edit-panel textarea:focus {
   border-color: var(--sh-accent);
-  box-shadow: 0 0 0 3px rgba(32, 217, 255, 0.14);
+  box-shadow: 0 0 0 3px rgba(88, 101, 242, 0.2);
 }
 
 .sh-profile-tabs button.active {
   color: var(--sh-accent);
-  border-bottom-color: var(--sh-violet);
+  border-bottom-color: var(--sh-accent);
 }
 
 .sh-button {
-  border-color: var(--sh-violet);
-  background: linear-gradient(90deg, #3020a0, #762bff);
+  border-color: var(--sh-line);
+  background: #171181;
+  color: #FFFFFF;
 }
 
 .sh-button-muted {
   background: var(--sh-surface-2);
   border-color: var(--sh-line);
+  color: var(--sh-text);
 }
 
 .sh-profile-content,
@@ -1008,24 +1010,24 @@ body {
 .sh-other-add-friend {
   flex: 1.25;
   min-width: 0;
-  border: 1px solid #5865f2;
-  background: #5865f2;
+  border: 1px solid #303238;
+  background: #171181;
   color: #fff;
 }
 
 .sh-other-action-button {
   flex: 1;
   min-width: 0;
-  border: 1px solid #303139;
-  background: #202127;
-  color: #fff;
+  border: 1px solid #303238;
+  background: #222428;
+  color: #F2F3F5;
 }
 
 .sh-other-pending-button {
   flex: 1.25;
-  border: 1px solid #303139;
-  background: #202127;
-  color: #c9cad1;
+  border: 1px solid #303238;
+  background: #222428;
+  color: #A1A4AA;
   cursor: default !important;
 }
 
