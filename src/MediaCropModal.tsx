@@ -78,6 +78,7 @@ export const MediaCropModal: React.FC<MediaCropModalProps> = ({
           aspect={aspect}
           cropShape={cropShape}
           showGrid={false}
+          objectFit="contain"
           onCropChange={setCrop}
           onCropComplete={onCropComplete}
           onZoomChange={setZoom}

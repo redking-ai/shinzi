@@ -69,16 +69,20 @@
   background: #000000 !important;
 }
 
-/* Round avatar mask border matching Root */
+/* Round avatar mask border matching Root & Discord */
 .sh-cropper-area-round {
   border: 2px solid #FFFFFF !important;
   box-shadow: 0 0 0 9999em rgba(0, 0, 0, 0.75) !important;
+  width: min(82vw, 320px) !important;
+  height: min(82vw, 320px) !important;
 }
 
-/* Rect banner mask border matching Root */
+/* Rect banner mask border matching Root & Discord */
 .sh-cropper-area-rect {
   border: 2px solid #FFFFFF !important;
   box-shadow: 0 0 0 9999em rgba(0, 0, 0, 0.75) !important;
+  width: min(92vw, 480px) !important;
+  height: calc(min(92vw, 480px) * (9 / 16)) !important;
 }
 
 /* Bottom slider controls */

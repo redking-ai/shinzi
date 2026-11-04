@@ -103,6 +103,10 @@ match /users/{userId} {
         'bio',  
         'bubleText',  
         'pronouns',
+        'photoURL',
+        'bannerUrl',
+        'profileAssetId',
+        'bannerAssetId',
         'username',  
         'usernameLastChanged',  
         'updatedAt'  

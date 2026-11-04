@@ -571,16 +571,17 @@ useEffect(() => {
         return;
       }
 
-      // Check duration
+      // Check duration strictly
       const videoEl = document.createElement('video');
       videoEl.preload = 'metadata';
       const objectUrl = URL.createObjectURL(file);
       videoEl.src = objectUrl;
 
       videoEl.onloadedmetadata = async () => {
+        const duration = videoEl.duration;
         URL.revokeObjectURL(objectUrl);
-        if (videoEl.duration > 10.5) {
-          setError('Profile videos must be 10 seconds or shorter.');
+        if (typeof duration === 'number' && !isNaN(duration) && duration > 10.0) {
+          setError(`Video is ${Math.round(duration)} seconds long. Maximum allowed is 10 seconds.`);
           return;
         }
 
@@ -765,30 +766,33 @@ useEffect(() => {
             <span className="sh-asset-status">Loading images…</span>
           )}
 
-          {/* Root-style Banner Pencil Edit Button */}
+          {/* Root-style Banner Pencil Edit Button (Only visible in editing mode; settings gear hidden in editing mode) */}
           <div className="sh-banner-edit-overlay">
-            <button
-              type="button"
-              className="sh-banner-edit-btn"
-              title="Change banner"
-              aria-label="Change banner"
-              onClick={() => bannerInputRef.current?.click()}
-            >
-              <Pencil size={18} />
-            </button>
-            <button
-              type="button"
-              className="sh-banner-settings-button"
-              title="Settings"
-              aria-label="Settings"
-              onClick={() =>
-                setError(
-                  'Settings are not connected to this profile screen yet.',
-                )
-              }
-            >
-              ⚙
-            </button>
+            {isEditing ? (
+              <button
+                type="button"
+                className="sh-banner-edit-btn"
+                title="Change banner"
+                aria-label="Change banner"
+                onClick={() => bannerInputRef.current?.click()}
+              >
+                <Pencil size={18} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="sh-banner-settings-button"
+                title="Settings"
+                aria-label="Settings"
+                onClick={() =>
+                  setError(
+                    'Settings are not connected to this profile screen yet.',
+                  )
+                }
+              >
+                ⚙
+              </button>
+            )}
           </div>
         </div>
 
@@ -885,19 +889,20 @@ useEffect(() => {
                 </div>
               )}
 
-              {/* Root-style Avatar Pencil Edit Overlay */}
-              <div
-                className="sh-avatar-edit-overlay"
-                onClick={() => avatarInputRef.current?.click()}
-                title="Change avatar"
-                aria-label="Change avatar"
-                role="button"
-                tabIndex={0}
-              >
-                <div className="sh-avatar-edit-btn">
-                  <Pencil size={16} />
-                </div>
-              </div>
+              {/* Root-style Avatar Pencil Edit Button (Only visible in editing mode, placed cleanly on the avatar) */}
+              {isEditing && (
+                <button
+                  type="button"
+                  className="sh-avatar-edit-overlay"
+                  onClick={() => avatarInputRef.current?.click()}
+                  title="Change avatar"
+                  aria-label="Change avatar"
+                >
+                  <div className="sh-avatar-edit-btn">
+                    <Pencil size={16} />
+                  </div>
+                </button>
+              )}
             </div>
 
             {isEditing ? (

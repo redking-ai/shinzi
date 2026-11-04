@@ -1287,19 +1287,20 @@ body {
 /* Profile media & crop enhancements (Root-style) */
 .sh-avatar-edit-overlay {
   position: absolute;
-  inset: 0;
+  right: -2px;
+  bottom: -2px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.45);
-  border-radius: 50%;
   cursor: pointer;
   z-index: 10;
-  transition: background 0.15s ease;
-}
-
-.sh-avatar-edit-overlay:hover {
-  background: rgba(0, 0, 0, 0.65);
 }
 
 .sh-avatar-edit-btn {
@@ -1308,12 +1309,17 @@ body {
   border-radius: 50%;
   background: #FFFFFF !important;
   color: #000000 !important;
-  border: none !important;
+  border: 2px solid #000000 !important;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
   pointer-events: none;
+  transition: transform 0.15s ease;
+}
+
+.sh-avatar-edit-overlay:hover .sh-avatar-edit-btn {
+  transform: scale(1.08);
 }
 
 .sh-avatar-edit-btn svg {
