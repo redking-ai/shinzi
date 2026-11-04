@@ -1226,13 +1226,13 @@ useEffect(() => {
         </div>
       )}
 
-      {/* Discord/Root-style Drag & Zoom Cropper Modal */}
+      {/* Discord-style Drag & Zoom Cropper Modal with Box Scaler & 3x3 Grid */}
       {cropModalData && (
         <MediaCropModal
           imageSrc={cropModalData.imageSrc}
-          cropShape={cropModalData.type === 'avatar' ? 'round' : 'rect'}
+          cropShape="rect"
           aspect={cropModalData.type === 'avatar' ? 1 : 16 / 9}
-          title={cropModalData.type === 'avatar' ? 'Edit Avatar' : 'Edit Banner'}
+          title={cropModalData.type === 'avatar' ? 'Edit Image' : 'Edit Banner'}
           onConfirm={({ file, dataUri }) => {
             void uploadMediaFile(file, cropModalData.type, dataUri);
           }}

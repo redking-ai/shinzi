@@ -32,7 +32,7 @@
 
 .sh-profile-banner {
   order: 1;
-  height: 160px;
+  height: 210px;
   position: relative;
   background: linear-gradient(130deg, #19132f, #0b2639 55%, #24143b);
   background-position: center;
@@ -182,14 +182,14 @@
   align-items: flex-end;
   gap: 16px;
   padding: 0 24px;
-  margin-top: -46px;
+  margin-top: -50px;
   position: relative;
 }
 
 .sh-avatar-wrap {
   position: relative !important;
-  width: 96px;
-  height: 96px;
+  width: 100px;
+  height: 100px;
   border-radius: 50%;
   padding: 4px;
   background: #101018;
@@ -577,7 +577,7 @@
   }
 
   .sh-profile-banner {
-    height: 120px;
+    height: 180px;
   }
 
   .sh-profile-card {
@@ -590,14 +590,14 @@
   .sh-profile-identity {
     padding: 0 16px;
     gap: 12px;
-    margin-top: -42px;
+    margin-top: -46px;
     align-items: flex-end;
   }
 
   .sh-avatar-wrap {
     position: relative !important;
-    width: 82px;
-    height: 82px;
+    width: 86px;
+    height: 86px;
     padding: 3px;
     border-radius: 50%;
   }
@@ -840,86 +840,51 @@ body {
 /* ===== Avatar & Thought Bubble Row (Discord-style) ===== */
 .sh-avatar-thought-row {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   position: relative;
   width: 100%;
-  gap: 14px;
+  gap: 12px;
 }
 
 .sh-profile-bubble {
   position: relative;
-  margin: 0;
-  align-self: center;
-  background: #11101d;
-  border: 1px solid #2f2a48;
-  border-radius: 18px;
+  margin: 0 0 6px 0;
+  align-self: flex-end;
+  background: #111214;
+  border: 1px solid #27272a;
+  border-radius: 9999px;
   padding: 6px 14px;
-  color: #f1f2f4;
-  font-size: 13.5px;
+  color: #dbdee1;
+  font-size: 13px;
   font-weight: 500;
-  max-width: calc(100% - 110px);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  max-width: calc(100% - 116px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   white-space: pre-wrap;
   word-break: break-word;
   z-index: 5;
 }
 
-/* Dots flow DOWNWARD and LEFT toward the avatar (Discord-style) */
-.sh-profile-bubble::after {
-  content: "";
-  position: absolute;
-  left: -4px;
-  bottom: 6px;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: #251e38;
-  border: 1px solid #6e5698;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-}
-
+/* Discord has clean pill badges with no cartoon dots */
+.sh-profile-bubble::after,
 .sh-profile-bubble::before {
-  content: "";
-  position: absolute;
-  left: -12px;
-  bottom: 0px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #251e38;
-  border: 1px solid #6e5698;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  display: none !important;
+  content: none !important;
 }
 
 @media (max-width: 600px) {
   .sh-avatar-thought-row {
-    gap: 12px;
+    gap: 10px;
   }
 
   .sh-profile-bubble {
-    font-size: 13px;
+    font-size: 12.5px;
     padding: 5px 12px;
-    max-width: calc(100% - 95px);
-  }
-
-  .sh-profile-bubble::after {
-    left: -3px;
-    bottom: 5px;
-    width: 8px;
-    height: 8px;
-    background: #251e38;
-    border: 1px solid #6e5698;
-  }
-
-  .sh-profile-bubble::before {
-    left: -10px;
-    bottom: 0px;
-    width: 5px;
-    height: 5px;
-    background: #251e38;
-    border: 1px solid #6e5698;
+    margin: 0 0 6px 0;
+    max-width: calc(100% - 100px);
+    border-radius: 9999px;
   }
 }
 

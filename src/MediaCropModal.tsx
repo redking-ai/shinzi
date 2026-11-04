@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import Cropper from 'react-easy-crop';
 import type { Area } from 'react-easy-crop';
-import { ArrowLeft, Check, ZoomIn, ZoomOut } from 'lucide-react';
+import { X, Check, RotateCw, Crop } from 'lucide-react';
 import { getCroppedImg } from './cropImageHelper';
 import './MediaCropModal.css';
 
@@ -16,14 +16,15 @@ export interface MediaCropModalProps {
 
 export const MediaCropModal: React.FC<MediaCropModalProps> = ({
   imageSrc,
-  cropShape = 'round',
+  cropShape = 'rect',
   aspect = 1,
-  title = 'Edit Avatar',
+  title = 'Edit Image',
   onConfirm,
   onCancel,
 }) => {
   const [crop, setCrop] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [zoom, setZoom] = useState<number>(1);
+  const [rotation, setRotation] = useState<number>(0);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
   const [processing, setProcessing] = useState<boolean>(false);
 
@@ -46,16 +47,17 @@ export const MediaCropModal: React.FC<MediaCropModalProps> = ({
 
   return (
     <div className="sh-crop-modal" role="dialog" aria-modal="true" aria-label={title}>
-      {/* Header bar matching Root app */}
+      {/* Discord-style Header: ✕ on left, Edit Image in center, ✓ on right */}
       <header className="sh-crop-header">
         <button
           type="button"
           className="sh-crop-back-btn"
           onClick={onCancel}
           disabled={processing}
-          aria-label="Back"
+          aria-label="Cancel"
+          title="Cancel"
         >
-          <ArrowLeft size={22} />
+          <X size={22} />
         </button>
         <h2 className="sh-crop-title">{title}</h2>
         <button
@@ -63,25 +65,28 @@ export const MediaCropModal: React.FC<MediaCropModalProps> = ({
           className="sh-crop-apply-btn"
           onClick={handleApply}
           disabled={processing}
-          aria-label="Save crop"
+          aria-label="Save"
+          title="Save"
         >
           {processing ? <span className="shc-spinner shc-spinner-sm" /> : <Check size={22} />}
         </button>
       </header>
 
-      {/* Static cropping view with movable & zoomable image */}
+      {/* Static cropping view with Discord-style Box Scaler & 3x3 Grid */}
       <div className="sh-crop-container">
         <Cropper
           image={imageSrc}
           crop={crop}
           zoom={zoom}
+          rotation={rotation}
           aspect={aspect}
           cropShape={cropShape}
-          showGrid={false}
+          showGrid={true}
           objectFit="contain"
           onCropChange={setCrop}
           onCropComplete={onCropComplete}
           onZoomChange={setZoom}
+          onRotationChange={setRotation}
           classes={{
             containerClassName: 'sh-cropper-crop-container',
             cropAreaClassName: cropShape === 'round' ? 'sh-cropper-area-round' : 'sh-cropper-area-rect',
@@ -89,35 +94,42 @@ export const MediaCropModal: React.FC<MediaCropModalProps> = ({
         />
       </div>
 
-      {/* Bottom zoom controls */}
-      <div className="sh-crop-controls">
-        <button
-          type="button"
-          className="sh-crop-zoom-btn"
-          onClick={() => setZoom((z) => Math.max(1, z - 0.2))}
-          aria-label="Zoom out"
-        >
-          <ZoomOut size={18} />
-        </button>
-        <input
-          type="range"
-          min={1}
-          max={3}
-          step={0.05}
-          value={zoom}
-          onChange={(e) => setZoom(Number(e.target.value))}
-          className="sh-crop-slider"
-          aria-label="Zoom slider"
-        />
-        <button
-          type="button"
-          className="sh-crop-zoom-btn"
-          onClick={() => setZoom((z) => Math.min(3, z + 0.2))}
-          aria-label="Zoom in"
-        >
-          <ZoomIn size={18} />
-        </button>
-      </div>
+      {/* Discord-style Bottom Controls with Zoom Percentage */}
+      <footer className="sh-crop-footer">
+        <div className="sh-crop-percentage">{Math.round(zoom * 100)}%</div>
+        <div className="sh-crop-controls">
+          <button
+            type="button"
+            className="sh-crop-ctrl-btn"
+            onClick={() => setRotation((r) => (r + 90) % 360)}
+            aria-label="Rotate"
+            title="Rotate"
+          >
+            <RotateCw size={20} />
+          </button>
+
+          <input
+            type="range"
+            min={1}
+            max={4}
+            step={0.05}
+            value={zoom}
+            onChange={(e) => setZoom(Number(e.target.value))}
+            className="sh-crop-slider"
+            aria-label="Scale slider"
+          />
+
+          <button
+            type="button"
+            className="sh-crop-ctrl-btn"
+            onClick={() => setZoom(1)}
+            aria-label="Reset scale"
+            title="Reset scale"
+          >
+            <Crop size={20} />
+          </button>
+        </div>
+      </footer>
     </div>
   );
 };
