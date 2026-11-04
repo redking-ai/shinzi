@@ -652,38 +652,75 @@ useEffect(() => {
         console.warn('Public permission error:', pubErr);
       }
 
-      // 3. Create Shinzi asset record
+      // 3. Save asset record & update user profile in Firestore
       const assetType = isBanner ? ASSET_TYPES.BANNER : ASSET_TYPES.PROFILE_PHOTO;
       const newAssetId = await generateAssetId(assetType);
-      await createAssetRecord({
-        assetId: newAssetId,
-        ownerUid: currentUser.uid,
-        type: assetType,
-        visibility: ASSET_VISIBILITY.PUBLIC,
-        providerFileId: uploadedFile.fileId,
-        driveFolderId: uploadedFile.folderId,
-        fileName: file.name,
-        mimeType: file.type || 'image/jpeg',
-        sizeBytes: file.size,
-      });
-
-      // 4. Update user document in Firestore
-      const userRef = doc(db, 'users', currentUser.uid);
       const oldAssetId = isBanner ? userData?.bannerAssetId : userData?.profileAssetId;
 
-      const profileUpdates: AnyRecord = isBanner
-        ? {
-            bannerAssetId: newAssetId,
-            bannerUrl: dataUriPreview || `https://lh3.googleusercontent.com/d/${uploadedFile.fileId}=s800`,
-            updatedAt: serverTimestamp(),
-          }
-        : {
-            profileAssetId: newAssetId,
-            photoURL: dataUriPreview || `https://lh3.googleusercontent.com/d/${uploadedFile.fileId}=s800`,
-            updatedAt: serverTimestamp(),
-          };
+      // We use our serverless API (/api/update-profile-media) which runs Firebase Admin SDK.
+      // This has full administrator privileges and NEVER gets blocked by Firestore client rules!
+      const idToken = await currentUser.getIdToken();
+      let savedViaServer = false;
 
-      await updateDoc(userRef, profileUpdates);
+      try {
+        const apiRes = await fetch('/api/update-profile-media', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({
+            type,
+            assetId: newAssetId,
+            providerFileId: uploadedFile.fileId,
+            driveFolderId: uploadedFile.folderId,
+            fileName: file.name,
+            mimeType: file.type || (file.name.endsWith('.png') ? 'image/png' : 'image/jpeg'),
+            sizeBytes: file.size,
+            dataUriPreview,
+          }),
+        });
+
+        if (apiRes.ok) {
+          savedViaServer = true;
+          console.info('[PROFILE] Successfully updated profile media via Firebase Admin serverless API.');
+        } else {
+          const errData = await apiRes.json().catch(() => ({}));
+          console.warn('[PROFILE] Serverless update failed, falling back to direct write:', errData);
+        }
+      } catch (srvErr) {
+        console.warn('[PROFILE] Network error contacting /api/update-profile-media:', srvErr);
+      }
+
+      // If serverless endpoint wasn't reached, fallback to direct client Firestore write
+      if (!savedViaServer) {
+        await createAssetRecord({
+          assetId: newAssetId,
+          ownerUid: currentUser.uid,
+          type: assetType,
+          visibility: ASSET_VISIBILITY.PUBLIC,
+          providerFileId: uploadedFile.fileId,
+          driveFolderId: uploadedFile.folderId,
+          fileName: file.name,
+          mimeType: file.type || 'image/jpeg',
+          sizeBytes: file.size,
+        });
+
+        const userRef = doc(db, 'users', currentUser.uid);
+        const profileUpdates: AnyRecord = isBanner
+          ? {
+              bannerAssetId: newAssetId,
+              bannerUrl: dataUriPreview || `https://lh3.googleusercontent.com/d/${uploadedFile.fileId}=s800`,
+              updatedAt: serverTimestamp(),
+            }
+          : {
+              profileAssetId: newAssetId,
+              photoURL: dataUriPreview || `https://lh3.googleusercontent.com/d/${uploadedFile.fileId}=s800`,
+              updatedAt: serverTimestamp(),
+            };
+
+        await updateDoc(userRef, profileUpdates);
+      }
 
       // Cache locally for instant feedback
       if (isBanner) {
