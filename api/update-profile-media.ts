@@ -107,6 +107,29 @@ export default {
 
       await userRef.set(userUpdates, { merge: true });
 
+      // 3. If updating avatar, update conversation memberProfiles across all conversations
+      if (!isBanner) {
+        try {
+          const convsSnap = await adminDb
+            .collection("conversations")
+            .where("memberIds", "array-contains", uid)
+            .get();
+
+          if (!convsSnap.empty) {
+            const batch = adminDb.batch();
+            convsSnap.forEach((convDoc) => {
+              batch.update(convDoc.ref, {
+                [`memberProfiles.${uid}.photoURL`]: mediaUrl,
+                [`memberProfiles.${uid}.profileAssetId`]: assetId,
+              });
+            });
+            await batch.commit();
+          }
+        } catch (convErr) {
+          console.warn("[update-profile-media] Could not update conversations:", convErr);
+        }
+      }
+
       return Response.json({
         ok: true,
         assetId,

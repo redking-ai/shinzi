@@ -1415,6 +1415,39 @@ export default function Chat({ onNavigate }: ChatProps) {
     [conversations, selected],
   );
 
+  const activeDmTargetUid = useMemo(() => {
+    if (!selectedConversation || selectedConversation.type === 'group') return null;
+    return otherMemberId(selectedConversation);
+  }, [selectedConversation]);
+
+  const [liveTargetProfile, setLiveTargetProfile] = useState<Rec | null>(null);
+
+  useEffect(() => {
+    if (!activeDmTargetUid) {
+      setLiveTargetProfile(null);
+      return;
+    }
+
+    return onSnapshot(
+      doc(db, 'users', activeDmTargetUid),
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data() as Rec;
+          setLiveTargetProfile(data);
+          if (data?.photoURL) {
+            avatarMemoryCache.set(activeDmTargetUid, data.photoURL);
+            try {
+              localStorage.setItem(`shinzi_avatar_${activeDmTargetUid}`, data.photoURL);
+            } catch {}
+          }
+        }
+      },
+      (err) => {
+        console.warn('Error listening to target user profile:', err);
+      }
+    );
+  }, [activeDmTargetUid]);
+
   const unreadCount = useMemo(() => {
     if (!uid) return 0;
 
@@ -3551,7 +3584,25 @@ const handleSearchMessage = async (target: Rec) => {
             aria-label="Jump to original message"
           >
             <div className="shc-dc-reply-line" />
-            <UserAvatar uid={quotedSenderId} name={quotedSender} size="xs" />
+            <UserAvatar
+              uid={quotedSenderId}
+              name={quotedSender}
+              photoURL={
+                quotedSenderId === uid
+                  ? (profile?.photoURL || undefined)
+                  : (quotedSenderId === activeDmTargetUid
+                      ? (liveTargetProfile?.photoURL || undefined)
+                      : (selectedConversation?.memberProfiles?.[quotedSenderId]?.photoURL || undefined))
+              }
+              profileAssetId={
+                quotedSenderId === uid
+                  ? (profile?.profileAssetId || undefined)
+                  : (quotedSenderId === activeDmTargetUid
+                      ? (liveTargetProfile?.profileAssetId || undefined)
+                      : (selectedConversation?.memberProfiles?.[quotedSenderId]?.profileAssetId || undefined))
+              }
+              size="xs"
+            />
             <span className="shc-dc-reply-sender">{quotedSender}</span>
             <span className="shc-dc-reply-text">{quotedText}</span>
           </div>
@@ -3572,8 +3623,20 @@ const handleSearchMessage = async (target: Rec) => {
               <ChatMessageAvatar
                 uid={item.senderId}
                 name={authorName}
-                photoURL={item.senderPhotoURL}
-                profileAssetId={item.senderProfileAssetId}
+                photoURL={
+                  item.senderId === uid
+                    ? (profile?.photoURL || item.senderPhotoURL)
+                    : (item.senderId === activeDmTargetUid
+                        ? (liveTargetProfile?.photoURL || item.senderPhotoURL)
+                        : (selectedConversation?.memberProfiles?.[item.senderId]?.photoURL || item.senderPhotoURL))
+                }
+                profileAssetId={
+                  item.senderId === uid
+                    ? (profile?.profileAssetId || item.senderProfileAssetId)
+                    : (item.senderId === activeDmTargetUid
+                        ? (liveTargetProfile?.profileAssetId || item.senderProfileAssetId)
+                        : (selectedConversation?.memberProfiles?.[item.senderId]?.profileAssetId || item.senderProfileAssetId))
+                }
                 size={36}
               />
             </button>
@@ -4081,7 +4144,7 @@ const handleSearchMessage = async (target: Rec) => {
     const username = getConversationUsername(selectedConversation);
     const isGroup = selectedConversation?.type === 'group';
     const targetUid = isGroup ? undefined : otherMemberId(selectedConversation);
-    const targetProfile = targetUid ? selectedConversation?.memberProfiles?.[targetUid] : undefined;
+    const targetProfile = liveTargetProfile || (targetUid ? selectedConversation?.memberProfiles?.[targetUid] : undefined);
     const dmRequestState = getDirectRequestState(selectedConversation);
     const conversationMessages = (messages && messages.length > 0)
       ? messages

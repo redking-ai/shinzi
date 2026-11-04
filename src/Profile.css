@@ -79,10 +79,7 @@
 }
 
 .sh-banner-settings-button {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  z-index: 5;
+  position: static;
   width: 36px;
   height: 36px;
   border-radius: 50%;
@@ -96,6 +93,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
+  margin: 0;
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
 }
 
