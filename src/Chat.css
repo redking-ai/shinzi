@@ -928,7 +928,7 @@
   margin-left: 28px;
   margin-bottom: 4px;
   font-size: 11px;
-  color: var(--muted);
+  color: #888888;
   cursor: pointer;
   position: relative;
 }
@@ -939,19 +939,19 @@
   left: -16px;
   width: 13px;
   height: 9px;
-  border-left: 2px solid var(--line-strong);
-  border-top: 2px solid var(--line-strong);
+  border-left: 2px solid #555555;
+  border-top: 2px solid #555555;
   border-top-left-radius: 5px;
 }
 
 .shc-dc-reply-sender {
   font-weight: 700;
-  color: #79c0ff;
+  color: #FFFFFF !important;
   white-space: nowrap;
 }
 
 .shc-dc-reply-text {
-  color: var(--muted);
+  color: #888888;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1448,7 +1448,7 @@
   padding: 6px 12px;
   background: var(--surface);
   border-top: 1px solid var(--line);
-  border-left: 3px solid #79c0ff;
+  border-left: 3px solid #888888;
   margin: 0;
   animation: shc-slide-up 0.15s ease-out;
 }
@@ -1473,7 +1473,7 @@
 }
 
 .shc-reply-bar-icon {
-  color: #79c0ff;
+  color: #888888;
   flex-shrink: 0;
 }
 
@@ -1486,16 +1486,21 @@
 
 .shc-reply-bar-sender {
   font-size: 11px;
-  font-weight: 700;
-  color: #79c0ff;
+  font-weight: 500;
+  color: #888888;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.shc-reply-bar-target-name {
+  color: #FFFFFF !important;
+  font-weight: 700;
+}
+
 .shc-reply-bar-text {
   font-size: 13px;
-  color: var(--muted);
+  color: #c0c0c0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1847,7 +1852,9 @@
 
 .shc-composer-textarea::placeholder,
 .shc-composer textarea::placeholder {
-  color: #777777 !important;
+  color: #666666 !important;
+  -webkit-text-fill-color: #666666 !important;
+  opacity: 1 !important;
 }
 
 .shc-composer-textarea:focus,
@@ -2703,6 +2710,34 @@ button {
   border-radius: 2px;
   background: rgba(255, 255, 255, 0.22);
   margin: 0 auto 4px;
+}
+
+.shc-sheet-handle-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 0 6px;
+  cursor: pointer;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: opacity 0.15s ease;
+}
+
+.shc-sheet-handle-wrap:hover {
+  opacity: 0.8;
+}
+
+.shc-sheet-handle-icon {
+  color: #777777;
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.shc-sheet-handle-wrap:hover .shc-sheet-handle-icon {
+  color: #FFFFFF;
+  transform: translateY(2px);
 }
 
 .shc-action-emoji-bar {

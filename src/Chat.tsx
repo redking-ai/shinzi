@@ -2227,6 +2227,7 @@ const handleSearchMessage = async (target: Rec) => {
         lastMessageText: text,
         lastMessageAt: serverTimestamp(),
         lastSenderId: uid,
+        lastSenderName: profile?.displayName || profile?.username || 'You',
         updatedAt: serverTimestamp(),
       };
 
@@ -2798,6 +2799,7 @@ const handleSearchMessage = async (target: Rec) => {
         lastMessageText: `Poll: ${question}`,
         lastMessageAt: serverTimestamp(),
         lastSenderId: uid,
+        lastSenderName: profile?.displayName || profile?.username || 'You',
         updatedAt: serverTimestamp(),
       });
 
@@ -2893,6 +2895,7 @@ const handleSearchMessage = async (target: Rec) => {
         lastMessageText: `Event: ${name}`,
         lastMessageAt: serverTimestamp(),
         lastSenderId: uid,
+        lastSenderName: profile?.displayName || profile?.username || 'You',
         updatedAt: serverTimestamp(),
       });
 
@@ -3018,6 +3021,7 @@ const handleSearchMessage = async (target: Rec) => {
         lastMessageText: params.text ? `📷 ${params.text}` : '📷 Photo',
         lastMessageAt: serverTimestamp(),
         lastSenderId: uid,
+        lastSenderName: profile?.displayName || profile?.username || 'You',
         updatedAt: serverTimestamp(),
       };
 
@@ -3392,29 +3396,29 @@ const handleSearchMessage = async (target: Rec) => {
         quotedSenderId = original.senderId || '';
         if (original.deleted) {
           quotedSender =
-            original.senderId === uid
-              ? 'You'
-              : original.senderName ||
-                original.senderUsername ||
-                'User';
+            original.senderName ||
+            original.senderUsername ||
+            (original.senderId === uid
+              ? profile?.displayName || profile?.username || 'You'
+              : 'User');
           quotedText = 'Original message was deleted';
         } else {
           quotedSender =
-            original.senderId === uid
-              ? 'You'
-              : original.senderName ||
-                original.senderUsername ||
-                'User';
+            original.senderName ||
+            original.senderUsername ||
+            (original.senderId === uid
+              ? profile?.displayName || profile?.username || 'You'
+              : 'User');
           quotedText = getReplyExcerpt(original);
         }
       } else if (item.replyTo) {
         quotedSenderId = item.replyTo.senderId || '';
         quotedSender =
-          item.replyTo.senderId === uid
-            ? 'You'
-            : item.replyTo.senderName ||
-              item.replyTo.senderUsername ||
-              'User';
+          item.replyTo.senderName ||
+          item.replyTo.senderUsername ||
+          (item.replyTo.senderId === uid
+            ? profile?.displayName || profile?.username || 'You'
+            : 'User');
         quotedText = item.replyTo.text || 'Original message unavailable';
       }
     }
@@ -3739,6 +3743,21 @@ const handleSearchMessage = async (target: Rec) => {
               millis(item.lastMessageAt) > millis(item.lastReadAt?.[me]) &&
               item.lastSenderId !== uid;
             const name = getConversationName(item);
+            const lastSenderName =
+              item.lastSenderId === uid
+                ? profile?.displayName || profile?.username || 'You'
+                : item.lastSenderName ||
+                  (item.lastSenderId
+                    ? item.memberProfiles?.[item.lastSenderId]?.displayName ||
+                      item.memberProfiles?.[item.lastSenderId]?.username
+                    : '') ||
+                  (item.type === 'group' ? '' : name);
+
+            const previewText = item.lastMessageText
+              ? lastSenderName
+                ? `${lastSenderName}: ${item.lastMessageText}`
+                : item.lastMessageText
+              : 'No messages yet';
 
             return (
               <button
@@ -3774,7 +3793,7 @@ const handleSearchMessage = async (target: Rec) => {
 
                   <span className="shc-conv-bottom">
                     <span className={unread ? 'shc-conv-preview shc-unread' : 'shc-conv-preview'}>
-                      {item.lastMessageText || 'No messages yet'}
+                      {previewText}
                     </span>
 
                     <span className="shc-conv-icons">
@@ -4226,11 +4245,13 @@ const handleSearchMessage = async (target: Rec) => {
               <div className="shc-reply-bar-content">
                 <span className="shc-reply-bar-sender">
                   Replying to{' '}
-                  {replyTarget.senderId === uid
-                    ? 'yourself'
-                    : replyTarget.senderName ||
+                  <span className="shc-reply-bar-target-name">
+                    {replyTarget.senderName ||
                       replyTarget.senderUsername ||
-                      'User'}
+                      (replyTarget.senderId === uid
+                        ? profile?.displayName || profile?.username || 'You'
+                        : 'User')}
+                  </span>
                 </span>
                 <span className="shc-reply-bar-text">
                   {getReplyExcerpt(replyTarget)}
@@ -4959,7 +4980,19 @@ const handleSearchMessage = async (target: Rec) => {
             className="shc-emoji-picker-sheet"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="shc-sheet-handle" />
+            <div
+              className="shc-sheet-handle-wrap"
+              onClick={() => {
+                setShowEmojiPicker(false);
+                setActionMessage(null);
+              }}
+              aria-label="Close emoji picker"
+              role="button"
+              tabIndex={0}
+            >
+              <div className="shc-sheet-handle" />
+              <ChevronDown size={18} className="shc-sheet-handle-icon" />
+            </div>
             <Suspense
               fallback={
                 <div className="shc-emoji-picker-loading" role="status">
