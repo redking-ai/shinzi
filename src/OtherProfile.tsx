@@ -262,7 +262,8 @@ export default function OtherProfile({
             !data.providerFileId ||
             (
               data.mimeType &&
-              !String(data.mimeType).startsWith('image/')
+              !String(data.mimeType).startsWith('image/') &&
+              !String(data.mimeType).startsWith('video/')
             )
           ) {
             return '';

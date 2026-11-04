@@ -337,10 +337,11 @@ useEffect(() => {
 
           if (
             asset.mimeType &&
-            !String(asset.mimeType).startsWith('image/')
+            !String(asset.mimeType).startsWith('image/') &&
+            !String(asset.mimeType).startsWith('video/')
           ) {
             console.error(
-              `[PROFILE IMAGE] ${kind} file is not an image:`,
+              `[PROFILE IMAGE] ${kind} file is not an image or video:`,
               asset.mimeType,
             );
             return '';
@@ -354,9 +355,13 @@ useEffect(() => {
             void drive.makeFilePublic(asset.providerFileId);
           }
 
-          if (!dataUri.startsWith('data:image/') && !dataUri.startsWith('https://')) {
+          if (
+            !dataUri.startsWith('data:image/') &&
+            !dataUri.startsWith('data:video/') &&
+            !dataUri.startsWith('https://')
+          ) {
             console.error(
-              `[PROFILE IMAGE] ${kind} download did not return an image data URI.`,
+              `[PROFILE IMAGE] ${kind} download did not return a valid data URI.`,
             );
             return '';
           }
@@ -585,8 +590,12 @@ useEffect(() => {
           return;
         }
 
-        // Upload directly without crop
-        await uploadMediaFile(file, type);
+        // Read video as data URL for instant feedback and upload
+        const reader = new FileReader();
+        reader.onload = async () => {
+          await uploadMediaFile(file, type, reader.result as string);
+        };
+        reader.readAsDataURL(file);
       };
 
       videoEl.onerror = () => {
@@ -691,7 +700,14 @@ useEffect(() => {
       await loadProfile();
     } catch (uploadErr) {
       console.error('[PROFILE] Media upload failed:', uploadErr);
-      setError(messageOf(uploadErr));
+      const msg = messageOf(uploadErr);
+      if (msg.toLowerCase().includes('permission') || msg.toLowerCase().includes('insufficient')) {
+        setError(
+          'Missing or insufficient permissions: Firebase rules blocked this profile update. Please publish firestore.rules in Firebase Console (Rules tab -> Publish).'
+        );
+      } else {
+        setError(msg);
+      }
     } finally {
       setMediaUploadLoading(false);
       setMediaUploadStatus('');
