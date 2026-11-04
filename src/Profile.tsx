@@ -551,23 +551,20 @@ useEffect(() => {
 
     // GIF selected: upload directly to keep all animated frames and timing intact!
     if (isGif) {
-      if (file.size > 10 * 1024 * 1024) {
+      if (file.size > 12 * 1024 * 1024) {
         setError('GIFs must be under 10MB.');
         return;
       }
 
-      const reader = new FileReader();
-      reader.onload = async () => {
-        await uploadMediaFile(file, type, reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      const previewUrl = URL.createObjectURL(file);
+      await uploadMediaFile(file, type, previewUrl);
       return;
     }
 
-    // Video / animated clip (MP4, WebM) selected: max 8MB, max 10 seconds
+    // Video / animated clip (MP4, WebM) selected: max 10MB, max 10 seconds
     if (isVideo) {
-      if (file.size > 8 * 1024 * 1024) {
-        setError('Video animations must be under 8MB.');
+      if (file.size > 12 * 1024 * 1024) {
+        setError('Video animations must be under 10MB.');
         return;
       }
 
@@ -578,26 +575,17 @@ useEffect(() => {
 
       videoEl.onloadedmetadata = async () => {
         const duration = videoEl.duration;
-        URL.revokeObjectURL(objectUrl);
         if (typeof duration === 'number' && !isNaN(duration) && duration > 10.0) {
+          URL.revokeObjectURL(objectUrl);
           setError(`Animation is ${Math.round(duration)} seconds long. Maximum allowed is 10 seconds.`);
           return;
         }
 
-        const reader = new FileReader();
-        reader.onload = async () => {
-          await uploadMediaFile(file, type, reader.result as string);
-        };
-        reader.readAsDataURL(file);
+        await uploadMediaFile(file, type, objectUrl);
       };
 
-      videoEl.onerror = () => {
-        URL.revokeObjectURL(objectUrl);
-        const reader = new FileReader();
-        reader.onload = async () => {
-          await uploadMediaFile(file, type, reader.result as string);
-        };
-        reader.readAsDataURL(file);
+      videoEl.onerror = async () => {
+        await uploadMediaFile(file, type, objectUrl);
       };
       return;
     }
@@ -613,7 +601,7 @@ useEffect(() => {
     reader.readAsDataURL(file);
   };
 
-  // Upload cropped image or video to Google Drive and update profile
+  // Upload cropped image or video to server and update profile
   const uploadMediaFile = async (
     file: File,
     type: 'avatar' | 'banner',
@@ -626,25 +614,70 @@ useEffect(() => {
 
     try {
       const idToken = await currentUser.getIdToken();
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('type', type);
+      const CHUNK_SIZE = 3 * 1024 * 1024; // 3 MB chunks to comfortably fit within Vercel's 4.5 MB request limit
+      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+      const uploadId = `upl_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
-      const res = await fetch('/api/update-profile-media', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: formData,
-      });
+      let resData: { ok?: boolean; mediaUrl?: string; error?: string } | null = null;
 
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || `Upload failed (${res.status})`);
+      if (totalChunks <= 1) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('type', type);
+        formData.append('fileName', file.name);
+        formData.append('mimeType', file.type);
+
+        const res = await fetch('/api/update-profile-media', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: formData,
+        });
+
+        if (!res.ok) {
+          const errJson = await res.json().catch(() => ({}));
+          throw new Error(errJson.error || `Upload failed (${res.status})`);
+        }
+
+        resData = await res.json();
+      } else {
+        // Multi-chunk upload for files > 3MB (e.g. 8.14MB GIFs / animations)
+        for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+          const percent = Math.round(((chunkIndex + 1) / totalChunks) * 100);
+          setMediaUploadStatus(`Uploading ${type} (${percent}%)…`);
+
+          const start = chunkIndex * CHUNK_SIZE;
+          const end = Math.min(start + CHUNK_SIZE, file.size);
+          const chunkBlob = file.slice(start, end, file.type);
+
+          const formData = new FormData();
+          formData.append('file', chunkBlob, file.name);
+          formData.append('type', type);
+          formData.append('uploadId', uploadId);
+          formData.append('chunkIndex', String(chunkIndex));
+          formData.append('totalChunks', String(totalChunks));
+          formData.append('fileName', file.name);
+          formData.append('mimeType', file.type);
+
+          const res = await fetch('/api/update-profile-media', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${idToken}`,
+            },
+            body: formData,
+          });
+
+          if (!res.ok) {
+            const errJson = await res.json().catch(() => ({}));
+            throw new Error(errJson.error || `Upload failed on part ${chunkIndex + 1} (${res.status})`);
+          }
+
+          resData = await res.json();
+        }
       }
 
-      const resData = await res.json();
-      const finalUrl = resData.mediaUrl || dataUriPreview || '';
+      const finalUrl = resData?.mediaUrl || dataUriPreview || '';
 
       // Update state for instant view
       if (type === 'banner') {

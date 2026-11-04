@@ -40,15 +40,24 @@ export default {
       let assetId = "";
 
       const contentType = request.headers.get("content-type") || "";
+      let uploadId = "";
+      let chunkIndex = 0;
+      let totalChunks = 1;
 
       if (contentType.includes("multipart/form-data")) {
         const formData = await request.formData();
         type = (formData.get("type") as string) || "avatar";
+        uploadId = (formData.get("uploadId") as string) || "";
+        const chunkIndexStr = formData.get("chunkIndex") as string | null;
+        const totalChunksStr = formData.get("totalChunks") as string | null;
+        chunkIndex = chunkIndexStr !== null ? parseInt(chunkIndexStr, 10) : 0;
+        totalChunks = totalChunksStr !== null ? parseInt(totalChunksStr, 10) : 1;
+
         const file = formData.get("file") as File | null;
         if (file && typeof file.arrayBuffer === "function") {
           fileBuffer = Buffer.from(await file.arrayBuffer());
-          fileName = file.name || "media";
-          mimeType = file.type || "image/jpeg";
+          fileName = (formData.get("fileName") as string) || file.name || "media";
+          mimeType = (formData.get("mimeType") as string) || file.type || "image/jpeg";
         }
       } else {
         const body: Record<string, unknown> = await request.json().catch(() => ({}));
@@ -73,17 +82,114 @@ export default {
       const assetType = isBanner ? "banner" : "profile_photo";
       const finalAssetId = assetId.trim() || `ast_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
+      const extFromFileName = fileName.split(".").pop()?.toLowerCase() || "";
       const ext =
-        mimeType.includes("gif") ? "gif" :
-        mimeType.includes("png") ? "png" :
-        mimeType.includes("webp") ? "webp" :
-        mimeType.includes("mp4") ? "mp4" :
-        mimeType.includes("webm") ? "webm" : "jpg";
+        mimeType.includes("gif") || extFromFileName === "gif" ? "gif" :
+        mimeType.includes("png") || extFromFileName === "png" ? "png" :
+        mimeType.includes("webp") || extFromFileName === "webp" ? "webp" :
+        mimeType.includes("mp4") || extFromFileName === "mp4" ? "mp4" :
+        mimeType.includes("webm") || extFromFileName === "webm" ? "webm" : "jpg";
+
+      if (!mimeType || mimeType === "application/octet-stream") {
+        if (ext === "gif") mimeType = "image/gif";
+        else if (ext === "png") mimeType = "image/png";
+        else if (ext === "webp") mimeType = "image/webp";
+        else if (ext === "mp4") mimeType = "video/mp4";
+        else if (ext === "webm") mimeType = "video/webm";
+        else mimeType = "image/jpeg";
+      }
+
+      // Handle intermediate chunks for files > 3MB (avoids Vercel 4.5MB payload limit)
+      if (totalChunks > 1 && chunkIndex < totalChunks - 1) {
+        if (!fileBuffer || fileBuffer.length === 0) {
+          return Response.json(
+            { ok: false, error: "Empty chunk payload." },
+            { status: 400 }
+          );
+        }
+
+        const bucket = adminStorage.bucket();
+        const safeUploadId = uploadId.replace(/[^a-zA-Z0-9_-]/g, "") || `upl_${Date.now()}`;
+        const chunkPath = `temp_chunks/${uid}_${safeUploadId}_part_${chunkIndex}`;
+        await bucket.file(chunkPath).save(fileBuffer, {
+          resumable: false,
+          contentType: "application/octet-stream",
+        });
+
+        return Response.json({
+          ok: true,
+          completed: false,
+          chunkIndex,
+          totalChunks,
+        });
+      }
 
       let mediaUrl = "";
 
-      // 1. Try Firebase Cloud Storage
-      if (fileBuffer && fileBuffer.length > 0) {
+      // 1. Try Firebase Cloud Storage (Chunked completion or single-shot)
+      if (totalChunks > 1 && chunkIndex === totalChunks - 1) {
+        try {
+          const bucket = adminStorage.bucket();
+          const safeUploadId = uploadId.replace(/[^a-zA-Z0-9_-]/g, "") || `upl_${Date.now()}`;
+          const lastChunkPath = `temp_chunks/${uid}_${safeUploadId}_part_${chunkIndex}`;
+          if (fileBuffer && fileBuffer.length > 0) {
+            await bucket.file(lastChunkPath).save(fileBuffer, {
+              resumable: false,
+              contentType: "application/octet-stream",
+            });
+          }
+
+          const partNames = Array.from(
+            { length: totalChunks },
+            (_, i) => `temp_chunks/${uid}_${safeUploadId}_part_${i}`
+          );
+          const destination = `${isBanner ? "banners" : "profiles"}/${uid}_${Date.now()}.${ext}`;
+          const destFile = bucket.file(destination);
+
+          let combinedSuccessfully = false;
+          try {
+            await bucket.combine(partNames, destination);
+            combinedSuccessfully = true;
+          } catch (combineErr) {
+            console.warn(
+              "[update-profile-media] bucket.combine note, falling back to buffer stitch:",
+              combineErr
+            );
+            try {
+              const partBuffers = await Promise.all(
+                partNames.map(async (name) => {
+                  const [buf] = await bucket.file(name).download();
+                  return buf;
+                })
+              );
+              const fullBuffer = Buffer.concat(partBuffers);
+              await destFile.save(fullBuffer, {
+                contentType: mimeType,
+                resumable: false,
+              });
+              combinedSuccessfully = true;
+            } catch (fallbackErr) {
+              console.error("[update-profile-media] Buffer stitching failed:", fallbackErr);
+            }
+          }
+
+          if (combinedSuccessfully) {
+            await destFile.setMetadata({
+              contentType: mimeType,
+              cacheControl: "public, max-age=31536000",
+            }).catch(() => {});
+            try {
+              await destFile.makePublic();
+            } catch {}
+            mediaUrl = `https://storage.googleapis.com/${bucket.name}/${destination}`;
+
+            // Clean up temporary chunks in background
+            Promise.all(partNames.map((p) => bucket.file(p).delete().catch(() => {}))).catch(() => {});
+          }
+        } catch (multiErr) {
+          console.warn("[update-profile-media] Chunk combine error:", multiErr);
+        }
+      } else if (fileBuffer && fileBuffer.length > 0) {
         try {
           const bucket = adminStorage.bucket();
           const destination = `${isBanner ? "banners" : "profiles"}/${uid}_${Date.now()}.${ext}`;
