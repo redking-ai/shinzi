@@ -524,7 +524,7 @@ export default function OtherProfile({
           </button>
           <button
             type="button"
-            className="sh-banner-settings-button"
+            className="sh-banner-settings-button sh-banner-more-button"
             title="More actions"
             aria-label="More profile actions"
             aria-expanded={menuOpen}

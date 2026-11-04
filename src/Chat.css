@@ -251,8 +251,8 @@
 .shc-spinner {
   width: 32px;
   height: 32px;
-  border: 3px solid rgba(32, 217, 255, 0.2);
-  border-top-color: var(--accent);
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #FFFFFF;
   border-radius: 50%;
   animation: shc-spin 0.75s linear infinite;
 }
