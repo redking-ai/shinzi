@@ -1407,8 +1407,16 @@ export default function Chat({ onNavigate }: ChatProps) {
   }, [screen]);
 
   // ----------------------------------------------------------
-  // DERIVED DATA
+  // DERIVED DATA & HELPERS
   // ----------------------------------------------------------
+
+  const otherMemberId = useCallback(
+    (conversation: Rec | null | undefined): string =>
+      String(
+        (conversation?.memberIds || []).find((id: string) => id !== uid) ?? '',
+      ),
+    [uid],
+  );
 
   const selectedConversation: Rec | null = useMemo(
     () => conversations.find((item) => item.id === selected?.id) || selected,
@@ -1418,9 +1426,10 @@ export default function Chat({ onNavigate }: ChatProps) {
   const activeDmTargetUid = useMemo(() => {
     if (!selectedConversation || selectedConversation.type === 'group') return null;
     return otherMemberId(selectedConversation);
-  }, [selectedConversation]);
+  }, [selectedConversation, otherMemberId]);
 
   const [liveTargetProfile, setLiveTargetProfile] = useState<Rec | null>(null);
+  const [userLiveAvatars, setUserLiveAvatars] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!activeDmTargetUid) {
@@ -1435,6 +1444,7 @@ export default function Chat({ onNavigate }: ChatProps) {
           const data = snap.data() as Rec;
           setLiveTargetProfile(data);
           if (data?.photoURL) {
+            setUserLiveAvatars((prev) => ({ ...prev, [activeDmTargetUid]: data.photoURL }));
             avatarMemoryCache.set(activeDmTargetUid, data.photoURL);
             try {
               localStorage.setItem(`shinzi_avatar_${activeDmTargetUid}`, data.photoURL);
@@ -1447,6 +1457,41 @@ export default function Chat({ onNavigate }: ChatProps) {
       }
     );
   }, [activeDmTargetUid]);
+
+  useEffect(() => {
+    if (!conversations || conversations.length === 0 || !uid) return;
+
+    const directOtherUids = conversations
+      .filter((c) => c.type !== 'group')
+      .map((c) => otherMemberId(c))
+      .filter((id) => Boolean(id) && !userLiveAvatars[id]);
+
+    if (directOtherUids.length === 0) return;
+
+    let cancelled = false;
+    directOtherUids.forEach(async (targetId) => {
+      try {
+        const snap = await getDoc(doc(db, 'users', targetId));
+        if (snap.exists() && !cancelled) {
+          const udata = snap.data();
+          if (udata?.photoURL) {
+            setUserLiveAvatars((prev) => ({
+              ...prev,
+              [targetId]: udata.photoURL,
+            }));
+            avatarMemoryCache.set(targetId, udata.photoURL);
+            try {
+              localStorage.setItem(`shinzi_avatar_${targetId}`, udata.photoURL);
+            } catch {}
+          }
+        }
+      } catch {}
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [conversations, uid, otherMemberId]);
 
   const unreadCount = useMemo(() => {
     if (!uid) return 0;
@@ -1477,11 +1522,6 @@ export default function Chat({ onNavigate }: ChatProps) {
         .map(([, data]) => String(data.displayName || data.username || 'Someone')),
     [activity, now, uid],
   );
-
-  const otherMemberId = (conversation: Rec | null | undefined): string =>
-    String(
-      (conversation?.memberIds || []).find((id: string) => id !== uid) ?? '',
-    );
 
   const getConversationName = (conversation: Rec | null | undefined) => {
     if (!conversation) return 'Conversation';
@@ -3831,7 +3871,7 @@ const handleSearchMessage = async (target: Rec) => {
                   photoURL={
                     item.type === 'group'
                       ? undefined
-                      : item.memberProfiles?.[otherMemberId(item)]?.photoURL
+                      : (userLiveAvatars[otherMemberId(item)] || item.memberProfiles?.[otherMemberId(item)]?.photoURL)
                   }
                   profileAssetId={
                     item.type === 'group'
@@ -3916,7 +3956,7 @@ const handleSearchMessage = async (target: Rec) => {
           <UserAvatar
             uid={item.id}
             name={item.displayName || item.username}
-            photoURL={item.photoURL}
+            photoURL={userLiveAvatars[item.id] || item.photoURL}
             profileAssetId={item.profileAssetId}
             size="md"
           />
