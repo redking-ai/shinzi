@@ -339,6 +339,73 @@ const uploadMultipart = async (
   const { folderId, fileName, mimeType, blob } =
     options;
 
+  // 1. Try Google Drive Resumable Upload (standard for web browsers; avoids multipart CORS errors)
+  try {
+    const initRes = await fetch(
+      `${DRIVE_UPLOAD_API}/files?uploadType=resumable`,
+      {
+        method: 'POST',
+        headers: {
+          ...getAuthHeader(token),
+          'Content-Type': 'application/json; charset=UTF-8',
+          'X-Upload-Content-Type': mimeType,
+          'X-Upload-Content-Length': String(blob.size),
+        },
+        body: JSON.stringify({
+          name: fileName,
+          mimeType,
+          parents: [folderId],
+        }),
+      }
+    );
+
+    if (initRes.ok) {
+      const uploadUrl = initRes.headers.get('Location');
+      if (uploadUrl) {
+        const putRes = await fetch(uploadUrl, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': mimeType,
+          },
+          body: blob,
+        });
+
+        if (putRes.ok) {
+          const uploaded = await putRes.json();
+          if (uploaded?.id) {
+            try {
+              await fetch(
+                `${DRIVE_API}/files/${encodeURIComponent(uploaded.id)}/permissions`,
+                {
+                  method: 'POST',
+                  headers: {
+                    ...getAuthHeader(token),
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    role: 'reader',
+                    type: 'anyone',
+                  }),
+                }
+              );
+            } catch {}
+
+            return {
+              fileId: uploaded.id,
+              folderId,
+              fileName: uploaded.name || fileName,
+              mimeType: uploaded.mimeType || mimeType,
+              sizeBytes: uploaded.size ? Number(uploaded.size) : blob.size,
+            };
+          }
+        }
+      }
+    }
+  } catch (resumableErr) {
+    console.warn('[DRIVE] Resumable upload attempt failed, falling back to multipart:', resumableErr);
+  }
+
+  // 2. Fallback to multipart upload
   const boundary =
     `shinzi_${Date.now().toString(36)}` +
     `_${Math.random().toString(36).slice(2)}`;
@@ -415,16 +482,10 @@ const uploadMultipart = async (
 
   return {
     fileId: uploaded.id,
-
     folderId,
-
     fileName: uploaded.name || fileName,
-
     mimeType: uploaded.mimeType || mimeType,
-
-    sizeBytes: uploaded.size
-      ? Number(uploaded.size)
-      : blob.size,
+    sizeBytes: uploaded.size ? Number(uploaded.size) : blob.size,
   };
 };
 

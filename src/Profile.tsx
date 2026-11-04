@@ -562,20 +562,13 @@ useEffect(() => {
     if (!file || !currentUser) return;
 
     const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|mkv|avi)$/i.test(file.name);
-    const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif)$/i.test(file.name);
-
-    // Videos are fully blocked for now per requirement
-    if (isVideo) {
-      setError('Video uploads are temporarily disabled. Please choose an image or GIF.');
-      return;
-    }
-
-    if (!isImage) {
-      setError('Please choose an image (PNG, JPG, WebP) or GIF.');
-      return;
-    }
-
     const isGif = file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
+    const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(file.name);
+
+    if (!isVideo && !isImage && !isGif) {
+      setError('Please choose an image (PNG, JPG, WebP), GIF, or short animation (MP4).');
+      return;
+    }
 
     // GIF selected: upload directly to keep all animated frames and timing intact!
     if (isGif) {
@@ -589,6 +582,44 @@ useEffect(() => {
         await uploadMediaFile(file, type, reader.result as string);
       };
       reader.readAsDataURL(file);
+      return;
+    }
+
+    // Video / animated clip (MP4, WebM) selected: max 8MB, max 10 seconds
+    if (isVideo) {
+      if (file.size > 8 * 1024 * 1024) {
+        setError('Video animations must be under 8MB.');
+        return;
+      }
+
+      const videoEl = document.createElement('video');
+      videoEl.preload = 'metadata';
+      const objectUrl = URL.createObjectURL(file);
+      videoEl.src = objectUrl;
+
+      videoEl.onloadedmetadata = async () => {
+        const duration = videoEl.duration;
+        URL.revokeObjectURL(objectUrl);
+        if (typeof duration === 'number' && !isNaN(duration) && duration > 10.0) {
+          setError(`Animation is ${Math.round(duration)} seconds long. Maximum allowed is 10 seconds.`);
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = async () => {
+          await uploadMediaFile(file, type, reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      };
+
+      videoEl.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        const reader = new FileReader();
+        reader.onload = async () => {
+          await uploadMediaFile(file, type, reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      };
       return;
     }
 
@@ -669,7 +700,10 @@ useEffect(() => {
             fileName: file.name,
             mimeType: fileMime,
             sizeBytes: file.size,
-            dataUriPreview,
+            dataUriPreview:
+              dataUriPreview && dataUriPreview.length < 500000
+                ? dataUriPreview
+                : undefined,
           }),
         });
 
@@ -1194,18 +1228,18 @@ useEffect(() => {
         </button>
       </nav>
 
-      {/* Hidden file inputs for avatar & banner selection (Images & GIFs allowed; videos blocked) */}
+      {/* Hidden file inputs for avatar & banner selection (Images, GIFs & animations allowed) */}
       <input
         ref={avatarInputRef}
         type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif"
+        accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm"
         style={{ display: 'none' }}
         onChange={(e) => void handleMediaFileSelect(e, 'avatar')}
       />
       <input
         ref={bannerInputRef}
         type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif"
+        accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm"
         style={{ display: 'none' }}
         onChange={(e) => void handleMediaFileSelect(e, 'banner')}
       />
