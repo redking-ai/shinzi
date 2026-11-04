@@ -17,14 +17,6 @@ import {
 } from 'lucide-react';
 import { auth, db } from './firebaseConfig';
 import { useDriveStore } from './driveStore';
-import {
-  generateAssetId,
-  createAssetRecord,
-  deleteAsset,
-  getAsset,
-  ASSET_TYPES,
-  ASSET_VISIBILITY,
-} from './assetService';
 import MediaCropModal from './MediaCropModal';
 import {
   getCachedProfile,
@@ -538,19 +530,6 @@ useEffect(() => {
     }
   };
 
-  // Helper to delete an old Google Drive file & asset record
-  const cleanupOldDriveAsset = async (oldAssetId?: string) => {
-    if (!oldAssetId) return;
-    try {
-      const assetRecord = await getAsset(oldAssetId);
-      if (assetRecord?.providerFileId) {
-        await drive.deleteFile(assetRecord.providerFileId);
-      }
-      await deleteAsset(oldAssetId);
-    } catch (delErr) {
-      console.warn('[PROFILE] Non-critical cleanup error for old asset:', delErr);
-    }
-  };
 
   // Handle selected file from input (Avatar or Banner)
   const handleMediaFileSelect = async (
@@ -646,131 +625,38 @@ useEffect(() => {
     setError('');
 
     try {
-      if (!drive.hasActiveSession) {
-        const token = await drive.connectDrive(true);
-        if (!token) {
-          throw new Error('Google Drive connection cancelled.');
-        }
-      }
+      const idToken = await currentUser.getIdToken();
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', type);
 
-      // 1. Upload to user's Google Drive
-      const isBanner = type === 'banner';
-      const folderType = isBanner ? 'banners' : 'profiles';
-      const fileMime = file.type || (
-        file.name.endsWith('.gif') ? 'image/gif' :
-        file.name.endsWith('.png') ? 'image/png' :
-        file.name.endsWith('.webp') ? 'image/webp' : 'image/jpeg'
-      );
-      const uploadedFile = await drive.uploadFile({
-        file,
-        fileName: file.name,
-        mimeType: fileMime,
-        folderType,
+      const res = await fetch('/api/update-profile-media', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: formData,
       });
 
-      // 2. Make file publicly accessible for profile display
-      try {
-        await drive.makeFilePublic(uploadedFile.fileId);
-      } catch (pubErr) {
-        console.warn('Public permission error:', pubErr);
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || `Upload failed (${res.status})`);
       }
 
-      // 3. Save asset record & update user profile in Firestore
-      const assetType = isBanner ? ASSET_TYPES.BANNER : ASSET_TYPES.PROFILE_PHOTO;
-      const newAssetId = await generateAssetId(assetType);
-      const oldAssetId = isBanner ? userData?.bannerAssetId : userData?.profileAssetId;
+      const resData = await res.json();
+      const finalUrl = resData.mediaUrl || dataUriPreview || '';
 
-      // We use our serverless API (/api/update-profile-media) which runs Firebase Admin SDK.
-      // This has full administrator privileges and NEVER gets blocked by Firestore client rules!
-      const idToken = await currentUser.getIdToken();
-      let savedViaServer = false;
-
-      try {
-        const apiRes = await fetch('/api/update-profile-media', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${idToken}`,
-          },
-          body: JSON.stringify({
-            type,
-            assetId: newAssetId,
-            providerFileId: uploadedFile.fileId,
-            driveFolderId: uploadedFile.folderId,
-            fileName: file.name,
-            mimeType: fileMime,
-            sizeBytes: file.size,
-            dataUriPreview:
-              dataUriPreview && dataUriPreview.length < 500000
-                ? dataUriPreview
-                : undefined,
-          }),
-        });
-
-        if (apiRes.ok) {
-          savedViaServer = true;
-          console.info('[PROFILE] Successfully updated profile media via Firebase Admin serverless API.');
-        } else {
-          const errData = await apiRes.json().catch(() => ({}));
-          console.warn('[PROFILE] Serverless update failed, falling back to direct write:', errData);
-        }
-      } catch (srvErr) {
-        console.warn('[PROFILE] Network error contacting /api/update-profile-media:', srvErr);
-      }
-
-      // If serverless endpoint wasn't reached, fallback to direct client Firestore write
-      if (!savedViaServer) {
-        await createAssetRecord({
-          assetId: newAssetId,
-          ownerUid: currentUser.uid,
-          type: assetType,
-          visibility: ASSET_VISIBILITY.PUBLIC,
-          providerFileId: uploadedFile.fileId,
-          driveFolderId: uploadedFile.folderId,
-          fileName: file.name,
-          mimeType: file.type || 'image/jpeg',
-          sizeBytes: file.size,
-        });
-
-        const userRef = doc(db, 'users', currentUser.uid);
-        const profileUpdates: AnyRecord = isBanner
-          ? {
-              bannerAssetId: newAssetId,
-              bannerUrl: dataUriPreview || `https://lh3.googleusercontent.com/d/${uploadedFile.fileId}=s800`,
-              updatedAt: serverTimestamp(),
-            }
-          : {
-              profileAssetId: newAssetId,
-              photoURL: dataUriPreview || `https://lh3.googleusercontent.com/d/${uploadedFile.fileId}=s800`,
-              updatedAt: serverTimestamp(),
-            };
-
-        await updateDoc(userRef, profileUpdates);
-      }
-
-      // Cache locally for instant feedback
-      if (isBanner) {
-        setBannerImageUri(dataUriPreview || `https://lh3.googleusercontent.com/d/${uploadedFile.fileId}=s800`);
+      // Update state for instant view
+      if (type === 'banner') {
+        setBannerImageUri(finalUrl);
       } else {
-        setProfileImageUri(dataUriPreview || `https://lh3.googleusercontent.com/d/${uploadedFile.fileId}=s800`);
-      }
-
-      // 5. Clean up the old asset from Drive so storage stays safe and clean
-      if (oldAssetId && oldAssetId !== newAssetId) {
-        void cleanupOldDriveAsset(oldAssetId);
+        setProfileImageUri(finalUrl);
       }
 
       await loadProfile();
     } catch (uploadErr) {
       console.error('[PROFILE] Media upload failed:', uploadErr);
-      const msg = messageOf(uploadErr);
-      if (msg.toLowerCase().includes('permission') || msg.toLowerCase().includes('insufficient')) {
-        setError(
-          'Missing or insufficient permissions: Firebase rules blocked this profile update. Please publish firestore.rules in Firebase Console (Rules tab -> Publish).'
-        );
-      } else {
-        setError(msg);
-      }
+      setError(messageOf(uploadErr));
     } finally {
       setMediaUploadLoading(false);
       setMediaUploadStatus('');
