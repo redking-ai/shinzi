@@ -11,7 +11,8 @@ export default {
       const sa = JSON.parse(raw);
       const app = getApps().length > 0 ? getApps()[0] : initializeApp({ credential: cert(sa) });
       const storage = getStorage(app);
-      const [buckets] = await storage.getBuckets();
+      const gcs = storage.bucket().storage;
+      const [buckets] = await gcs.getBuckets();
       const bucketNames = buckets.map(b => b.name);
       return Response.json({
         ok: true,
