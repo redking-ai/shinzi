@@ -1063,7 +1063,7 @@ export default function Chat({ onNavigate }: ChatProps) {
       if (typeof window === 'undefined') return;
       const params = new URLSearchParams(window.location.search);
       const targetUid = params.get('uid');
-      if (window.location.pathname.toLowerCase() === '/profile' && targetUid && targetUid !== uid) {
+      if (window.location.pathname.toLowerCase() === '/profile' && targetUid) {
         setViewingProfileUid(targetUid);
       } else {
         setViewingProfileUid(null);
@@ -3185,10 +3185,6 @@ const handleSearchMessage = async (target: Rec) => {
 
   const openUserProfile = (profileUid?: string) => {
     if (!profileUid) return;
-    if (profileUid === uid) {
-      navigateToUrl('/profile');
-      return;
-    }
     setViewingProfileUid(profileUid);
     window.history.pushState(
       { profileUid },
@@ -4980,19 +4976,7 @@ const handleSearchMessage = async (target: Rec) => {
             className="shc-emoji-picker-sheet"
             onClick={(e) => e.stopPropagation()}
           >
-            <div
-              className="shc-sheet-handle-wrap"
-              onClick={() => {
-                setShowEmojiPicker(false);
-                setActionMessage(null);
-              }}
-              aria-label="Close emoji picker"
-              role="button"
-              tabIndex={0}
-            >
-              <div className="shc-sheet-handle" />
-              <ChevronDown size={18} className="shc-sheet-handle-icon" />
-            </div>
+            <div className="shc-sheet-handle" />
             <Suspense
               fallback={
                 <div className="shc-emoji-picker-loading" role="status">

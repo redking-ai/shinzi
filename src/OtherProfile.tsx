@@ -161,11 +161,6 @@ export default function OtherProfile({
       return;
     }
 
-    if (currentUser && targetUid === currentUser.uid) {
-      navigateTo('/profile');
-      return;
-    }
-
     setLoading((prev) => (getCachedProfile(targetUid) ? false : prev));
     setError('');
 

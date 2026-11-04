@@ -2712,34 +2712,6 @@ button {
   margin: 0 auto 4px;
 }
 
-.shc-sheet-handle-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  padding: 4px 0 6px;
-  cursor: pointer;
-  touch-action: pan-y;
-  user-select: none;
-  -webkit-user-select: none;
-  transition: opacity 0.15s ease;
-}
-
-.shc-sheet-handle-wrap:hover {
-  opacity: 0.8;
-}
-
-.shc-sheet-handle-icon {
-  color: #777777;
-  transition: transform 0.15s ease, color 0.15s ease;
-}
-
-.shc-sheet-handle-wrap:hover .shc-sheet-handle-icon {
-  color: #FFFFFF;
-  transform: translateY(2px);
-}
-
 .shc-action-emoji-bar {
   display: flex;
   align-items: center;
