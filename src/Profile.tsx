@@ -561,51 +561,38 @@ useEffect(() => {
     e.target.value = '';
     if (!file || !currentUser) return;
 
-    const isVideo = file.type.startsWith('video/');
-    const isImage = file.type.startsWith('image/');
+    const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|mkv|avi)$/i.test(file.name);
+    const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif)$/i.test(file.name);
 
-    if (!isVideo && !isImage) {
-      setError('Please choose an image (PNG, JPG) or short video (MP4, WebM).');
+    // Videos are fully blocked for now per requirement
+    if (isVideo) {
+      setError('Video uploads are temporarily disabled. Please choose an image or GIF.');
       return;
     }
 
-    // Video validation: max 8MB, max 10 seconds
-    if (isVideo) {
-      if (file.size > 8 * 1024 * 1024) {
-        setError('Profile videos must be under 8MB.');
+    if (!isImage) {
+      setError('Please choose an image (PNG, JPG, WebP) or GIF.');
+      return;
+    }
+
+    const isGif = file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
+
+    // GIF selected: upload directly to keep all animated frames and timing intact!
+    if (isGif) {
+      if (file.size > 10 * 1024 * 1024) {
+        setError('GIFs must be under 10MB.');
         return;
       }
 
-      // Check duration strictly
-      const videoEl = document.createElement('video');
-      videoEl.preload = 'metadata';
-      const objectUrl = URL.createObjectURL(file);
-      videoEl.src = objectUrl;
-
-      videoEl.onloadedmetadata = async () => {
-        const duration = videoEl.duration;
-        URL.revokeObjectURL(objectUrl);
-        if (typeof duration === 'number' && !isNaN(duration) && duration > 10.0) {
-          setError(`Video is ${Math.round(duration)} seconds long. Maximum allowed is 10 seconds.`);
-          return;
-        }
-
-        // Read video as data URL for instant feedback and upload
-        const reader = new FileReader();
-        reader.onload = async () => {
-          await uploadMediaFile(file, type, reader.result as string);
-        };
-        reader.readAsDataURL(file);
+      const reader = new FileReader();
+      reader.onload = async () => {
+        await uploadMediaFile(file, type, reader.result as string);
       };
-
-      videoEl.onerror = () => {
-        URL.revokeObjectURL(objectUrl);
-        setError('Unable to read video file.');
-      };
+      reader.readAsDataURL(file);
       return;
     }
 
-    // Image selected: open interactive crop modal
+    // Static image selected (PNG, JPG, WebP): open interactive crop modal
     const reader = new FileReader();
     reader.onload = () => {
       setCropModalData({
@@ -638,10 +625,15 @@ useEffect(() => {
       // 1. Upload to user's Google Drive
       const isBanner = type === 'banner';
       const folderType = isBanner ? 'banners' : 'profiles';
+      const fileMime = file.type || (
+        file.name.endsWith('.gif') ? 'image/gif' :
+        file.name.endsWith('.png') ? 'image/png' :
+        file.name.endsWith('.webp') ? 'image/webp' : 'image/jpeg'
+      );
       const uploadedFile = await drive.uploadFile({
         file,
         fileName: file.name,
-        mimeType: file.type || (file.name.endsWith('.png') ? 'image/png' : 'image/jpeg'),
+        mimeType: fileMime,
         folderType,
       });
 
@@ -675,7 +667,7 @@ useEffect(() => {
             providerFileId: uploadedFile.fileId,
             driveFolderId: uploadedFile.folderId,
             fileName: file.name,
-            mimeType: file.type || (file.name.endsWith('.png') ? 'image/png' : 'image/jpeg'),
+            mimeType: fileMime,
             sizeBytes: file.size,
             dataUriPreview,
           }),
@@ -1202,18 +1194,18 @@ useEffect(() => {
         </button>
       </nav>
 
-      {/* Hidden file inputs for avatar & banner selection */}
+      {/* Hidden file inputs for avatar & banner selection (Images & GIFs allowed; videos blocked) */}
       <input
         ref={avatarInputRef}
         type="file"
-        accept="image/png,image/jpeg,image/webp,video/mp4,video/webm"
+        accept="image/png,image/jpeg,image/webp,image/gif"
         style={{ display: 'none' }}
         onChange={(e) => void handleMediaFileSelect(e, 'avatar')}
       />
       <input
         ref={bannerInputRef}
         type="file"
-        accept="image/png,image/jpeg,image/webp,video/mp4,video/webm"
+        accept="image/png,image/jpeg,image/webp,image/gif"
         style={{ display: 'none' }}
         onChange={(e) => void handleMediaFileSelect(e, 'banner')}
       />

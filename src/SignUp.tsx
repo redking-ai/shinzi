@@ -312,12 +312,13 @@ const [draftRestored, setDraftRestored] = useState(false);
       'image/jpeg',
       'image/png',
       'image/webp',
+      'image/gif',
     ];
 
     if (!supportedImageTypes.includes(file.type)) {
       setFormError({
         message:
-          'This image format is not supported. Please choose a JPG, PNG, or WebP image.',
+          'This image format is not supported. Please choose a JPG, PNG, WebP, or GIF image.',
       });
 
       event.target.value = '';
@@ -1122,7 +1123,7 @@ useEffect(() => {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/jpeg,image/png,image/webp"
+              accept="image/jpeg,image/png,image/webp,image/gif"
               onChange={handleImageChange}
               style={{
                 display: 'none',
