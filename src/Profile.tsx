@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   doc,
   getDoc,
@@ -17,6 +17,15 @@ import {
 } from 'lucide-react';
 import { auth, db } from './firebaseConfig';
 import { useDriveStore } from './driveStore';
+import {
+  generateAssetId,
+  createAssetRecord,
+  deleteAsset,
+  getAsset,
+  ASSET_TYPES,
+  ASSET_VISIBILITY,
+} from './assetService';
+import MediaCropModal from './MediaCropModal';
 import {
   getCachedProfile,
   setCachedProfile,
@@ -138,6 +147,17 @@ useEffect(() => {
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // Media cropping & upload state
+  const [mediaUploadLoading, setMediaUploadLoading] = useState(false);
+  const [mediaUploadStatus, setMediaUploadStatus] = useState('');
+  const [cropModalData, setCropModalData] = useState<{
+    imageSrc: string;
+    type: 'avatar' | 'banner';
+  } | null>(null);
+
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
+  const bannerInputRef = useRef<HTMLInputElement | null>(null);
 
   const [editForm, setEditForm] = useState({
     displayName: '',
@@ -513,6 +533,171 @@ useEffect(() => {
     }
   };
 
+  // Helper to delete an old Google Drive file & asset record
+  const cleanupOldDriveAsset = async (oldAssetId?: string) => {
+    if (!oldAssetId) return;
+    try {
+      const assetRecord = await getAsset(oldAssetId);
+      if (assetRecord?.providerFileId) {
+        await drive.deleteFile(assetRecord.providerFileId);
+      }
+      await deleteAsset(oldAssetId);
+    } catch (delErr) {
+      console.warn('[PROFILE] Non-critical cleanup error for old asset:', delErr);
+    }
+  };
+
+  // Handle selected file from input (Avatar or Banner)
+  const handleMediaFileSelect = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    type: 'avatar' | 'banner'
+  ) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !currentUser) return;
+
+    const isVideo = file.type.startsWith('video/');
+    const isImage = file.type.startsWith('image/');
+
+    if (!isVideo && !isImage) {
+      setError('Please choose an image (PNG, JPG) or short video (MP4, WebM).');
+      return;
+    }
+
+    // Video validation: max 8MB, max 10 seconds
+    if (isVideo) {
+      if (file.size > 8 * 1024 * 1024) {
+        setError('Profile videos must be under 8MB.');
+        return;
+      }
+
+      // Check duration
+      const videoEl = document.createElement('video');
+      videoEl.preload = 'metadata';
+      const objectUrl = URL.createObjectURL(file);
+      videoEl.src = objectUrl;
+
+      videoEl.onloadedmetadata = async () => {
+        URL.revokeObjectURL(objectUrl);
+        if (videoEl.duration > 10.5) {
+          setError('Profile videos must be 10 seconds or shorter.');
+          return;
+        }
+
+        // Upload directly without crop
+        await uploadMediaFile(file, type);
+      };
+
+      videoEl.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        setError('Unable to read video file.');
+      };
+      return;
+    }
+
+    // Image selected: open interactive crop modal
+    const reader = new FileReader();
+    reader.onload = () => {
+      setCropModalData({
+        imageSrc: reader.result as string,
+        type,
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Upload cropped image or video to Google Drive and update profile
+  const uploadMediaFile = async (
+    file: File,
+    type: 'avatar' | 'banner',
+    dataUriPreview?: string
+  ) => {
+    if (!currentUser) return;
+    setMediaUploadLoading(true);
+    setMediaUploadStatus(`Uploading ${type}…`);
+    setError('');
+
+    try {
+      if (!drive.hasActiveSession) {
+        const token = await drive.connectDrive(true);
+        if (!token) {
+          throw new Error('Google Drive connection cancelled.');
+        }
+      }
+
+      // 1. Upload to user's Google Drive
+      const isBanner = type === 'banner';
+      const folderType = isBanner ? 'banners' : 'profiles';
+      const uploadedFile = await drive.uploadFile({
+        file,
+        fileName: file.name,
+        mimeType: file.type || (file.name.endsWith('.png') ? 'image/png' : 'image/jpeg'),
+        folderType,
+      });
+
+      // 2. Make file publicly accessible for profile display
+      try {
+        await drive.makeFilePublic(uploadedFile.fileId);
+      } catch (pubErr) {
+        console.warn('Public permission error:', pubErr);
+      }
+
+      // 3. Create Shinzi asset record
+      const assetType = isBanner ? ASSET_TYPES.BANNER : ASSET_TYPES.PROFILE_PHOTO;
+      const newAssetId = await generateAssetId(assetType);
+      await createAssetRecord({
+        assetId: newAssetId,
+        ownerUid: currentUser.uid,
+        type: assetType,
+        visibility: ASSET_VISIBILITY.PUBLIC,
+        providerFileId: uploadedFile.fileId,
+        driveFolderId: uploadedFile.folderId,
+        fileName: file.name,
+        mimeType: file.type || 'image/jpeg',
+        sizeBytes: file.size,
+      });
+
+      // 4. Update user document in Firestore
+      const userRef = doc(db, 'users', currentUser.uid);
+      const oldAssetId = isBanner ? userData?.bannerAssetId : userData?.profileAssetId;
+
+      const profileUpdates: AnyRecord = isBanner
+        ? {
+            bannerAssetId: newAssetId,
+            bannerUrl: dataUriPreview || `https://lh3.googleusercontent.com/d/${uploadedFile.fileId}=s800`,
+            updatedAt: serverTimestamp(),
+          }
+        : {
+            profileAssetId: newAssetId,
+            photoURL: dataUriPreview || `https://lh3.googleusercontent.com/d/${uploadedFile.fileId}=s800`,
+            updatedAt: serverTimestamp(),
+          };
+
+      await updateDoc(userRef, profileUpdates);
+
+      // Cache locally for instant feedback
+      if (isBanner) {
+        setBannerImageUri(dataUriPreview || `https://lh3.googleusercontent.com/d/${uploadedFile.fileId}=s800`);
+      } else {
+        setProfileImageUri(dataUriPreview || `https://lh3.googleusercontent.com/d/${uploadedFile.fileId}=s800`);
+      }
+
+      // 5. Clean up the old asset from Drive so storage stays safe and clean
+      if (oldAssetId && oldAssetId !== newAssetId) {
+        void cleanupOldDriveAsset(oldAssetId);
+      }
+
+      await loadProfile();
+    } catch (uploadErr) {
+      console.error('[PROFILE] Media upload failed:', uploadErr);
+      setError(messageOf(uploadErr));
+    } finally {
+      setMediaUploadLoading(false);
+      setMediaUploadStatus('');
+      setCropModalData(null);
+    }
+  };
+
   if (loading || authLoading) {
     return (
       <main className="sh-profile-page sh-profile-loading">
@@ -555,7 +740,7 @@ useEffect(() => {
         <div
           className="sh-profile-banner"
           style={
-            bannerImageUri
+            bannerImageUri && !bannerImageUri.includes('video/')
               ? {
                   backgroundImage:
                     `linear-gradient(180deg, transparent, #00000099), url("${bannerImageUri}")`,
@@ -563,25 +748,48 @@ useEffect(() => {
               : undefined
           }
         >
-          {!bannerImageUri && <div className="sh-banner-glow" />}
+          {bannerImageUri && bannerImageUri.includes('video/') ? (
+            <video
+              className="sh-banner-video"
+              src={bannerImageUri}
+              autoPlay
+              loop
+              muted
+              playsInline
+            />
+          ) : !bannerImageUri ? (
+            <div className="sh-banner-glow" />
+          ) : null}
 
           {(assetLoading || (assetError && !showAssetError)) && (
             <span className="sh-asset-status">Loading images…</span>
           )}
 
-          <button
-            type="button"
-            className="sh-banner-settings-button"
-            title="Settings"
-            aria-label="Settings"
-            onClick={() =>
-              setError(
-                'Settings are not connected to this profile screen yet.',
-              )
-            }
-          >
-            ⚙
-          </button>
+          {/* Root-style Banner Pencil Edit Button */}
+          <div className="sh-banner-edit-overlay">
+            <button
+              type="button"
+              className="sh-banner-edit-btn"
+              title="Change banner"
+              aria-label="Change banner"
+              onClick={() => bannerInputRef.current?.click()}
+            >
+              <Pencil size={18} />
+            </button>
+            <button
+              type="button"
+              className="sh-banner-settings-button"
+              title="Settings"
+              aria-label="Settings"
+              onClick={() =>
+                setError(
+                  'Settings are not connected to this profile screen yet.',
+                )
+              }
+            >
+              ⚙
+            </button>
+          </div>
         </div>
 
         {error && (
@@ -646,6 +854,15 @@ useEffect(() => {
             <div className="sh-avatar-wrap">
               {assetLoading && !profileImageUri ? (
                 <div className="sh-avatar sh-avatar-skeleton" />
+              ) : profileImageUri && profileImageUri.includes('video/') ? (
+                <video
+                  className="sh-avatar-video"
+                  src={profileImageUri}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                />
               ) : profileImageUri ? (
                 <img
                   className="sh-avatar"
@@ -667,6 +884,20 @@ useEffect(() => {
                     .toUpperCase()}
                 </div>
               )}
+
+              {/* Root-style Avatar Pencil Edit Overlay */}
+              <div
+                className="sh-avatar-edit-overlay"
+                onClick={() => avatarInputRef.current?.click()}
+                title="Change avatar"
+                aria-label="Change avatar"
+                role="button"
+                tabIndex={0}
+              >
+                <div className="sh-avatar-edit-btn">
+                  <Pencil size={16} />
+                </div>
+              </div>
             </div>
 
             {isEditing ? (
@@ -912,6 +1143,44 @@ useEffect(() => {
           )}
         </button>
       </nav>
+
+      {/* Hidden file inputs for avatar & banner selection */}
+      <input
+        ref={avatarInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,video/mp4,video/webm"
+        style={{ display: 'none' }}
+        onChange={(e) => void handleMediaFileSelect(e, 'avatar')}
+      />
+      <input
+        ref={bannerInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,video/mp4,video/webm"
+        style={{ display: 'none' }}
+        onChange={(e) => void handleMediaFileSelect(e, 'banner')}
+      />
+
+      {/* Loading overlay during Drive upload */}
+      {mediaUploadLoading && (
+        <div className="sh-media-upload-progress">
+          <span className="shc-spinner" />
+          <span>{mediaUploadStatus || 'Uploading media…'}</span>
+        </div>
+      )}
+
+      {/* Discord/Root-style Drag & Zoom Cropper Modal */}
+      {cropModalData && (
+        <MediaCropModal
+          imageSrc={cropModalData.imageSrc}
+          cropShape={cropModalData.type === 'avatar' ? 'round' : 'rect'}
+          aspect={cropModalData.type === 'avatar' ? 1 : 16 / 9}
+          title={cropModalData.type === 'avatar' ? 'Edit Avatar' : 'Edit Banner'}
+          onConfirm={({ file, dataUri }) => {
+            void uploadMediaFile(file, cropModalData.type, dataUri);
+          }}
+          onCancel={() => setCropModalData(null)}
+        />
+      )}
     </main>
   );
 }

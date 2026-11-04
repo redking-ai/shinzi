@@ -492,7 +492,7 @@ export default function OtherProfile({
         <div
           className="sh-profile-banner"
           style={
-            banner
+            banner && !banner.includes('video/')
               ? {
                   backgroundImage:
                     `linear-gradient(180deg, transparent, #00000099), url("${banner}")`,
@@ -500,7 +500,18 @@ export default function OtherProfile({
               : undefined
           }
         >
-          {!banner && <div className="sh-banner-glow" />}
+          {banner && banner.includes('video/') ? (
+            <video
+              className="sh-banner-video"
+              src={banner}
+              autoPlay
+              loop
+              muted
+              playsInline
+            />
+          ) : !banner ? (
+            <div className="sh-banner-glow" />
+          ) : null}
           <button
             type="button"
             className="sh-banner-back-button"
@@ -538,7 +549,16 @@ export default function OtherProfile({
         <div className="sh-profile-identity">
           <div className="sh-avatar-thought-row">
             <div className="sh-avatar-wrap">
-              {avatar ? (
+              {avatar && avatar.includes('video/') ? (
+                <video
+                  className="sh-avatar-video"
+                  src={avatar}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                />
+              ) : avatar ? (
                 <img
                   className="sh-avatar"
                   src={avatar}

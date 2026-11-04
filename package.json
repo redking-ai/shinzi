@@ -21,7 +21,8 @@
     "primeicons": "^8.0.2",
     "primereact": "^9.6.5",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-easy-crop": "^6.2.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",
