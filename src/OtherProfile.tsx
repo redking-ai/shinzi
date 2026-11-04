@@ -632,16 +632,12 @@ export default function OtherProfile({
 
         <div className="sh-profile-content">
           <div className="sh-profile-info-card">
-            <div className="sh-info-card-section">
-              <h3 className="sh-info-card-label">Bio</h3>
-              <p className="sh-bio-text">
-                {userData.bio ? (
-                  userData.bio
-                ) : (
-                  <span className="sh-bio-empty">No bio added yet.</span>
-                )}
-              </p>
-            </div>
+            {userData.bio ? (
+              <div className="sh-info-card-section">
+                <h3 className="sh-info-card-label">Bio</h3>
+                <p className="sh-bio-text">{userData.bio}</p>
+              </div>
+            ) : null}
 
             <div className="sh-info-card-section">
               <h3 className="sh-info-card-label">Joined Shinzi</h3>

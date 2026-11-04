@@ -1109,7 +1109,7 @@ body {
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
-  color: var(--sh-muted, #949ba4);
+  color: #FFFFFF !important;
   text-transform: uppercase;
   margin: 0;
 }
@@ -1117,14 +1117,14 @@ body {
 .sh-bio-text {
   font-size: 14px;
   line-height: 1.5;
-  color: #dbdee1;
+  color: #c0c0c0 !important;
   white-space: pre-wrap;
   word-break: break-word;
   margin: 0;
 }
 
 .sh-bio-empty {
-  color: #726f8d;
+  color: #666666 !important;
   font-style: italic;
 }
 
@@ -1135,7 +1135,7 @@ body {
 .sh-joined-text {
   font-size: 14px;
   font-weight: 500;
-  color: #dbdee1;
+  color: #888888 !important;
   margin: 0;
 }
 
@@ -1183,10 +1183,10 @@ body {
   align-items: center;
   justify-content: space-around;
   padding: 4px 8px env(safe-area-inset-bottom, 0px);
-  background: rgba(8, 6, 18, 0.94);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-top: 1px solid #28223d;
+  background: #000000 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-top: 1px solid #1a1a1a !important;
   z-index: 50;
 }
 
@@ -1199,18 +1199,28 @@ body {
   border: 0;
   border-radius: 12px;
   background: transparent;
-  color: #a6a2b5;
+  color: #555555 !important;
   cursor: pointer;
   transition: color 0.15s ease, background 0.15s ease;
 }
 
 .sh-profile-bottom-nav button:hover {
-  color: #ffffff;
+  color: #ffffff !important;
   background: rgba(255, 255, 255, 0.05);
 }
 
 .sh-profile-bottom-nav button.sh-bottom-active {
-  color: #20d9ff;
+  color: #FFFFFF !important;
+}
+
+.sh-profile-bottom-nav button svg {
+  color: #555555 !important;
+  stroke: #555555 !important;
+}
+
+.sh-profile-bottom-nav button.sh-bottom-active svg {
+  color: #FFFFFF !important;
+  stroke: #FFFFFF !important;
 }
 
 .shc-avatar-nav {

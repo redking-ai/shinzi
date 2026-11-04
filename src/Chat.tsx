@@ -35,6 +35,7 @@ import {
   Bell,
   Calendar,
   Check,
+  ChevronDown,
   ChevronRight,
   Copy,
   CornerUpLeft,
@@ -1073,6 +1074,8 @@ export default function Chat({ onNavigate }: ChatProps) {
   }, [uid]);
   const [showEmojiPicker, setShowEmojiPicker] = useState<boolean>(false);
   const [recentEmojis, setRecentEmojis] = useState<string[]>(() => getRecentEmojis());
+  const [showScrollBottom, setShowScrollBottom] = useState<boolean>(false);
+  const isNearBottomRef = useRef<boolean>(true);
   const [toastMessage, setToastMessage] = useState<string>('');
   const toastMessageTimer = useRef<number | null>(null);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -1384,7 +1387,8 @@ export default function Chat({ onNavigate }: ChatProps) {
       setVisualHeight(vv.height);
       setVisualTop(vv.offsetTop);
 
-      if (screen === 'conversation' && scrollRef.current) {
+      // Force lock: only auto-scroll on keyboard/viewport resize if user is already at the bottom
+      if (screen === 'conversation' && scrollRef.current && isNearBottomRef.current) {
         scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
       }
     };
@@ -1609,11 +1613,31 @@ export default function Chat({ onNavigate }: ChatProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastMessage?.id, screen, selected?.id]);
 
-  // Scroll to the newest message.
+  // Scroll to the newest message only if near bottom or when screen first opens
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el && isNearBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+    }
   }, [messages.length, screen, typingNames.length]);
+
+  const handleMessagesScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const nearBottom = distanceFromBottom < 80;
+    isNearBottomRef.current = nearBottom;
+    setShowScrollBottom(!nearBottom);
+  };
+
+  const scrollToBottom = () => {
+    const el = scrollRef.current;
+    if (el) {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+      isNearBottomRef.current = true;
+      setShowScrollBottom(false);
+    }
+  };
 
   useEffect(() => {
     if (!activeImageViewer) return;
@@ -1631,6 +1655,8 @@ export default function Chat({ onNavigate }: ChatProps) {
     setSelected(conversation);
     setScreen('conversation');
     setPendingDmMessages([]);
+    isNearBottomRef.current = true;
+    setShowScrollBottom(false);
 
     const savedDraft =
       typeof window !== 'undefined'
@@ -2228,6 +2254,11 @@ const handleSearchMessage = async (target: Rec) => {
 
       setMessageText('');
       setReplyTarget(null);
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        isNearBottomRef.current = true;
+        setShowScrollBottom(false);
+      }
       if (inputRef.current) {
         inputRef.current.style.height = 'auto';
         if (screen === 'conversation' && selected?.id) {
@@ -4130,7 +4161,7 @@ const handleSearchMessage = async (target: Rec) => {
           )}
         </header>
 
-        <div className="shc-messages" ref={scrollRef}>
+        <div className="shc-messages" ref={scrollRef} onScroll={handleMessagesScroll}>
           {hasFirstContactIntro && targetUid && (
               <div className="shc-dm-intro">
                 <UserAvatar
@@ -4236,6 +4267,18 @@ const handleSearchMessage = async (target: Rec) => {
           </div>
         )}
 
+        {/* Discord-style scroll-to-bottom floating button */}
+        {showScrollBottom && (
+          <button
+            type="button"
+            className="shc-scroll-bottom-btn"
+            onClick={scrollToBottom}
+            aria-label="Scroll to bottom"
+          >
+            <ChevronDown size={20} />
+          </button>
+        )}
+
         <div className="shc-composer-wrap">
           {mentionQuery !== null && filteredMentionSuggestions.length > 0 && (
             <div className="shc-mention-panel" role="listbox" aria-label="Mention suggestions">
@@ -4319,11 +4362,14 @@ const handleSearchMessage = async (target: Rec) => {
                   rows={1}
                   className="shc-composer-textarea"
                   onFocus={() => {
-                    window.requestAnimationFrame(() => {
-                      if (scrollRef.current) {
-                        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-                      }
-                    });
+                    // Force lock: only auto-scroll on focus if user is already near bottom
+                    if (isNearBottomRef.current) {
+                      window.requestAnimationFrame(() => {
+                        if (scrollRef.current) {
+                          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+                        }
+                      });
+                    }
                   }}
                 />
               </div>
@@ -4340,14 +4386,16 @@ const handleSearchMessage = async (target: Rec) => {
                 <Smile size={21} />
               </button>
 
-              <button
-                type="button"
-                className={`shc-composer-icon-btn shc-composer-voice-btn ${recording ? 'shc-rec-on' : ''}`}
-                onClick={toggleRecordingUI}
-                aria-label={recording ? 'Stop recording' : 'Record voice message'}
-              >
-                {recording ? <Square size={20} /> : <Mic size={21} />}
-              </button>
+              {!messageText.trim() && (
+                <button
+                  type="button"
+                  className={`shc-composer-icon-btn shc-composer-voice-btn ${recording ? 'shc-rec-on' : ''}`}
+                  onClick={toggleRecordingUI}
+                  aria-label={recording ? 'Stop recording' : 'Record voice message'}
+                >
+                  {recording ? <Square size={20} /> : <Mic size={21} />}
+                </button>
+              )}
 
               <button
                 type="button"
