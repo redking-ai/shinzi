@@ -493,7 +493,7 @@ export default function OtherProfile({
         <div
           className="sh-profile-banner"
           style={
-            banner && !banner.includes('video/')
+            banner && !(banner.includes('video/') || banner.includes('.mp4') || banner.includes('.webm'))
               ? {
                   backgroundImage:
                     `linear-gradient(180deg, transparent, #00000099), url("${banner}")`,
@@ -501,7 +501,7 @@ export default function OtherProfile({
               : undefined
           }
         >
-          {banner && banner.includes('video/') ? (
+          {banner && (banner.includes('video/') || banner.includes('.mp4') || banner.includes('.webm')) ? (
             <video
               className="sh-banner-video"
               src={banner}
@@ -550,7 +550,7 @@ export default function OtherProfile({
         <div className="sh-profile-identity">
           <div className="sh-avatar-thought-row">
             <div className="sh-avatar-wrap">
-              {avatar && avatar.includes('video/') ? (
+              {avatar && (avatar.includes('video/') || avatar.includes('.mp4') || avatar.includes('.webm')) ? (
                 <video
                   className="sh-avatar-video"
                   src={avatar}

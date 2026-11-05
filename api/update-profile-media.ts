@@ -1,21 +1,37 @@
 import { adminDb, adminAuth } from "./_lib/firebaseAdmin.js";
 import { FieldValue } from "firebase-admin/firestore";
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Authorization, Content-Type",
+};
+
 export default {
   async fetch(request: Request): Promise<Response> {
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: CORS_HEADERS,
+      });
+    }
+
     if (request.method !== "POST") {
       return Response.json(
         { ok: false, error: "Method not allowed. Use POST." },
-        { status: 405 }
+        { status: 405, headers: CORS_HEADERS }
       );
     }
 
     try {
-      const authHeader = request.headers.get("authorization") || request.headers.get("Authorization") || "";
+      const authHeader =
+        request.headers.get("authorization") ||
+        request.headers.get("Authorization") ||
+        "";
       if (!authHeader.startsWith("Bearer ")) {
         return Response.json(
           { ok: false, error: "Unauthorized: Missing or invalid Authorization header." },
-          { status: 401 }
+          { status: 401, headers: CORS_HEADERS }
         );
       }
 
@@ -27,7 +43,7 @@ export default {
         console.error("[update-profile-media] Token verification failed:", authErr);
         return Response.json(
           { ok: false, error: "Unauthorized: Invalid authentication token." },
-          { status: 401 }
+          { status: 401, headers: CORS_HEADERS }
         );
       }
 
@@ -42,6 +58,7 @@ export default {
       const contentType = request.headers.get("content-type") || "";
       let chunkIndex = 0;
       let totalChunks = 1;
+      let subChunkOffset = 0;
 
       if (contentType.includes("multipart/form-data")) {
         const formData = await request.formData();
@@ -49,8 +66,10 @@ export default {
         assetId = (formData.get("assetId") as string) || "";
         const chunkIndexStr = formData.get("chunkIndex") as string | null;
         const totalChunksStr = formData.get("totalChunks") as string | null;
+        const subChunkOffsetStr = formData.get("subChunkOffset") as string | null;
         chunkIndex = chunkIndexStr !== null ? parseInt(chunkIndexStr, 10) : 0;
         totalChunks = totalChunksStr !== null ? parseInt(totalChunksStr, 10) : 1;
+        subChunkOffset = subChunkOffsetStr !== null ? parseInt(subChunkOffsetStr, 10) : 0;
 
         const file = formData.get("file") as File | null;
         if (file && typeof file.arrayBuffer === "function") {
@@ -96,100 +115,137 @@ export default {
         else mimeType = "image/jpeg";
       }
 
-      // Handle intermediate chunks for large files (e.g. 8.14MB GIFs / animations)
+      // Fast sub-chunking: split incoming chunk (e.g. 2.5MB) into 600KB pieces for Firestore 1MB doc limit
+      const SUB_CHUNK_SIZE = 600 * 1024;
+      const subChunks: Buffer[] = [];
+      if (fileBuffer && fileBuffer.length > 0) {
+        for (let offset = 0; offset < fileBuffer.length; offset += SUB_CHUNK_SIZE) {
+          subChunks.push(
+            fileBuffer.subarray(offset, Math.min(offset + SUB_CHUNK_SIZE, fileBuffer.length))
+          );
+        }
+      }
+
+      // If this is an intermediate client chunk of a multi-part upload
       if (totalChunks > 1 && chunkIndex < totalChunks - 1) {
-        if (!fileBuffer || fileBuffer.length === 0) {
+        if (subChunks.length === 0) {
           return Response.json(
             { ok: false, error: "Empty chunk payload." },
-            { status: 400 }
+            { status: 400, headers: CORS_HEADERS }
           );
         }
 
-        await adminDb
-          .collection("mediaChunks")
-          .doc(`${finalAssetId}_${chunkIndex}`)
-          .set({
-            data: fileBuffer.toString("base64"),
-            index: chunkIndex,
-            ownerUid: uid,
-            assetId: finalAssetId,
-            createdAt: FieldValue.serverTimestamp(),
-          });
+        // Save sub-chunks to Firestore in parallel
+        await Promise.all(
+          subChunks.map((sub, idx) => {
+            const globalIndex = subChunkOffset + idx;
+            return adminDb
+              .collection("mediaChunks")
+              .doc(`${finalAssetId}_${globalIndex}`)
+              .set({
+                data: sub.toString("base64"),
+                index: globalIndex,
+                ownerUid: uid,
+                assetId: finalAssetId,
+                createdAt: FieldValue.serverTimestamp(),
+              });
+          })
+        );
 
-        return Response.json({
-          ok: true,
-          completed: false,
-          chunkIndex,
-          totalChunks,
-          assetId: finalAssetId,
-        });
+        const nextSubChunkOffset = subChunkOffset + subChunks.length;
+
+        return Response.json(
+          {
+            ok: true,
+            completed: false,
+            chunkIndex,
+            totalChunks,
+            assetId: finalAssetId,
+            nextSubChunkOffset,
+          },
+          { headers: CORS_HEADERS }
+        );
       }
 
       let mediaUrl = "";
 
-      if (totalChunks > 1 && chunkIndex === totalChunks - 1) {
-        // Final chunk received
-        if (fileBuffer && fileBuffer.length > 0) {
-          await adminDb
-            .collection("mediaChunks")
-            .doc(`${finalAssetId}_${chunkIndex}`)
-            .set({
-              data: fileBuffer.toString("base64"),
-              index: chunkIndex,
-              ownerUid: uid,
-              assetId: finalAssetId,
-              createdAt: FieldValue.serverTimestamp(),
-            });
+      // Single small file (<= 700KB): store inline data URI for instant 0-RTT load
+      if (totalChunks <= 1 && fileBuffer && fileBuffer.length <= 700 * 1024) {
+        mediaUrl = `data:${mimeType};base64,${fileBuffer.toString("base64")}`;
+      } else {
+        // Multi-part completion OR single file > 700KB: write final sub-chunks to Firestore
+        if (subChunks.length > 0) {
+          await Promise.all(
+            subChunks.map((sub, idx) => {
+              const globalIndex = subChunkOffset + idx;
+              return adminDb
+                .collection("mediaChunks")
+                .doc(`${finalAssetId}_${globalIndex}`)
+                .set({
+                  data: sub.toString("base64"),
+                  index: globalIndex,
+                  ownerUid: uid,
+                  assetId: finalAssetId,
+                  createdAt: FieldValue.serverTimestamp(),
+                });
+            })
+          );
         }
 
-        mediaUrl = `/api/avatar?assetId=${finalAssetId}`;
-      } else if (fileBuffer && fileBuffer.length > 0) {
-        // Single chunk upload
-        if (fileBuffer.length <= 750 * 1024) {
-          mediaUrl = `data:${mimeType};base64,${fileBuffer.toString("base64")}`;
-        } else {
-          await adminDb
-            .collection("mediaChunks")
-            .doc(`${finalAssetId}_0`)
-            .set({
-              data: fileBuffer.toString("base64"),
-              index: 0,
-              ownerUid: uid,
-              assetId: finalAssetId,
-              createdAt: FieldValue.serverTimestamp(),
-            });
-          totalChunks = 1;
-          mediaUrl = `/api/avatar?assetId=${finalAssetId}`;
-        }
+        const totalSubChunks = subChunkOffset + subChunks.length;
+        mediaUrl = `/api/avatar?assetId=${finalAssetId}&mime=${encodeURIComponent(mimeType)}`;
+
+        // Update asset record in 'assets' collection
+        const assetRef = adminDb.collection("assets").doc(finalAssetId);
+        await assetRef.set(
+          {
+            ownerUid: uid,
+            type: assetType,
+            visibility: "public",
+            provider: "firestore_chunks",
+            chunkCount: totalSubChunks,
+            fileName,
+            mimeType,
+            sizeBytes: fileBuffer ? fileBuffer.length : 0,
+            mediaUrl,
+            version: 1,
+            status: "active",
+            createdAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
       }
 
       if (!mediaUrl) {
         return Response.json(
           { ok: false, error: "Failed to store media file. Please try a file under 10MB." },
-          { status: 400 }
+          { status: 400, headers: CORS_HEADERS }
         );
       }
 
-      // Update asset record in 'assets' collection
-      const assetRef = adminDb.collection("assets").doc(finalAssetId);
-      await assetRef.set(
-        {
-          ownerUid: uid,
-          type: assetType,
-          visibility: "public",
-          provider: totalChunks > 1 || !mediaUrl.startsWith("data:") ? "firestore_chunks" : "data_uri",
-          chunkCount: totalChunks,
-          fileName,
-          mimeType,
-          sizeBytes: fileBuffer ? fileBuffer.length : 0,
-          mediaUrl,
-          version: 1,
-          status: "active",
-          createdAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
+      // If inline data URI, save asset record as well
+      if (mediaUrl.startsWith("data:")) {
+        const assetRef = adminDb.collection("assets").doc(finalAssetId);
+        await assetRef.set(
+          {
+            ownerUid: uid,
+            type: assetType,
+            visibility: "public",
+            provider: "data_uri",
+            chunkCount: 1,
+            fileName,
+            mimeType,
+            sizeBytes: fileBuffer ? fileBuffer.length : 0,
+            mediaUrl,
+            version: 1,
+            status: "active",
+            createdAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
 
       // Update user profile document in 'users' collection
       const userRef = adminDb.collection("users").doc(uid);
@@ -207,7 +263,7 @@ export default {
 
       await userRef.set(userUpdates, { merge: true });
 
-      // If updating avatar, update conversation memberProfiles across all conversations
+      // If updating avatar, update conversation memberProfiles across all active conversations
       if (!isBanner) {
         try {
           const convsSnap = await adminDb
@@ -230,17 +286,23 @@ export default {
         }
       }
 
-      return Response.json({
-        ok: true,
-        completed: true,
-        assetId: finalAssetId,
-        mediaUrl,
-        type,
-      });
+      return Response.json(
+        {
+          ok: true,
+          completed: true,
+          assetId: finalAssetId,
+          mediaUrl,
+          type,
+        },
+        { headers: CORS_HEADERS }
+      );
     } catch (err: unknown) {
       console.error("[update-profile-media] Internal error:", err);
       const message = err instanceof Error ? err.message : "Internal server error";
-      return Response.json({ ok: false, error: message }, { status: 500 });
+      return Response.json(
+        { ok: false, error: message },
+        { status: 500, headers: CORS_HEADERS }
+      );
     }
   },
 };

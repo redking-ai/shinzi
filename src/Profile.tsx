@@ -561,7 +561,7 @@ useEffect(() => {
       return;
     }
 
-    // Video / animated clip (MP4, WebM) selected: max 10MB, max 10 seconds
+    // Video / animated clip (MP4, WebM) selected: max 10MB, max 15 seconds
     if (isVideo) {
       if (file.size > 12 * 1024 * 1024) {
         setError('Video animations must be under 10MB.');
@@ -575,9 +575,9 @@ useEffect(() => {
 
       videoEl.onloadedmetadata = async () => {
         const duration = videoEl.duration;
-        if (typeof duration === 'number' && !isNaN(duration) && duration > 10.0) {
+        if (typeof duration === 'number' && !isNaN(duration) && duration > 16.0) {
           URL.revokeObjectURL(objectUrl);
-          setError(`Animation is ${Math.round(duration)} seconds long. Maximum allowed is 10 seconds.`);
+          setError(`Animation is ${Math.round(duration)} seconds long. Maximum allowed is 15 seconds.`);
           return;
         }
 
@@ -615,13 +615,18 @@ useEffect(() => {
     try {
       const idToken = await currentUser.getIdToken();
       const assetId = `ast_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-      const CHUNK_SIZE = 650 * 1024; // 650 KB chunks (fits comfortably within Firestore 1MB document limit)
+      const CHUNK_SIZE = 2.5 * 1024 * 1024; // 2.5 MB chunks (fast upload and comfortably under Vercel's 4.5 MB limit)
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
       const uploadId = `upl_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      const isVideoFile = file.type.startsWith('video/') || /\.(mp4|webm)$/i.test(file.name);
+      const isGifFile = file.type === 'image/gif' || /\.gif$/i.test(file.name);
+      const resolvedMime = file.type || (isVideoFile ? 'video/mp4' : isGifFile ? 'image/gif' : 'image/jpeg');
 
-      let resData: { ok?: boolean; mediaUrl?: string; error?: string } | null = null;
+      let resData: { ok?: boolean; mediaUrl?: string; error?: string; nextSubChunkOffset?: number } | null = null;
+      let subChunkOffset = 0;
 
-      if (totalChunks <= 1) {
+      if (totalChunks <= 1 && file.size <= 700 * 1024) {
+        // Fast-path single request for small files <= 700KB
         const formData = new FormData();
         formData.append('file', file);
         formData.append('type', type);
@@ -629,8 +634,9 @@ useEffect(() => {
         formData.append('uploadId', uploadId);
         formData.append('chunkIndex', '0');
         formData.append('totalChunks', '1');
+        formData.append('subChunkOffset', '0');
         formData.append('fileName', file.name);
-        formData.append('mimeType', file.type);
+        formData.append('mimeType', resolvedMime);
 
         const res = await fetch('/api/update-profile-media', {
           method: 'POST',
@@ -647,14 +653,14 @@ useEffect(() => {
 
         resData = await res.json();
       } else {
-        // Multi-chunk upload for files > 650KB (e.g. 8.14MB GIFs / animations)
+        // Fast multi-chunk upload for files up to 10MB (only 3-4 chunks total)
         for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
           const percent = Math.round(((chunkIndex + 1) / totalChunks) * 100);
           setMediaUploadStatus(`Uploading ${type} (${percent}%)…`);
 
           const start = chunkIndex * CHUNK_SIZE;
           const end = Math.min(start + CHUNK_SIZE, file.size);
-          const chunkBlob = file.slice(start, end, file.type);
+          const chunkBlob = file.slice(start, end, resolvedMime);
 
           const formData = new FormData();
           formData.append('file', chunkBlob, file.name);
@@ -663,8 +669,9 @@ useEffect(() => {
           formData.append('uploadId', uploadId);
           formData.append('chunkIndex', String(chunkIndex));
           formData.append('totalChunks', String(totalChunks));
+          formData.append('subChunkOffset', String(subChunkOffset));
           formData.append('fileName', file.name);
-          formData.append('mimeType', file.type);
+          formData.append('mimeType', resolvedMime);
 
           const res = await fetch('/api/update-profile-media', {
             method: 'POST',
@@ -680,6 +687,9 @@ useEffect(() => {
           }
 
           resData = await res.json();
+          if (typeof resData?.nextSubChunkOffset === 'number') {
+            subChunkOffset = resData.nextSubChunkOffset;
+          }
         }
       }
 
@@ -745,7 +755,7 @@ useEffect(() => {
         <div
           className="sh-profile-banner"
           style={
-            bannerImageUri && !bannerImageUri.includes('video/')
+            bannerImageUri && !(bannerImageUri.includes('video/') || bannerImageUri.includes('.mp4') || bannerImageUri.includes('.webm'))
               ? {
                   backgroundImage:
                     `linear-gradient(180deg, transparent, #00000099), url("${bannerImageUri}")`,
@@ -753,7 +763,7 @@ useEffect(() => {
               : undefined
           }
         >
-          {bannerImageUri && bannerImageUri.includes('video/') ? (
+          {bannerImageUri && (bannerImageUri.includes('video/') || bannerImageUri.includes('.mp4') || bannerImageUri.includes('.webm')) ? (
             <video
               className="sh-banner-video"
               src={bannerImageUri}
@@ -862,7 +872,7 @@ useEffect(() => {
             <div className="sh-avatar-wrap">
               {assetLoading && !profileImageUri ? (
                 <div className="sh-avatar sh-avatar-skeleton" />
-              ) : profileImageUri && profileImageUri.includes('video/') ? (
+              ) : profileImageUri && (profileImageUri.includes('video/') || profileImageUri.includes('.mp4') || profileImageUri.includes('.webm')) ? (
                 <video
                   className="sh-avatar-video"
                   src={profileImageUri}
