@@ -4359,9 +4359,6 @@ const handleSearchMessage = async (target: Rec) => {
           <div className="shc-recording">
             <span className="shc-rec-dot" />
             <span>Recording {formatDuration(recordSeconds)}</span>
-            <button type="button" onClick={toggleRecordingUI}>
-              Stop
-            </button>
           </div>
         )}
 
