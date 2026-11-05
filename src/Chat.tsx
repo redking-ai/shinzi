@@ -79,6 +79,8 @@ import {
   saveRecentEmoji,
 } from './emojiData';
 import OtherProfile from './OtherProfile';
+import VoicePlayer from './VoicePlayer';
+import { cacheAudioBlob } from './voiceCache';
 import MuiAvatar from '@mui/material/Avatar';
 import './Chat.css';
 
@@ -1145,6 +1147,9 @@ export default function Chat({ onNavigate }: ChatProps) {
 
   const typingTimer = useRef<number | null>(null);
   const recordingTimer = useRef<number | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const audioStreamRef = useRef<MediaStream | null>(null);
   const toastTimer = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -1403,6 +1408,16 @@ export default function Chat({ onNavigate }: ChatProps) {
       if (typingTimer.current) window.clearTimeout(typingTimer.current);
       if (recordingTimer.current) window.clearInterval(recordingTimer.current);
       if (toastTimer.current) window.clearTimeout(toastTimer.current);
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try {
+          mediaRecorderRef.current.stop();
+        } catch {}
+      }
+      if (audioStreamRef.current) {
+        try {
+          audioStreamRef.current.getTracks().forEach((track) => track.stop());
+        } catch {}
+      }
     };
   }, []);
 
@@ -3233,36 +3248,275 @@ const handleSearchMessage = async (target: Rec) => {
     );
   };
 
-  const toggleRecordingUI = () => {
-    if (recording) {
-      setRecording(false);
-
-      if (recordingTimer.current) {
-        window.clearInterval(recordingTimer.current);
-        recordingTimer.current = null;
-      }
-
-      notify(
-        'Voice recording',
-        'Recording UI stopped. Real audio recording and upload are not built yet.',
-      );
+  const startRecording = async () => {
+    if (!selected?.id) {
+      notify('No conversation open', 'Please select a conversation to record a voice note.');
       return;
     }
 
-    setRecordSeconds(0);
-    setRecording(true);
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        notify('Not supported', 'Your browser does not support audio recording.');
+        return;
+      }
 
-    recordingTimer.current = window.setInterval(() => {
-      setRecordSeconds((seconds) => {
-        if (seconds >= 3599) {
-          if (recordingTimer.current) window.clearInterval(recordingTimer.current);
-          recordingTimer.current = null;
-          setRecording(false);
-          return seconds;
-        }
-        return seconds + 1;
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
       });
-    }, 1000);
+      audioStreamRef.current = stream;
+
+      let mimeType = 'audio/webm;codecs=opus';
+      if (typeof MediaRecorder !== 'undefined') {
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+          if (MediaRecorder.isTypeSupported('audio/webm')) {
+            mimeType = 'audio/webm';
+          } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+            mimeType = 'audio/mp4';
+          } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
+            mimeType = 'audio/ogg';
+          } else {
+            mimeType = '';
+          }
+        }
+      }
+
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.start(250);
+      setRecordSeconds(0);
+      setRecording(true);
+
+      if (recordingTimer.current) window.clearInterval(recordingTimer.current);
+      recordingTimer.current = window.setInterval(() => {
+        setRecordSeconds((sec) => {
+          if (sec >= 300) {
+            // Cap recording at 5 minutes
+            void finishAndSendRecording();
+            return sec;
+          }
+          return sec + 1;
+        });
+      }, 1000);
+    } catch (err: unknown) {
+      console.error('Microphone error:', err);
+      notify('Microphone permission needed', 'Please allow microphone access to record voice notes.');
+    }
+  };
+
+  const cancelRecording = () => {
+    if (recordingTimer.current) {
+      window.clearInterval(recordingTimer.current);
+      recordingTimer.current = null;
+    }
+    setRecording(false);
+    setRecordSeconds(0);
+
+    if (mediaRecorderRef.current) {
+      try {
+        mediaRecorderRef.current.onstop = null;
+        if (mediaRecorderRef.current.state !== 'inactive') {
+          mediaRecorderRef.current.stop();
+        }
+      } catch {}
+      mediaRecorderRef.current = null;
+    }
+
+    if (audioStreamRef.current) {
+      try {
+        audioStreamRef.current.getTracks().forEach((track) => track.stop());
+      } catch {}
+      audioStreamRef.current = null;
+    }
+    audioChunksRef.current = [];
+  };
+
+  const finishAndSendRecording = async () => {
+    if (recordingTimer.current) {
+      window.clearInterval(recordingTimer.current);
+      recordingTimer.current = null;
+    }
+
+    const duration = recordSeconds;
+    setRecording(false);
+    setRecordSeconds(0);
+
+    const recorder = mediaRecorderRef.current;
+    if (!recorder) return;
+
+    const audioBlob = await new Promise<Blob>((resolve) => {
+      recorder.onstop = () => {
+        const mime = recorder.mimeType || 'audio/webm';
+        const blob = new Blob(audioChunksRef.current, { type: mime });
+        resolve(blob);
+      };
+      try {
+        if (recorder.state !== 'inactive') {
+          recorder.stop();
+        } else {
+          const mime = recorder.mimeType || 'audio/webm';
+          resolve(new Blob(audioChunksRef.current, { type: mime }));
+        }
+      } catch {
+        resolve(new Blob(audioChunksRef.current, { type: 'audio/webm' }));
+      }
+    });
+
+    if (audioStreamRef.current) {
+      try {
+        audioStreamRef.current.getTracks().forEach((track) => track.stop());
+      } catch {}
+      audioStreamRef.current = null;
+    }
+    mediaRecorderRef.current = null;
+    audioChunksRef.current = [];
+
+    if (duration < 1 && audioBlob.size < 1000) {
+      notify('Voice note too short', 'Recording was too short to send.');
+      return;
+    }
+
+    if (!uid || !selected?.id) return;
+    const activeConv = selectedConversation || selected;
+    if (!activeConv) return;
+
+    try {
+      const targetReply =
+        replyTarget && messages.some((m) => m.id === replyTarget.id)
+          ? replyTarget
+          : null;
+
+      const messageData: Rec = {
+        type: 'voice',
+        text: '',
+        durationSeconds: duration,
+        duration: formatDuration(duration),
+        senderId: uid,
+        senderName: profile?.displayName || profile?.username || 'User',
+        senderUsername: profile?.username || '',
+        senderPhotoURL: profile?.photoURL || '',
+        senderProfileAssetId: profile?.profileAssetId || '',
+        createdAt: serverTimestamp(),
+        status: drive.hasActiveSession ? 'uploading' : 'ready',
+        audioUrl: '',
+        driveFileId: null,
+        driveOwnerUid: uid,
+        listenedBy: [],
+        listenedAt: null,
+        deletedFromDrive: false,
+        expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
+        editedAt: null,
+        deleted: false,
+      };
+
+      if (targetReply) {
+        messageData.replyToMessageId = targetReply.id;
+        messageData.replyTo = {
+          id: targetReply.id,
+          senderId: targetReply.senderId || '',
+          senderName:
+            targetReply.senderName || targetReply.senderUsername || 'User',
+          senderUsername: targetReply.senderUsername || '',
+          text: getReplyExcerpt(targetReply),
+        };
+      }
+
+      const messageRef = await addDoc(
+        collection(db, 'conversations', selected.id, 'messages'),
+        messageData,
+      );
+
+      // Cache audio locally on user device immediately for instant zero-wait playback
+      await cacheAudioBlob(messageRef.id, audioBlob);
+
+      const updates: Rec = {
+        lastMessageId: messageRef.id,
+        lastMessageText: '🎤 Voice message',
+        lastMessageAt: serverTimestamp(),
+        lastSenderId: uid,
+        lastSenderName: profile?.displayName || profile?.username || 'You',
+        updatedAt: serverTimestamp(),
+      };
+
+      await updateDoc(doc(db, 'conversations', selected.id), updates);
+      setReplyTarget(null);
+
+      // Upload to Google Drive folder 'Shinzi' -> 'Voice' in the background
+      if (drive.hasActiveSession) {
+        void (async () => {
+          try {
+            const ext = audioBlob.type.includes('mp4')
+              ? 'mp4'
+              : audioBlob.type.includes('ogg')
+              ? 'ogg'
+              : 'webm';
+            const fileName = `voice_${Date.now()}.${ext}`;
+            const file = new File([audioBlob], fileName, {
+              type: audioBlob.type || 'audio/webm',
+            });
+            const uploaded = await drive.uploadFile({
+              file,
+              fileName,
+              mimeType: audioBlob.type || 'audio/webm',
+              folderType: 'voice',
+            });
+            await drive.makeFilePublic(uploaded.fileId);
+            const voiceUrl = `/api/voice?fileId=${encodeURIComponent(
+              uploaded.fileId,
+            )}&ownerUid=${encodeURIComponent(uid)}`;
+            await updateDoc(
+              doc(db, 'conversations', selected.id, 'messages', messageRef.id),
+              {
+                driveFileId: uploaded.fileId,
+                audioUrl: voiceUrl,
+                status: 'ready',
+              },
+            );
+          } catch (driveErr) {
+            console.warn('Voice upload to Drive failed, storing inline:', driveErr);
+            const dataUri = await blobToDataUri(audioBlob);
+            await updateDoc(
+              doc(db, 'conversations', selected.id, 'messages', messageRef.id),
+              {
+                audioUrl: dataUri,
+                status: 'ready',
+              },
+            );
+          }
+        })();
+      } else {
+        const dataUri = await blobToDataUri(audioBlob);
+        await updateDoc(
+          doc(db, 'conversations', selected.id, 'messages', messageRef.id),
+          {
+            audioUrl: dataUri,
+            status: 'ready',
+          },
+        );
+      }
+    } catch (err: unknown) {
+      console.error('Error sending voice message:', err);
+      notify('Failed to send voice message', messageOf(err));
+    }
+  };
+
+  const toggleRecordingUI = () => {
+    if (recording) {
+      void finishAndSendRecording();
+    } else {
+      void startRecording();
+    }
   };
 
   const startCallUI = (mode: 'voice' | 'video') => {
@@ -3578,11 +3832,13 @@ const handleSearchMessage = async (target: Rec) => {
       contentNode = renderEvent(item);
     } else if (item.type === 'voice') {
       contentNode = (
-        <div className="shc-voice">
-          <Mic size={20} />
-          <span>Voice message</span>
-          <span className="shc-voice-time">{item.duration || '00:00'}</span>
-        </div>
+        <VoicePlayer
+          message={item}
+          currentUid={uid}
+          conversationId={selected?.id || ''}
+          own={item.senderId === uid}
+          onNotify={notify}
+        />
       );
     } else if (hasImageMessage) {
       const isStandaloneUrl = isStandaloneImageUrl(item.text);
@@ -4359,6 +4615,15 @@ const handleSearchMessage = async (target: Rec) => {
           <div className="shc-recording">
             <span className="shc-rec-dot" />
             <span>Recording {formatDuration(recordSeconds)}</span>
+            <button
+              type="button"
+              className="shc-rec-cancel-btn"
+              onClick={cancelRecording}
+              aria-label="Cancel recording"
+              title="Cancel recording"
+            >
+              <Trash2 size={16} />
+            </button>
           </div>
         )}
 

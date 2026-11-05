@@ -18,6 +18,7 @@ export type DriveFolderType =
   | 'photos'
   | 'videos'
   | 'files'
+  | 'voice'
   | 'others';
 
 interface GoogleTokenResponse {
@@ -176,6 +177,7 @@ const SHINZI_SUBFOLDERS: Record<
   photos: 'Photos',
   videos: 'Videos',
   files: 'Files',
+  voice: 'Voice',
   others: 'Others',
 };
 
