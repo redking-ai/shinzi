@@ -89,6 +89,18 @@ export default {
         const sizeBytes = typeof body.sizeBytes === "number" ? body.sizeBytes : 0;
 
         if (providerFileId) {
+          const extFromFileName = fileName.split(".").pop()?.toLowerCase() || "";
+          if (
+            mimeType.toLowerCase().includes("video") ||
+            extFromFileName === "mp4" ||
+            extFromFileName === "webm"
+          ) {
+            return Response.json(
+              { ok: false, error: "Videos are not supported. Only images (PNG, JPG, WebP) and animated GIFs are allowed." },
+              { status: 400, headers: CORS_HEADERS }
+            );
+          }
+
           const isBanner = type === "banner";
           const assetType = isBanner ? "banner" : "profile_photo";
           const finalAssetId = assetId.trim() || `ast_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;

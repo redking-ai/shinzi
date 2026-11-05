@@ -362,6 +362,17 @@ const testImageLoad = (url: string): Promise<boolean> =>
 
 function isValidMediaUrl(url?: string | null): boolean {
   if (!url || typeof url !== 'string') return false;
+  const lower = url.toLowerCase();
+  if (
+    lower.includes('video/') ||
+    lower.includes('.mp4') ||
+    lower.includes('.webm') ||
+    lower.includes('ext=mp4') ||
+    lower.includes('ext=webm') ||
+    lower.includes('mime=video')
+  ) {
+    return false;
+  }
   return (
     url.startsWith('http://') ||
     url.startsWith('https://') ||

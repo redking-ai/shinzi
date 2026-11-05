@@ -360,7 +360,8 @@ useEffect(() => {
             isMediaVideo(asset.mediaUrl) ||
             isMediaVideo(asset.fileName)
           ) {
-            return asset.mediaUrl || `/api/avatar?assetId=${encodeURIComponent(trimmedAssetId)}&ext=mp4&mime=video%2Fmp4`;
+            console.info('[PROFILE IMAGE] Video assets are deprecated and disabled.');
+            return '';
           }
 
           if (asset.mediaUrl && typeof asset.mediaUrl === 'string') {
@@ -585,49 +586,25 @@ useEffect(() => {
     const isGif = file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
     const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(file.name);
 
-    if (!isVideo && !isImage && !isGif) {
-      setError('Please choose an image (PNG, JPG, WebP), GIF, or short animation (MP4).');
+    if (isVideo) {
+      setError('Videos are not supported. Please choose an image (PNG, JPG, WebP) or animated GIF (up to 10MB).');
+      return;
+    }
+
+    if (!isImage && !isGif) {
+      setError('Please choose an image (PNG, JPG, WebP) or animated GIF.');
       return;
     }
 
     // GIF selected: upload directly to keep all animated frames and timing intact!
     if (isGif) {
-      if (file.size > 12 * 1024 * 1024) {
+      if (file.size > 10 * 1024 * 1024) {
         setError('GIFs must be under 10MB.');
         return;
       }
 
       const previewUrl = URL.createObjectURL(file);
       await uploadMediaFile(file, type, previewUrl);
-      return;
-    }
-
-    // Video / animated clip (MP4, WebM) selected: max 10MB, max 15 seconds
-    if (isVideo) {
-      if (file.size > 12 * 1024 * 1024) {
-        setError('Video animations must be under 10MB.');
-        return;
-      }
-
-      const videoEl = document.createElement('video');
-      videoEl.preload = 'metadata';
-      const objectUrl = URL.createObjectURL(file);
-      videoEl.src = objectUrl;
-
-      videoEl.onloadedmetadata = async () => {
-        const duration = videoEl.duration;
-        if (typeof duration === 'number' && !isNaN(duration) && duration > 16.0) {
-          URL.revokeObjectURL(objectUrl);
-          setError(`Animation is ${Math.round(duration)} seconds long. Maximum allowed is 15 seconds.`);
-          return;
-        }
-
-        await uploadMediaFile(file, type, objectUrl);
-      };
-
-      videoEl.onerror = async () => {
-        await uploadMediaFile(file, type, objectUrl);
-      };
       return;
     }
 
@@ -676,10 +653,8 @@ useEffect(() => {
         }
       }
 
-      const isVideoFile = file.type.startsWith('video/') || /\.(mp4|webm)$/i.test(file.name);
       const isGifFile = file.type === 'image/gif' || /\.gif$/i.test(file.name);
       const fileMime = file.type || (
-        isVideoFile ? 'video/mp4' :
         isGifFile ? 'image/gif' :
         file.name.endsWith('.png') ? 'image/png' :
         file.name.endsWith('.webp') ? 'image/webp' : 'image/jpeg'
@@ -833,18 +808,9 @@ useEffect(() => {
               : undefined
           }
         >
-          {bannerImageUri && isMediaVideo(bannerImageUri) ? (
-            <video
-              className="sh-banner-video"
-              src={bannerImageUri}
-              autoPlay
-              loop
-              muted
-              playsInline
-            />
-          ) : !bannerImageUri ? (
+          {(!bannerImageUri || isMediaVideo(bannerImageUri)) && (
             <div className="sh-banner-glow" />
-          ) : null}
+          )}
 
           {(assetLoading || (assetError && !showAssetError)) && (
             <span className="sh-asset-status">Loading images…</span>
@@ -942,16 +908,7 @@ useEffect(() => {
             <div className="sh-avatar-wrap">
               {assetLoading && !profileImageUri ? (
                 <div className="sh-avatar sh-avatar-skeleton" />
-              ) : profileImageUri && isMediaVideo(profileImageUri) ? (
-                <video
-                  className="sh-avatar-video"
-                  src={profileImageUri}
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
-                />
-              ) : profileImageUri ? (
+              ) : profileImageUri && !isMediaVideo(profileImageUri) ? (
                 <img
                   className="sh-avatar"
                   src={profileImageUri}
@@ -1215,16 +1172,7 @@ useEffect(() => {
         >
           {assetLoading && !profileImageUri ? (
             <div className="shc-avatar shc-avatar-nav shc-avatar-skeleton" />
-          ) : profileImageUri && isMediaVideo(profileImageUri) ? (
-            <video
-              src={profileImageUri}
-              className="shc-avatar-nav"
-              autoPlay
-              loop
-              muted
-              playsInline
-            />
-          ) : profileImageUri ? (
+          ) : profileImageUri && !isMediaVideo(profileImageUri) ? (
             <img
               src={profileImageUri}
               alt="Profile"
@@ -1242,18 +1190,18 @@ useEffect(() => {
         </button>
       </nav>
 
-      {/* Hidden file inputs for avatar & banner selection (Images, GIFs & animations allowed) */}
+      {/* Hidden file inputs for avatar & banner selection (Images and GIFs only) */}
       <input
         ref={avatarInputRef}
         type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm"
+        accept="image/png,image/jpeg,image/webp,image/gif"
         style={{ display: 'none' }}
         onChange={(e) => void handleMediaFileSelect(e, 'avatar')}
       />
       <input
         ref={bannerInputRef}
         type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm"
+        accept="image/png,image/jpeg,image/webp,image/gif"
         style={{ display: 'none' }}
         onChange={(e) => void handleMediaFileSelect(e, 'banner')}
       />

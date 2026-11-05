@@ -99,25 +99,13 @@ export default function OtherProfile({
   });
   const [avatar, setAvatar] = useState<string>(() => {
     const cached = targetUid ? getCachedProfile(targetUid) : null;
-    if (cached?.profileAssetId) {
-      const meta = getCachedAssetMeta(cached.profileAssetId);
-      if (meta?.providerFileId && typeof window !== 'undefined' && window.sessionStorage) {
-        const stored = window.sessionStorage.getItem(`shinzi_drive_${meta.providerFileId}`);
-        if (stored) return stored;
-      }
-    }
-    return String(cached?.photoURL ?? '');
+    const url = String(cached?.photoURL ?? '');
+    return isMediaVideo(url) ? '' : url;
   });
   const [banner, setBanner] = useState<string>(() => {
     const cached = targetUid ? getCachedProfile(targetUid) : null;
-    if (cached?.bannerAssetId) {
-      const meta = getCachedAssetMeta(cached.bannerAssetId);
-      if (meta?.providerFileId && typeof window !== 'undefined' && window.sessionStorage) {
-        const stored = window.sessionStorage.getItem(`shinzi_drive_${meta.providerFileId}`);
-        if (stored) return stored;
-      }
-    }
-    return String(cached?.bannerUrl ?? '');
+    const url = String(cached?.bannerUrl ?? '');
+    return isMediaVideo(url) ? '' : url;
   });
   const [menuOpen, setMenuOpen] = useState(false);
   const [friendState, setFriendState] = useState({
@@ -281,8 +269,7 @@ export default function OtherProfile({
             return '';
           }
 
-          // For videos, Google Drive lh3 image CDN cannot serve video streams.
-          // Use /api/avatar or data.mediaUrl which provides range-streaming for <video>.
+          // Reject video assets: videos are disabled in favor of static images & GIFs
           const isVideo = (
             (data.mimeType && String(data.mimeType).startsWith('video/')) ||
             isMediaVideo(data.mediaUrl) ||
@@ -290,10 +277,7 @@ export default function OtherProfile({
           );
 
           if (isVideo) {
-            return (
-              data.mediaUrl ||
-              `/api/avatar?assetId=${encodeURIComponent(trimmedId)}&ext=mp4&mime=video%2Fmp4`
-            );
+            return '';
           }
 
           if (data.mediaUrl && typeof data.mediaUrl === 'string') {
@@ -324,22 +308,21 @@ export default function OtherProfile({
       ]);
 
       if (!cancelled) {
-        if (avatarUri) {
+        if (avatarUri && !isMediaVideo(avatarUri)) {
           setAvatar(avatarUri);
-        } else if (userData?.photoURL) {
+        } else if (userData?.photoURL && !isMediaVideo(userData.photoURL)) {
           setAvatar(String(userData.photoURL));
         } else {
           setAvatar('');
         }
 
-        // Prefer video stream URL if banner is video
-        const userBanner = userData?.bannerUrl ? String(userData.bannerUrl) : '';
-        if (bannerUri && (isMediaVideo(bannerUri) || !isMediaVideo(userBanner))) {
+        // Only set banner if it is a valid image/GIF, otherwise clear to default glow
+        if (bannerUri && !isMediaVideo(bannerUri)) {
           setBanner(bannerUri);
-        } else if (userBanner) {
-          setBanner(userBanner);
-        } else if (bannerUri) {
-          setBanner(bannerUri);
+        } else if (userData?.bannerUrl && !isMediaVideo(userData.bannerUrl)) {
+          setBanner(String(userData.bannerUrl));
+        } else {
+          setBanner('');
         }
       }
     };
@@ -537,22 +520,9 @@ export default function OtherProfile({
               : undefined
           }
         >
-          {banner && isMediaVideo(banner) ? (
-            <video
-              className="sh-banner-video"
-              src={banner}
-              autoPlay
-              loop
-              muted
-              playsInline
-              preload="auto"
-              onError={() => {
-                console.warn('[OtherProfile] Video banner failed to play');
-              }}
-            />
-          ) : !banner ? (
+          {(!banner || isMediaVideo(banner)) && (
             <div className="sh-banner-glow" />
-          ) : null}
+          )}
           <button
             type="button"
             className="sh-banner-back-button"
@@ -590,16 +560,7 @@ export default function OtherProfile({
         <div className="sh-profile-identity">
           <div className="sh-avatar-thought-row">
             <div className="sh-avatar-wrap">
-              {avatar && isMediaVideo(avatar) ? (
-                <video
-                  className="sh-avatar-video"
-                  src={avatar}
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
-                />
-              ) : avatar ? (
+              {avatar && !isMediaVideo(avatar) ? (
                 <img
                   className="sh-avatar"
                   src={avatar}
