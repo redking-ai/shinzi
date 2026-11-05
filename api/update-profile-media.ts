@@ -1,5 +1,6 @@
 import { adminDb, adminAuth } from "./_lib/firebaseAdmin.js";
 import { FieldValue } from "firebase-admin/firestore";
+import { decryptRefreshToken } from "./_lib/driveOAuth.js";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -249,6 +250,10 @@ export default {
 
       // Update user profile document in 'users' collection
       const userRef = adminDb.collection("users").doc(uid);
+      const currentUserDoc = await userRef.get();
+      const currentUData = currentUserDoc.data() || {};
+      const oldAssetId = isBanner ? currentUData.bannerAssetId : currentUData.profileAssetId;
+
       const userUpdates = isBanner
         ? {
             bannerAssetId: finalAssetId,
@@ -262,6 +267,62 @@ export default {
           };
 
       await userRef.set(userUpdates, { merge: true });
+
+      // Clean up previous media asset & chunks to save storage and prevent file accumulation
+      if (oldAssetId && oldAssetId !== finalAssetId) {
+        try {
+          const oldAssetDoc = await adminDb.collection("assets").doc(oldAssetId).get();
+          if (oldAssetDoc.exists) {
+            const oldData = oldAssetDoc.data();
+            if (oldData?.chunkCount && typeof oldData.chunkCount === "number") {
+              const chunkDeletes = Array.from({ length: oldData.chunkCount }, (_, i) =>
+                adminDb.collection("mediaChunks").doc(`${oldAssetId}_${i}`).delete().catch(() => {})
+              );
+              await Promise.all(chunkDeletes);
+            }
+            if (oldData?.providerFileId) {
+              try {
+                const tokenDoc = await adminDb.collection("privateDriveTokens").doc(uid).get();
+                if (tokenDoc.exists) {
+                  const encToken = tokenDoc.data()?.encryptedRefreshToken;
+                  const clientId = process.env.GOOGLE_CLIENT_ID;
+                  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+                  if (encToken && clientId && clientSecret) {
+                    const refreshToken = decryptRefreshToken(encToken);
+                    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                      body: new URLSearchParams({
+                        client_id: clientId,
+                        client_secret: clientSecret,
+                        refresh_token: refreshToken,
+                        grant_type: "refresh_token",
+                      }),
+                    });
+                    if (tokenRes.ok) {
+                      const tData = await tokenRes.json();
+                      if (tData.access_token) {
+                        await fetch(
+                          `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(oldData.providerFileId)}`,
+                          {
+                            method: "DELETE",
+                            headers: { Authorization: `Bearer ${tData.access_token}` },
+                          }
+                        ).catch(() => {});
+                      }
+                    }
+                  }
+                }
+              } catch (driveDelErr) {
+                console.warn("[update-profile-media] Old Drive file delete error:", driveDelErr);
+              }
+            }
+            await adminDb.collection("assets").doc(oldAssetId).delete().catch(() => {});
+          }
+        } catch (cleanupErr) {
+          console.warn("[update-profile-media] Cleanup error:", cleanupErr);
+        }
+      }
 
       // If updating avatar, update conversation memberProfiles across all active conversations
       if (!isBanner) {

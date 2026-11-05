@@ -408,6 +408,15 @@ useEffect(() => {
           setAssetLoading(false);
         }
       }
+
+      if (currentUser) {
+        currentUser.getIdToken().then((token) => {
+          fetch('/api/cleanup-old-media', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+          }).catch(() => {});
+        }).catch(() => {});
+      }
     };
 
     void loadAssets();
@@ -735,6 +744,14 @@ useEffect(() => {
       }
 
       await loadProfile();
+
+      // Trigger automatic background cleanup of old superseded media & Drive files
+      currentUser.getIdToken().then((token) => {
+        fetch('/api/cleanup-old-media', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => {});
+      }).catch(() => {});
     } catch (uploadErr) {
       console.error('[PROFILE] Media upload failed:', uploadErr);
       setError(messageOf(uploadErr));
