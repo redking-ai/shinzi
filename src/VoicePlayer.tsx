@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Play, Pause, AlertCircle, Loader2 } from 'lucide-react';
 import { doc, updateDoc, arrayUnion, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebaseConfig';
@@ -34,10 +34,23 @@ export const VoicePlayer: React.FC<VoicePlayerProps> = ({
   own,
   onNotify,
 }) => {
+  const initialDuration = useMemo(() => {
+    if (message.durationSeconds && isFinite(message.durationSeconds) && !isNaN(message.durationSeconds)) {
+      return message.durationSeconds;
+    }
+    if (typeof message.duration === 'string' && message.duration.includes(':')) {
+      const parts = message.duration.split(':').map(Number);
+      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+        return parts[0] * 60 + parts[1];
+      }
+    }
+    return 0;
+  }, [message.durationSeconds, message.duration]);
+
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState<number>(message.durationSeconds || 0);
+  const [duration, setDuration] = useState<number>(initialDuration);
   const [isUnavailable, setIsUnavailable] = useState(Boolean(message.deletedFromDrive));
   const [resolvedAudioUrl, setResolvedAudioUrl] = useState<string | null>(null);
 
@@ -109,7 +122,8 @@ export const VoicePlayer: React.FC<VoicePlayerProps> = ({
   }, []);
 
   const formatSeconds = (sec: number) => {
-    const s = Math.floor(sec || 0);
+    if (!sec || !isFinite(sec) || isNaN(sec)) return '0:00';
+    const s = Math.floor(sec);
     const m = Math.floor(s / 60);
     const rem = s % 60;
     return `${m}:${rem.toString().padStart(2, '0')}`;
@@ -190,10 +204,6 @@ export const VoicePlayer: React.FC<VoicePlayerProps> = ({
 
   const togglePlay = async () => {
     if (isUnavailable) {
-      onNotify?.(
-        'Voice Unavailable',
-        'Voice note is unavailable. Please ask sender to send again.'
-      );
       return;
     }
 
@@ -207,7 +217,12 @@ export const VoicePlayer: React.FC<VoicePlayerProps> = ({
       };
 
       audioRef.current.onloadedmetadata = () => {
-        if (audioRef.current && audioRef.current.duration && !isNaN(audioRef.current.duration)) {
+        if (
+          audioRef.current &&
+          audioRef.current.duration &&
+          isFinite(audioRef.current.duration) &&
+          !isNaN(audioRef.current.duration)
+        ) {
           setDuration(audioRef.current.duration);
         }
       };
@@ -221,10 +236,6 @@ export const VoicePlayer: React.FC<VoicePlayerProps> = ({
         setIsPlaying(false);
         setIsLoading(false);
         setIsUnavailable(true);
-        onNotify?.(
-          'Voice Unavailable',
-          'Voice note is unavailable. Please ask sender to send again.'
-        );
       };
     }
 

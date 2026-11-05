@@ -1473,6 +1473,11 @@ export default function Chat({ onNavigate }: ChatProps) {
 
   const [liveTargetProfile, setLiveTargetProfile] = useState<Rec | null>(null);
   const [userLiveAvatars, setUserLiveAvatars] = useState<Record<string, string>>({});
+  const [userLiveProfiles, setUserLiveProfiles] = useState<Record<string, Rec>>({});
+
+  useEffect(() => {
+    setToast(null);
+  }, [screen]);
 
   useEffect(() => {
     if (!activeDmTargetUid) {
@@ -1486,6 +1491,7 @@ export default function Chat({ onNavigate }: ChatProps) {
         if (snap.exists()) {
           const data = snap.data() as Rec;
           setLiveTargetProfile(data);
+          setUserLiveProfiles((prev) => ({ ...prev, [activeDmTargetUid]: data }));
           if (data?.photoURL) {
             setUserLiveAvatars((prev) => ({ ...prev, [activeDmTargetUid]: data.photoURL }));
             avatarMemoryCache.set(activeDmTargetUid, data.photoURL);
@@ -1507,7 +1513,7 @@ export default function Chat({ onNavigate }: ChatProps) {
     const directOtherUids = conversations
       .filter((c) => c.type !== 'group')
       .map((c) => otherMemberId(c))
-      .filter((id) => Boolean(id) && !userLiveAvatars[id]);
+      .filter((id) => Boolean(id) && (!userLiveAvatars[id] || !userLiveProfiles[id]));
 
     if (directOtherUids.length === 0) return;
 
@@ -1516,7 +1522,8 @@ export default function Chat({ onNavigate }: ChatProps) {
       try {
         const snap = await getDoc(doc(db, 'users', targetId));
         if (snap.exists() && !cancelled) {
-          const udata = snap.data();
+          const udata = snap.data() as Rec;
+          setUserLiveProfiles((prev) => ({ ...prev, [targetId]: udata }));
           if (udata?.photoURL) {
             setUserLiveAvatars((prev) => ({
               ...prev,
@@ -1534,7 +1541,37 @@ export default function Chat({ onNavigate }: ChatProps) {
     return () => {
       cancelled = true;
     };
-  }, [conversations, uid, otherMemberId]);
+  }, [conversations, uid, otherMemberId, userLiveAvatars, userLiveProfiles]);
+
+  useEffect(() => {
+    if (!messages || messages.length === 0) return;
+    const missingUids = Array.from(
+      new Set(
+        messages
+          .map((m) => m.senderId)
+          .filter((id) => Boolean(id) && id !== uid && !userLiveProfiles[id])
+      )
+    );
+    if (missingUids.length === 0) return;
+
+    let cancelled = false;
+    missingUids.forEach(async (senderId) => {
+      try {
+        const snap = await getDoc(doc(db, 'users', senderId));
+        if (snap.exists() && !cancelled) {
+          const udata = snap.data() as Rec;
+          setUserLiveProfiles((prev) => ({ ...prev, [senderId]: udata }));
+          if (udata?.photoURL) {
+            setUserLiveAvatars((prev) => ({ ...prev, [senderId]: udata.photoURL }));
+          }
+        }
+      } catch {}
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [messages, uid, userLiveProfiles]);
 
   const unreadCount = useMemo(() => {
     if (!uid) return 0;
@@ -1570,14 +1607,22 @@ export default function Chat({ onNavigate }: ChatProps) {
     if (!conversation) return 'Conversation';
     if (conversation.type === 'group') return conversation.name || 'Group';
 
-    const member = conversation.memberProfiles?.[otherMemberId(conversation)];
+    const otherId = otherMemberId(conversation);
+    const live = (activeDmTargetUid === otherId ? liveTargetProfile : null) || userLiveProfiles[otherId];
+    if (live?.displayName) return live.displayName;
+    if (live?.username) return live.username;
+
+    const member = conversation.memberProfiles?.[otherId];
     return member?.displayName || member?.username || 'User';
   };
 
   const getConversationUsername = (conversation: Rec | null | undefined) => {
     if (!conversation || conversation.type === 'group') return '';
+    const otherId = otherMemberId(conversation);
+    const live = (activeDmTargetUid === otherId ? liveTargetProfile : null) || userLiveProfiles[otherId];
+    if (live?.username) return live.username;
     return (
-      conversation.memberProfiles?.[otherMemberId(conversation)]?.username || ''
+      conversation.memberProfiles?.[otherId]?.username || ''
     );
   };
 
@@ -3764,19 +3809,29 @@ const handleSearchMessage = async (target: Rec) => {
         }
       } else if (item.replyTo) {
         quotedSenderId = item.replyTo.senderId || '';
+        const replyProfile = quotedSenderId
+          ? (quotedSenderId === uid
+              ? profile
+              : (quotedSenderId === activeDmTargetUid ? liveTargetProfile : null) || userLiveProfiles[quotedSenderId])
+          : null;
         quotedSender =
+          (quotedSenderId === uid ? 'You' : replyProfile?.displayName || replyProfile?.username) ||
           item.replyTo.senderName ||
           item.replyTo.senderUsername ||
-          (item.replyTo.senderId === uid
-            ? profile?.displayName || profile?.username || 'You'
-            : 'User');
+          'User';
         quotedText = item.replyTo.text || 'Original message unavailable';
       }
     }
 
+    const authorProfile = item.senderId
+      ? (item.senderId === uid
+          ? profile
+          : (item.senderId === activeDmTargetUid ? liveTargetProfile : null) || userLiveProfiles[item.senderId])
+      : null;
+
     const authorName = own
       ? profile?.displayName || profile?.username || 'You'
-      : item.senderName || item.senderUsername || 'User';
+      : authorProfile?.displayName || authorProfile?.username || item.senderName || item.senderUsername || 'User';
 
     const mentionedMe =
       !own &&
@@ -3950,16 +4005,19 @@ const handleSearchMessage = async (target: Rec) => {
                 photoURL={
                   item.senderId === uid
                     ? (profile?.photoURL || item.senderPhotoURL)
-                    : (item.senderId === activeDmTargetUid
-                        ? (liveTargetProfile?.photoURL || item.senderPhotoURL)
-                        : (selectedConversation?.memberProfiles?.[item.senderId]?.photoURL || item.senderPhotoURL))
+                    : (authorProfile?.photoURL ||
+                        userLiveAvatars[item.senderId] ||
+                        (item.senderId === activeDmTargetUid
+                          ? (liveTargetProfile?.photoURL || item.senderPhotoURL)
+                          : (selectedConversation?.memberProfiles?.[item.senderId]?.photoURL || item.senderPhotoURL)))
                 }
                 profileAssetId={
                   item.senderId === uid
                     ? (profile?.profileAssetId || item.senderProfileAssetId)
-                    : (item.senderId === activeDmTargetUid
-                        ? (liveTargetProfile?.profileAssetId || item.senderProfileAssetId)
-                        : (selectedConversation?.memberProfiles?.[item.senderId]?.profileAssetId || item.senderProfileAssetId))
+                    : (authorProfile?.profileAssetId ||
+                        (item.senderId === activeDmTargetUid
+                          ? (liveTargetProfile?.profileAssetId || item.senderProfileAssetId)
+                          : (selectedConversation?.memberProfiles?.[item.senderId]?.profileAssetId || item.senderProfileAssetId)))
                 }
                 size={36}
               />
@@ -4129,7 +4187,9 @@ const handleSearchMessage = async (target: Rec) => {
             const lastSenderName =
               item.lastSenderId === uid
                 ? profile?.displayName || profile?.username || 'You'
-                : item.lastSenderName ||
+                : userLiveProfiles[item.lastSenderId]?.displayName ||
+                  userLiveProfiles[item.lastSenderId]?.username ||
+                  item.lastSenderName ||
                   (item.lastSenderId
                     ? item.memberProfiles?.[item.lastSenderId]?.displayName ||
                       item.memberProfiles?.[item.lastSenderId]?.username
@@ -4142,6 +4202,9 @@ const handleSearchMessage = async (target: Rec) => {
                 : item.lastMessageText
               : 'No messages yet';
 
+            const otherId = otherMemberId(item);
+            const otherProfile = userLiveProfiles[otherId] || (item.memberProfiles?.[otherId]);
+
             return (
               <button
                 type="button"
@@ -4150,17 +4213,17 @@ const handleSearchMessage = async (target: Rec) => {
                 onClick={() => void openConversation(item)}
               >
                 <UserAvatar
-                  uid={item.type === 'group' ? undefined : otherMemberId(item)}
+                  uid={item.type === 'group' ? undefined : otherId}
                   name={name}
                   photoURL={
                     item.type === 'group'
                       ? undefined
-                      : (userLiveAvatars[otherMemberId(item)] || item.memberProfiles?.[otherMemberId(item)]?.photoURL)
+                      : (userLiveAvatars[otherId] || otherProfile?.photoURL)
                   }
                   profileAssetId={
                     item.type === 'group'
                       ? undefined
-                      : item.memberProfiles?.[otherMemberId(item)]?.profileAssetId
+                      : otherProfile?.profileAssetId
                   }
                   group={item.type === 'group'}
                   size="md"
@@ -4464,11 +4527,15 @@ const handleSearchMessage = async (target: Rec) => {
   );
 
   const renderConversation = () => {
-    const name = getConversationName(selectedConversation);
-    const username = getConversationUsername(selectedConversation);
     const isGroup = selectedConversation?.type === 'group';
     const targetUid = isGroup ? undefined : otherMemberId(selectedConversation);
-    const targetProfile = liveTargetProfile || (targetUid ? selectedConversation?.memberProfiles?.[targetUid] : undefined);
+    const targetProfile =
+      liveTargetProfile ||
+      (targetUid
+        ? userLiveProfiles[targetUid] || selectedConversation?.memberProfiles?.[targetUid]
+        : undefined);
+    const name = getConversationName(selectedConversation);
+    const username = getConversationUsername(selectedConversation);
     const dmRequestState = getDirectRequestState(selectedConversation);
     const conversationMessages = (messages && messages.length > 0)
       ? messages
