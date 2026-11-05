@@ -1,28 +1,22 @@
-
 import { adminDb } from "./_lib/firebaseAdmin.js";
 
 export default {
   async fetch(): Promise<Response> {
     try {
-      // Check that Firebase Admin can access Firestore.
-      await adminDb.listCollections();
+      const start = Date.now();
+      const testData = "A".repeat(600 * 1024);
+      await adminDb.collection("mediaChunks").doc("test_doc").set({ data: testData });
+      const elapsed = Date.now() - start;
 
       return Response.json({
         ok: true,
-        service: "shinzi-backend",
-        firebaseAdmin: "connected",
-        firestore: "connected",
+        elapsedMs: elapsed,
       });
     } catch (error) {
-      console.error(
-        "Firebase Admin check failed:",
-        error instanceof Error ? error.message : "Unknown error"
-      );
-
       return Response.json(
         {
           ok: false,
-          error: "Firebase Admin connection failed",
+          error: error instanceof Error ? error.message : String(error),
         },
         { status: 500 }
       );
