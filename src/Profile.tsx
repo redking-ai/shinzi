@@ -16,7 +16,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { auth, db } from './firebaseConfig';
-import { useDriveStore } from './driveStore';
+import { useDriveStore, type DriveFolderType } from './driveStore';
 import MediaCropModal from './MediaCropModal';
 import {
   getCachedProfile,
@@ -408,15 +408,6 @@ useEffect(() => {
           setAssetLoading(false);
         }
       }
-
-      if (currentUser) {
-        currentUser.getIdToken().then((token) => {
-          fetch('/api/cleanup-old-media', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}` },
-          }).catch(() => {});
-        }).catch(() => {});
-      }
     };
 
     void loadAssets();
@@ -622,7 +613,7 @@ useEffect(() => {
     reader.readAsDataURL(file);
   };
 
-  // Upload cropped image or video to server and update profile
+  // Upload cropped image or video to Google Drive and update profile
   const uploadMediaFile = async (
     file: File,
     type: 'avatar' | 'banner',
@@ -634,107 +625,82 @@ useEffect(() => {
     setError('');
 
     try {
-      const idToken = await currentUser.getIdToken();
-      const assetId = `ast_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-      const CHUNK_SIZE = 280 * 1024; // 280 KB chunks: writes in 1.8s (well under Vercel Hobby 10s ceiling)
-      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-      const uploadId = `upl_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-      const isVideoFile = file.type.startsWith('video/') || /\.(mp4|webm)$/i.test(file.name);
-      const isGifFile = file.type === 'image/gif' || /\.gif$/i.test(file.name);
-      const resolvedMime = file.type || (isVideoFile ? 'video/mp4' : isGifFile ? 'image/gif' : 'image/jpeg');
+      if (file.size > 10 * 1024 * 1024) {
+        throw new Error(`File is too large (${(file.size / (1024 * 1024)).toFixed(1)}MB). Maximum allowed is 10MB.`);
+      }
 
-      let resData: { ok?: boolean; mediaUrl?: string; error?: string; nextSubChunkOffset?: number } | null = null;
-      let subChunkOffset = 0;
-
-      if (totalChunks <= 1 && file.size <= 280 * 1024) {
-        // Fast-path single request for small files <= 280KB
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('type', type);
-        formData.append('assetId', assetId);
-        formData.append('uploadId', uploadId);
-        formData.append('chunkIndex', '0');
-        formData.append('totalChunks', '1');
-        formData.append('subChunkOffset', '0');
-        formData.append('fileName', file.name);
-        formData.append('mimeType', resolvedMime);
-
-        const res = await fetch('/api/update-profile-media', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${idToken}`,
-          },
-          body: formData,
-        });
-
-        if (!res.ok) {
-          const errJson = await res.json().catch(() => ({}));
-          throw new Error(errJson.error || `Upload failed (${res.status})`);
-        }
-
-        resData = await res.json();
-      } else {
-        // Fast multi-chunk upload for files up to 10MB
-        for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
-          const percent = Math.round(((chunkIndex + 1) / totalChunks) * 100);
-          setMediaUploadStatus(`Uploading ${type} (${percent}%)…`);
-
-          const start = chunkIndex * CHUNK_SIZE;
-          const end = Math.min(start + CHUNK_SIZE, file.size);
-          const chunkBlob = file.slice(start, end, resolvedMime);
-
-          let chunkSuccess = false;
-          let chunkErr: unknown = null;
-
-          // Retry each chunk up to 4 times with backoff and fresh token if needed
-          for (let attempt = 0; attempt < 4; attempt++) {
-            try {
-              const currentToken = await currentUser.getIdToken(attempt > 0);
-              const formData = new FormData();
-              formData.append('file', chunkBlob, file.name);
-              formData.append('type', type);
-              formData.append('assetId', assetId);
-              formData.append('uploadId', uploadId);
-              formData.append('chunkIndex', String(chunkIndex));
-              formData.append('totalChunks', String(totalChunks));
-              formData.append('subChunkOffset', String(subChunkOffset));
-              formData.append('fileName', file.name);
-              formData.append('mimeType', resolvedMime);
-
-              const res = await fetch('/api/update-profile-media', {
-                method: 'POST',
-                headers: {
-                  Authorization: `Bearer ${currentToken}`,
-                },
-                body: formData,
-              });
-
-              if (!res.ok) {
-                const errJson = await res.json().catch(() => ({}));
-                throw new Error(errJson.error || `Upload failed on part ${chunkIndex + 1} (${res.status})`);
-              }
-
-              resData = await res.json();
-              if (typeof resData?.nextSubChunkOffset === 'number') {
-                subChunkOffset = resData.nextSubChunkOffset;
-              }
-              chunkSuccess = true;
-              break;
-            } catch (e) {
-              chunkErr = e;
-              if (attempt < 3) {
-                await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
-              }
-            }
-          }
-
-          if (!chunkSuccess) {
-            throw chunkErr || new Error(`Upload failed on part ${chunkIndex + 1}`);
-          }
+      if (!drive.hasActiveSession) {
+        const token = await drive.connectDrive(true);
+        if (!token) {
+          throw new Error('Google Drive authorization required.');
         }
       }
 
-      const finalUrl = resData?.mediaUrl || dataUriPreview || '';
+      const isBanner = type === 'banner';
+      const folderType: DriveFolderType = isBanner ? 'banners' : 'profiles';
+      const isVideoFile = file.type.startsWith('video/') || /\.(mp4|webm)$/i.test(file.name);
+      const isGifFile = file.type === 'image/gif' || /\.gif$/i.test(file.name);
+      const fileMime = file.type || (
+        isVideoFile ? 'video/mp4' :
+        isGifFile ? 'image/gif' :
+        file.name.endsWith('.png') ? 'image/png' :
+        file.name.endsWith('.webp') ? 'image/webp' : 'image/jpeg'
+      );
+
+      // 1. Direct upload straight to user's Google Drive folder (Shinzi/Profiles or Shinzi/Banners)
+      const uploadedFile = await drive.uploadFile({
+        file,
+        fileName: file.name,
+        mimeType: fileMime,
+        folderType,
+      });
+
+      // 2. Make file publicly accessible
+      try {
+        await drive.makeFilePublic(uploadedFile.fileId);
+      } catch (pubErr) {
+        console.warn('Public permission error:', pubErr);
+      }
+
+      // 3. Delete all old files in this folder (Shinzi/Profiles or Shinzi/Banners) and any old root ast_*.gif
+      try {
+        await drive.cleanOldFiles(folderType, uploadedFile.fileId);
+      } catch (cleanErr) {
+        console.warn('Clean old files error:', cleanErr);
+      }
+
+      // 4. Update profile and save asset record via serverless API
+      const assetId = `ast_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      const idToken = await currentUser.getIdToken();
+
+      const apiRes = await fetch('/api/update-profile-media', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          type,
+          assetId,
+          providerFileId: uploadedFile.fileId,
+          driveFolderId: uploadedFile.folderId,
+          fileName: file.name,
+          mimeType: fileMime,
+          sizeBytes: file.size,
+          dataUriPreview:
+            dataUriPreview && dataUriPreview.length < 500000
+              ? dataUriPreview
+              : undefined,
+        }),
+      });
+
+      let finalUrl = '';
+      if (apiRes.ok) {
+        const resData = await apiRes.json();
+        finalUrl = resData.mediaUrl || `/api/avatar?assetId=${assetId}`;
+      } else {
+        finalUrl = dataUriPreview || `https://lh3.googleusercontent.com/d/${uploadedFile.fileId}=s800`;
+      }
 
       // Update state for instant view
       if (type === 'banner') {
@@ -744,14 +710,6 @@ useEffect(() => {
       }
 
       await loadProfile();
-
-      // Trigger automatic background cleanup of old superseded media & Drive files
-      currentUser.getIdToken().then((token) => {
-        fetch('/api/cleanup-old-media', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-        }).catch(() => {});
-      }).catch(() => {});
     } catch (uploadErr) {
       console.error('[PROFILE] Media upload failed:', uploadErr);
       setError(messageOf(uploadErr));

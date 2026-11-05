@@ -12,7 +12,7 @@ import { auth } from './firebaseConfig';
 // TYPES
 // ============================================================
 
-type DriveFolderType =
+export type DriveFolderType =
   | 'profiles'
   | 'banners'
   | 'photos'
@@ -141,6 +141,11 @@ interface DriveStore {
   deleteFile: (
     fileId: string
   ) => Promise<boolean>;
+
+  cleanOldFiles: (
+    folderType: DriveFolderType,
+    keepFileId?: string
+  ) => Promise<number>;
 }
 
 
@@ -1376,6 +1381,60 @@ export const useDriveStore = (): DriveStore => {
       );
 
 
+    const cleanOldFiles = useCallback(
+      async (folderType: DriveFolderType, keepFileId?: string): Promise<number> => {
+        return withToken(async (token) => {
+          let deletedCount = 0;
+          try {
+            const folder = await getShinziSubfolder(token, folderType);
+            const res = await fetch(
+              `${DRIVE_API}/files?q='${folder.id}'+in+parents+and+trashed=false&fields=files(id,name)`,
+              { headers: getAuthHeader(token) }
+            );
+            if (res.ok) {
+              const data = await res.json();
+              for (const f of data.files || []) {
+                if (f.id && f.id !== keepFileId) {
+                  await fetch(`${DRIVE_API}/files/${encodeURIComponent(f.id)}`, {
+                    method: 'DELETE',
+                    headers: getAuthHeader(token),
+                  }).catch(() => {});
+                  deletedCount++;
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('[driveStore] cleanOldFiles folder error:', e);
+          }
+
+          // Clean up any old ast_*.gif files accidentally created in root My Drive
+          try {
+            const rootRes = await fetch(
+              `${DRIVE_API}/files?q='root'+in+parents+and+trashed=false&fields=files(id,name)`,
+              { headers: getAuthHeader(token) }
+            );
+            if (rootRes.ok) {
+              const rootData = await rootRes.json();
+              for (const f of rootData.files || []) {
+                if (f.name && f.name.startsWith('ast_') && f.name.endsWith('.gif')) {
+                  await fetch(`${DRIVE_API}/files/${encodeURIComponent(f.id)}`, {
+                    method: 'DELETE',
+                    headers: getAuthHeader(token),
+                  }).catch(() => {});
+                  deletedCount++;
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('[driveStore] cleanOldFiles root error:', e);
+          }
+
+          return deletedCount;
+        });
+      },
+      [withToken, getShinziSubfolder]
+    );
+
     // ========================================================
     // RETURN STORE API
     // ========================================================
@@ -1410,5 +1469,7 @@ export const useDriveStore = (): DriveStore => {
       makeFilePublic,
 
       deleteFile,
+
+      cleanOldFiles,
     };
   };

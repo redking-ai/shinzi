@@ -232,11 +232,38 @@ export default {
       }
 
       const arrayBuffer = await driveRes.arrayBuffer();
+      const fullBuffer = Buffer.from(arrayBuffer);
+      const totalLength = fullBuffer.length;
+      const rangeHeader = request.headers.get("Range") || request.headers.get("range");
 
-      return new Response(arrayBuffer, {
+      if (rangeHeader && rangeHeader.startsWith("bytes=")) {
+        const parts = rangeHeader.replace(/bytes=/, "").split("-");
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : totalLength - 1;
+
+        if (!isNaN(start) && start < totalLength) {
+          const chunkEnd = Math.min(end, totalLength - 1);
+          const chunk = fullBuffer.subarray(start, chunkEnd + 1);
+          return new Response(chunk, {
+            status: 206,
+            headers: {
+              "Content-Range": `bytes ${start}-${chunkEnd}/${totalLength}`,
+              "Accept-Ranges": "bytes",
+              "Content-Length": String(chunk.length),
+              "Content-Type": mimeType,
+              "Cache-Control": "public, max-age=86400",
+              "Access-Control-Allow-Origin": "*",
+            },
+          });
+        }
+      }
+
+      return new Response(fullBuffer, {
         status: 200,
         headers: {
           "Content-Type": mimeType,
+          "Content-Length": String(totalLength),
+          "Accept-Ranges": "bytes",
           "Cache-Control": "public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400",
           "Access-Control-Allow-Origin": "*",
         },

@@ -84,6 +84,112 @@ export default {
         fileName = typeof body.fileName === "string" ? body.fileName : "media";
         mimeType = typeof body.mimeType === "string" ? body.mimeType : "image/jpeg";
         assetId = typeof body.assetId === "string" ? body.assetId : "";
+        const providerFileId = typeof body.providerFileId === "string" ? body.providerFileId : "";
+        const driveFolderId = typeof body.driveFolderId === "string" ? body.driveFolderId : "";
+        const sizeBytes = typeof body.sizeBytes === "number" ? body.sizeBytes : 0;
+
+        if (providerFileId) {
+          const isBanner = type === "banner";
+          const assetType = isBanner ? "banner" : "profile_photo";
+          const finalAssetId = assetId.trim() || `ast_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+          const extFromFileName = fileName.split(".").pop()?.toLowerCase() || "";
+          const ext =
+            mimeType.includes("gif") || extFromFileName === "gif" ? "gif" :
+            mimeType.includes("png") || extFromFileName === "png" ? "png" :
+            mimeType.includes("webp") || extFromFileName === "webp" ? "webp" :
+            mimeType.includes("mp4") || extFromFileName === "mp4" ? "mp4" :
+            mimeType.includes("webm") || extFromFileName === "webm" ? "webm" : "jpg";
+
+          const mediaUrl = `/api/avatar?assetId=${finalAssetId}&ext=${ext}&mime=${encodeURIComponent(mimeType)}`;
+
+          const assetRef = adminDb.collection("assets").doc(finalAssetId);
+          await assetRef.set({
+            ownerUid: uid,
+            type: assetType,
+            visibility: "public",
+            provider: "google_drive",
+            providerFileId,
+            driveFolderId: driveFolderId || null,
+            fileName,
+            mimeType,
+            sizeBytes,
+            mediaUrl,
+            version: 1,
+            status: "active",
+            createdAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+
+          const userRef = adminDb.collection("users").doc(uid);
+          const currentUserDoc = await userRef.get();
+          const currentUData = currentUserDoc.data() || {};
+          const oldAssetId = isBanner ? currentUData.bannerAssetId : currentUData.profileAssetId;
+
+          const userUpdates = isBanner
+            ? {
+                bannerAssetId: finalAssetId,
+                bannerUrl: mediaUrl,
+                updatedAt: FieldValue.serverTimestamp(),
+              }
+            : {
+                profileAssetId: finalAssetId,
+                photoURL: mediaUrl,
+                updatedAt: FieldValue.serverTimestamp(),
+              };
+
+          await userRef.set(userUpdates, { merge: true });
+
+          if (!isBanner) {
+            try {
+              const convsSnap = await adminDb
+                .collection("conversations")
+                .where("memberIds", "array-contains", uid)
+                .get();
+
+              if (!convsSnap.empty) {
+                const batch = adminDb.batch();
+                convsSnap.forEach((convDoc) => {
+                  batch.update(convDoc.ref, {
+                    [`memberProfiles.${uid}.photoURL`]: mediaUrl,
+                    [`memberProfiles.${uid}.profileAssetId`]: finalAssetId,
+                  });
+                });
+                await batch.commit();
+              }
+            } catch (convErr) {
+              console.warn("[update-profile-media] Could not update conversations:", convErr);
+            }
+          }
+
+          if (oldAssetId && oldAssetId !== finalAssetId) {
+            try {
+              const oldAssetDoc = await adminDb.collection("assets").doc(oldAssetId).get();
+              if (oldAssetDoc.exists) {
+                const oldData = oldAssetDoc.data();
+                if (oldData?.chunkCount && typeof oldData.chunkCount === "number") {
+                  const chunkDeletes = Array.from({ length: oldData.chunkCount }, (_, i) =>
+                    adminDb.collection("mediaChunks").doc(`${oldAssetId}_${i}`).delete().catch(() => {})
+                  );
+                  await Promise.all(chunkDeletes);
+                }
+                await adminDb.collection("assets").doc(oldAssetId).delete().catch(() => {});
+              }
+            } catch (e) {
+              console.warn("[update-profile-media] Old asset delete error:", e);
+            }
+          }
+
+          return Response.json(
+            {
+              ok: true,
+              completed: true,
+              assetId: finalAssetId,
+              mediaUrl,
+              type,
+            },
+            { headers: CORS_HEADERS }
+          );
+        }
 
         if (typeof body.base64Data === "string" && body.base64Data) {
           const raw = body.base64Data.replace(/^data:[^;]+;base64,/, "");
