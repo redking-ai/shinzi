@@ -627,7 +627,7 @@ useEffect(() => {
     try {
       const idToken = await currentUser.getIdToken();
       const assetId = `ast_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-      const CHUNK_SIZE = 750 * 1024; // 750 KB chunks: ultra-reliable over mobile networks and writes 1 doc per chunk to Firestore
+      const CHUNK_SIZE = 280 * 1024; // 280 KB chunks: writes in 1.8s (well under Vercel Hobby 10s ceiling)
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
       const uploadId = `upl_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
       const isVideoFile = file.type.startsWith('video/') || /\.(mp4|webm)$/i.test(file.name);
@@ -637,8 +637,8 @@ useEffect(() => {
       let resData: { ok?: boolean; mediaUrl?: string; error?: string; nextSubChunkOffset?: number } | null = null;
       let subChunkOffset = 0;
 
-      if (totalChunks <= 1 && file.size <= 700 * 1024) {
-        // Fast-path single request for small files <= 700KB
+      if (totalChunks <= 1 && file.size <= 280 * 1024) {
+        // Fast-path single request for small files <= 280KB
         const formData = new FormData();
         formData.append('file', file);
         formData.append('type', type);
@@ -677,9 +677,10 @@ useEffect(() => {
           let chunkSuccess = false;
           let chunkErr: unknown = null;
 
-          // Retry each chunk up to 3 times with exponential backoff on transient network error
-          for (let attempt = 0; attempt < 3; attempt++) {
+          // Retry each chunk up to 4 times with backoff and fresh token if needed
+          for (let attempt = 0; attempt < 4; attempt++) {
             try {
+              const currentToken = await currentUser.getIdToken(attempt > 0);
               const formData = new FormData();
               formData.append('file', chunkBlob, file.name);
               formData.append('type', type);
@@ -694,7 +695,7 @@ useEffect(() => {
               const res = await fetch('/api/update-profile-media', {
                 method: 'POST',
                 headers: {
-                  Authorization: `Bearer ${idToken}`,
+                  Authorization: `Bearer ${currentToken}`,
                 },
                 body: formData,
               });
@@ -712,8 +713,8 @@ useEffect(() => {
               break;
             } catch (e) {
               chunkErr = e;
-              if (attempt < 2) {
-                await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+              if (attempt < 3) {
+                await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
               }
             }
           }
