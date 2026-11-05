@@ -1,13 +1,25 @@
-
 import { adminAuth, adminDb } from "../_lib/firebaseAdmin.js";
 import { decryptRefreshToken } from "../_lib/driveOAuth.js";
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Authorization, Content-Type",
+};
+
 export default {
   async fetch(request: Request): Promise<Response> {
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: CORS_HEADERS,
+      });
+    }
+
     if (request.method !== "POST") {
       return Response.json(
         { error: "Method not allowed" },
-        { status: 405, headers: { Allow: "POST" } }
+        { status: 405, headers: { ...CORS_HEADERS, Allow: "POST" } }
       );
     }
 
@@ -17,7 +29,7 @@ export default {
       if (!authorization?.startsWith("Bearer ")) {
         return Response.json(
           { error: "Authentication required" },
-          { status: 401 }
+          { status: 401, headers: CORS_HEADERS }
         );
       }
 
@@ -35,7 +47,7 @@ export default {
       if (typeof encryptedToken !== "string") {
         return Response.json(
           { error: "Google Drive is not connected" },
-          { status: 404 }
+          { status: 404, headers: CORS_HEADERS }
         );
       }
 
@@ -74,14 +86,17 @@ export default {
 
         return Response.json(
           { error: "Google authorization expired; reconnect Drive" },
-          { status: 401 }
+          { status: 401, headers: CORS_HEADERS }
         );
       }
 
-      return Response.json({
-        accessToken: tokens.access_token,
-        expiresIn: tokens.expires_in ?? 3600,
-      });
+      return Response.json(
+        {
+          accessToken: tokens.access_token,
+          expiresIn: tokens.expires_in ?? 3600,
+        },
+        { headers: CORS_HEADERS }
+      );
     } catch (error) {
       console.error(
         "Drive token refresh failed:",
@@ -90,7 +105,7 @@ export default {
 
       return Response.json(
         { error: "Could not refresh Google authorization" },
-        { status: 401 }
+        { status: 401, headers: CORS_HEADERS }
       );
     }
   },

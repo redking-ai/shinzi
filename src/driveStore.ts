@@ -1406,8 +1406,9 @@ export const useDriveStore = (): DriveStore => {
           let deletedCount = 0;
           try {
             const folder = await getShinziSubfolder(token, folderType);
+            const query = encodeURIComponent(`'${folder.id}' in parents and trashed = false`);
             const res = await fetch(
-              `${DRIVE_API}/files?q='${folder.id}'+in+parents+and+trashed=false&fields=files(id,name)`,
+              `${DRIVE_API}/files?q=${query}&fields=files(id,name)`,
               { headers: getAuthHeader(token) }
             );
             if (res.ok) {
@@ -1428,19 +1429,22 @@ export const useDriveStore = (): DriveStore => {
 
           // Clean up any old ast_*.gif files accidentally created in root My Drive
           try {
+            const rootQuery = encodeURIComponent(`'root' in parents and trashed = false`);
             const rootRes = await fetch(
-              `${DRIVE_API}/files?q='root'+in+parents+and+trashed=false&fields=files(id,name)`,
+              `${DRIVE_API}/files?q=${rootQuery}&fields=files(id,name)`,
               { headers: getAuthHeader(token) }
             );
             if (rootRes.ok) {
               const rootData = await rootRes.json();
               for (const f of rootData.files || []) {
-                if (f.name && f.name.startsWith('ast_') && f.name.endsWith('.gif')) {
-                  await fetch(`${DRIVE_API}/files/${encodeURIComponent(f.id)}`, {
-                    method: 'DELETE',
-                    headers: getAuthHeader(token),
-                  }).catch(() => {});
-                  deletedCount++;
+                if (f.name && f.name.startsWith('ast_') && (f.name.endsWith('.gif') || f.name.endsWith('.mp4') || f.name.endsWith('.png') || f.name.endsWith('.webp') || f.name.endsWith('.jpg') || f.name.endsWith('.jpeg'))) {
+                  if (f.id !== keepFileId) {
+                    await fetch(`${DRIVE_API}/files/${encodeURIComponent(f.id)}`, {
+                      method: 'DELETE',
+                      headers: getAuthHeader(token),
+                    }).catch(() => {});
+                    deletedCount++;
+                  }
                 }
               }
             }

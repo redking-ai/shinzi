@@ -671,19 +671,15 @@ useEffect(() => {
         throw lastUploadErr || new Error('Upload to Google Drive failed.');
       }
 
-      // 2. Make file publicly accessible
-      try {
-        await drive.makeFilePublic(uploadedFile.fileId);
-      } catch (pubErr) {
+      // 2. Make file publicly accessible in Google Drive (background)
+      drive.makeFilePublic(uploadedFile.fileId).catch((pubErr) => {
         console.warn('Public permission error:', pubErr);
-      }
+      });
 
-      // 3. Delete all old files in this folder (Shinzi/Profiles or Shinzi/Banners) and any old root ast_*.gif
-      try {
-        await drive.cleanOldFiles(folderType, uploadedFile.fileId);
-      } catch (cleanErr) {
+      // 3. Delete all old files in this folder (Shinzi/Profiles or Shinzi/Banners) and any old root ast_*.gif (background)
+      drive.cleanOldFiles(folderType, uploadedFile.fileId).catch((cleanErr) => {
         console.warn('Clean old files error:', cleanErr);
-      }
+      });
 
       // 4. Update profile and save asset record via serverless API (with retry)
       const assetId = `ast_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;

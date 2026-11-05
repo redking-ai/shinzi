@@ -1,13 +1,25 @@
-
 import { adminAuth } from "../_lib/firebaseAdmin.js";
 import { createOAuthState } from "../_lib/driveOAuth.js";
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Authorization, Content-Type",
+};
+
 export default {
   async fetch(request: Request): Promise<Response> {
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: CORS_HEADERS,
+      });
+    }
+
     if (request.method !== "POST") {
       return Response.json(
         { error: "Method not allowed" },
-        { status: 405, headers: { Allow: "POST" } }
+        { status: 405, headers: { ...CORS_HEADERS, Allow: "POST" } }
       );
     }
 
@@ -17,7 +29,7 @@ export default {
       if (!authorization?.startsWith("Bearer ")) {
         return Response.json(
           { error: "Authentication required" },
-          { status: 401 }
+          { status: 401, headers: CORS_HEADERS }
         );
       }
 
@@ -43,7 +55,7 @@ export default {
         "scope",
         "openid email https://www.googleapis.com/auth/drive.file"
       );
-            googleUrl.searchParams.set("access_type", "offline");
+      googleUrl.searchParams.set("access_type", "offline");
       googleUrl.searchParams.set("include_granted_scopes", "true");
 
       const body: { switchAccount?: boolean } =
@@ -59,7 +71,10 @@ export default {
       );
       googleUrl.searchParams.set("state", state);
 
-      return Response.json({ url: googleUrl.toString() });
+      return Response.json(
+        { url: googleUrl.toString() },
+        { headers: CORS_HEADERS }
+      );
     } catch (error) {
       console.error(
         "Drive OAuth start failed:",
@@ -68,7 +83,7 @@ export default {
 
       return Response.json(
         { error: "Could not start Google authorization" },
-        { status: 401 }
+        { status: 401, headers: CORS_HEADERS }
       );
     }
   },
