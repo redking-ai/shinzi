@@ -647,13 +647,29 @@ useEffect(() => {
         file.name.endsWith('.webp') ? 'image/webp' : 'image/jpeg'
       );
 
-      // 1. Direct upload straight to user's Google Drive folder (Shinzi/Profiles or Shinzi/Banners)
-      const uploadedFile = await drive.uploadFile({
-        file,
-        fileName: file.name,
-        mimeType: fileMime,
-        folderType,
-      });
+      // 1. Direct upload straight to user's Google Drive folder (Shinzi/Profiles or Shinzi/Banners) with retry
+      let uploadedFile: any = null;
+      let lastUploadErr: unknown = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          uploadedFile = await drive.uploadFile({
+            file,
+            fileName: file.name,
+            mimeType: fileMime,
+            folderType,
+          });
+          if (uploadedFile?.fileId) break;
+        } catch (uErr) {
+          lastUploadErr = uErr;
+          if (attempt < 2) {
+            await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+          }
+        }
+      }
+
+      if (!uploadedFile?.fileId) {
+        throw lastUploadErr || new Error('Upload to Google Drive failed.');
+      }
 
       // 2. Make file publicly accessible
       try {
@@ -669,37 +685,46 @@ useEffect(() => {
         console.warn('Clean old files error:', cleanErr);
       }
 
-      // 4. Update profile and save asset record via serverless API
+      // 4. Update profile and save asset record via serverless API (with retry)
       const assetId = `ast_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-      const idToken = await currentUser.getIdToken();
+      let finalUrl = dataUriPreview || `https://lh3.googleusercontent.com/d/${uploadedFile.fileId}=s800`;
 
-      const apiRes = await fetch('/api/update-profile-media', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({
-          type,
-          assetId,
-          providerFileId: uploadedFile.fileId,
-          driveFolderId: uploadedFile.folderId,
-          fileName: file.name,
-          mimeType: fileMime,
-          sizeBytes: file.size,
-          dataUriPreview:
-            dataUriPreview && dataUriPreview.length < 500000
-              ? dataUriPreview
-              : undefined,
-        }),
-      });
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const idToken = await currentUser.getIdToken(attempt > 0);
+          const apiRes = await fetch('/api/update-profile-media', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${idToken}`,
+            },
+            body: JSON.stringify({
+              type,
+              assetId,
+              providerFileId: uploadedFile.fileId,
+              driveFolderId: uploadedFile.folderId,
+              fileName: file.name,
+              mimeType: fileMime,
+              sizeBytes: file.size,
+              dataUriPreview:
+                dataUriPreview && dataUriPreview.length < 500000
+                  ? dataUriPreview
+                  : undefined,
+            }),
+          });
 
-      let finalUrl = '';
-      if (apiRes.ok) {
-        const resData = await apiRes.json();
-        finalUrl = resData.mediaUrl || `/api/avatar?assetId=${assetId}`;
-      } else {
-        finalUrl = dataUriPreview || `https://lh3.googleusercontent.com/d/${uploadedFile.fileId}=s800`;
+          if (apiRes.ok) {
+            const resData = await apiRes.json();
+            if (resData.mediaUrl) {
+              finalUrl = resData.mediaUrl;
+            }
+            break;
+          }
+        } catch (apiErr) {
+          if (attempt < 2) {
+            await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+          }
+        }
       }
 
       // Update state for instant view

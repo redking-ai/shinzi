@@ -367,15 +367,30 @@ const uploadMultipart = async (
     if (initRes.ok) {
       const uploadUrl = initRes.headers.get('Location');
       if (uploadUrl) {
-        const putRes = await fetch(uploadUrl, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': mimeType,
-          },
-          body: blob,
-        });
+        let putRes: Response | null = null;
+        let lastPutError: unknown = null;
 
-        if (putRes.ok) {
+        // Resilient upload: retry PUT up to 3 times on mobile network hiccups
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            putRes = await fetch(uploadUrl, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': mimeType,
+              },
+              body: blob,
+            });
+
+            if (putRes.ok) break;
+          } catch (err) {
+            lastPutError = err;
+            if (attempt < 2) {
+              await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+            }
+          }
+        }
+
+        if (putRes && putRes.ok) {
           const uploaded = await putRes.json();
           if (uploaded?.id) {
             try {
@@ -403,6 +418,10 @@ const uploadMultipart = async (
               sizeBytes: uploaded.size ? Number(uploaded.size) : blob.size,
             };
           }
+        }
+
+        if (lastPutError) {
+          throw lastPutError;
         }
       }
     }
