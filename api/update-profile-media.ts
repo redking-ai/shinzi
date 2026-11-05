@@ -104,7 +104,6 @@ export default {
           const isBanner = type === "banner";
           const assetType = isBanner ? "banner" : "profile_photo";
           const finalAssetId = assetId.trim() || `ast_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-          const extFromFileName = fileName.split(".").pop()?.toLowerCase() || "";
           const ext =
             mimeType.includes("gif") || extFromFileName === "gif" ? "gif" :
             mimeType.includes("png") || extFromFileName === "png" ? "png" :
