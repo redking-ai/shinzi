@@ -21,6 +21,7 @@ import MediaCropModal from './MediaCropModal';
 import {
   getCachedProfile,
   setCachedProfile,
+  invalidateCachedProfile,
   getCachedAssetMeta,
   setCachedAssetMeta,
   navigateTo,
@@ -260,8 +261,8 @@ useEffect(() => {
       const fallbackBanner = String(userData.bannerUrl ?? '');
 
       // Keep previously loaded image to prevent UI flicker while fetching
-      setProfileImageUri((prev) => prev || fallbackAvatar);
-      setBannerImageUri((prev) => prev || fallbackBanner);
+      if (fallbackAvatar) setProfileImageUri(fallbackAvatar);
+      if (fallbackBanner) setBannerImageUri(fallbackBanner);
 
       const profileAssetId = userData.profileAssetId;
       const bannerAssetId = userData.bannerAssetId;
@@ -273,7 +274,10 @@ useEffect(() => {
         return;
       }
 
-      setAssetLoading(true);
+      // Only show loading placeholder if there is no image at all yet
+      if (!fallbackAvatar && profileAssetId) {
+        setAssetLoading(true);
+      }
 
       const loadAsset = async (
         assetId: unknown,
@@ -349,6 +353,18 @@ useEffect(() => {
               asset.mimeType,
             );
             return '';
+          }
+
+          if (
+            (asset.mimeType && String(asset.mimeType).startsWith('video/')) ||
+            isMediaVideo(asset.mediaUrl) ||
+            isMediaVideo(asset.fileName)
+          ) {
+            return asset.mediaUrl || `/api/avatar?assetId=${encodeURIComponent(trimmedAssetId)}&ext=mp4&mime=video%2Fmp4`;
+          }
+
+          if (asset.mediaUrl && typeof asset.mediaUrl === 'string') {
+            return asset.mediaUrl;
           }
 
           const dataUri = await drive.getFileDataUri(
@@ -548,9 +564,22 @@ useEffect(() => {
     e: React.ChangeEvent<HTMLInputElement>,
     type: 'avatar' | 'banner'
   ) => {
-    const file = e.target.files?.[0];
+    const rawFile = e.target.files?.[0];
     e.target.value = '';
-    if (!file || !currentUser) return;
+    if (!rawFile || !currentUser) return;
+
+    // Immediately copy the picked file into memory so Android Chrome never revokes permissions
+    let file: File;
+    try {
+      const buffer = await rawFile.arrayBuffer();
+      file = new File([buffer], rawFile.name, {
+        type: rawFile.type || 'application/octet-stream',
+        lastModified: rawFile.lastModified || Date.now(),
+      });
+    } catch (readErr) {
+      console.warn('[handleMediaFileSelect] Direct buffer read failed, using raw handle:', readErr);
+      file = rawFile;
+    }
 
     const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|mkv|avi)$/i.test(file.name);
     const isGif = file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
@@ -714,6 +743,17 @@ useEffect(() => {
         setBannerImageUri(cacheBustedUrl);
       } else {
         setProfileImageUri(cacheBustedUrl);
+      }
+
+      // Invalidate caches so Chat and other views immediately see new photo
+      invalidateCachedProfile(currentUser.uid);
+      if (typeof window !== 'undefined') {
+        try {
+          if (type === 'avatar') {
+            localStorage.setItem(`shinzi_avatar_${currentUser.uid}`, finalUrl);
+          }
+          sessionStorage.removeItem(`shinzi_profile_${currentUser.uid}`);
+        } catch {}
       }
 
       await loadProfile();

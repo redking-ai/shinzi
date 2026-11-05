@@ -360,6 +360,17 @@ const testImageLoad = (url: string): Promise<boolean> =>
     img.src = url;
   });
 
+function isValidMediaUrl(url?: string | null): boolean {
+  if (!url || typeof url !== 'string') return false;
+  return (
+    url.startsWith('http://') ||
+    url.startsWith('https://') ||
+    url.startsWith('data:') ||
+    url.startsWith('/api/') ||
+    url.startsWith('/')
+  );
+}
+
 function useResolvedAvatarUri(
   targetUid?: string | null,
   photoURL?: string,
@@ -369,8 +380,8 @@ function useResolvedAvatarUri(
   const drive = useDriveStore();
 
   const [imageUri, setImageUri] = useState<string | null>(() => {
-    if (photoURL && (photoURL.startsWith('http') || photoURL.startsWith('data:'))) {
-      return photoURL;
+    if (isValidMediaUrl(photoURL)) {
+      return photoURL!;
     }
     if (targetUid && avatarMemoryCache.has(targetUid)) {
       return avatarMemoryCache.get(targetUid)!;
@@ -397,7 +408,7 @@ function useResolvedAvatarUri(
 
   const [loading, setLoading] = useState<boolean>(() => {
     if (group) return false;
-    if (photoURL && (photoURL.startsWith('http') || photoURL.startsWith('data:'))) return false;
+    if (isValidMediaUrl(photoURL)) return false;
     if (targetUid && avatarMemoryCache.has(targetUid)) return false;
     if (typeof window !== 'undefined' && targetUid) {
       try {
@@ -414,12 +425,12 @@ function useResolvedAvatarUri(
       return;
     }
 
-    if (photoURL && (photoURL.startsWith('http') || photoURL.startsWith('data:'))) {
-      setImageUri(photoURL);
+    if (isValidMediaUrl(photoURL)) {
+      setImageUri(photoURL!);
       if (targetUid) {
-        avatarMemoryCache.set(targetUid, photoURL);
+        avatarMemoryCache.set(targetUid, photoURL!);
         try {
-          localStorage.setItem(`shinzi_avatar_${targetUid}`, photoURL);
+          localStorage.setItem(`shinzi_avatar_${targetUid}`, photoURL!);
         } catch {}
       }
       setLoading(false);
@@ -474,13 +485,13 @@ function useResolvedAvatarUri(
           } catch {}
         }
 
-        if (directUrl && (directUrl.startsWith('http') || directUrl.startsWith('data:'))) {
+        if (isValidMediaUrl(directUrl)) {
           if (!cancelled) {
-            setImageUri(directUrl);
+            setImageUri(directUrl!);
             if (targetUid) {
-              avatarMemoryCache.set(targetUid, directUrl);
+              avatarMemoryCache.set(targetUid, directUrl!);
               try {
-                localStorage.setItem(`shinzi_avatar_${targetUid}`, directUrl);
+                localStorage.setItem(`shinzi_avatar_${targetUid}`, directUrl!);
               } catch {}
             }
             setLoading(false);
@@ -1160,6 +1171,12 @@ export default function Chat({ onNavigate }: ChatProps) {
           const data = snap.data();
           setProfile({ id: snap.id, ...data });
           setCachedProfile(uid, data);
+          if (data?.photoURL && isValidMediaUrl(data.photoURL)) {
+            avatarMemoryCache.set(uid, data.photoURL);
+            try {
+              localStorage.setItem(`shinzi_avatar_${uid}`, data.photoURL);
+            } catch {}
+          }
         } else {
           setProfile(null);
         }

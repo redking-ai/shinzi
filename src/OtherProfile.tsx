@@ -281,6 +281,25 @@ export default function OtherProfile({
             return '';
           }
 
+          // For videos, Google Drive lh3 image CDN cannot serve video streams.
+          // Use /api/avatar or data.mediaUrl which provides range-streaming for <video>.
+          const isVideo = (
+            (data.mimeType && String(data.mimeType).startsWith('video/')) ||
+            isMediaVideo(data.mediaUrl) ||
+            isMediaVideo(data.fileName)
+          );
+
+          if (isVideo) {
+            return (
+              data.mediaUrl ||
+              `/api/avatar?assetId=${encodeURIComponent(trimmedId)}&ext=mp4&mime=video%2Fmp4`
+            );
+          }
+
+          if (data.mediaUrl && typeof data.mediaUrl === 'string') {
+            return data.mediaUrl;
+          }
+
           try {
             const dataUri = await drive.getFileDataUri(
               String(data.providerFileId)
@@ -288,7 +307,7 @@ export default function OtherProfile({
             if (dataUri) return dataUri;
           } catch {}
 
-          // Fallback to Google Drive public image CDN
+          // Fallback to Google Drive public image CDN for static images only
           return `https://lh3.googleusercontent.com/d/${encodeURIComponent(String(data.providerFileId))}=s800`;
         } catch (e) {
           console.warn(
@@ -312,10 +331,15 @@ export default function OtherProfile({
         } else {
           setAvatar('');
         }
-        if (bannerUri) {
+
+        // Prefer video stream URL if banner is video
+        const userBanner = userData?.bannerUrl ? String(userData.bannerUrl) : '';
+        if (bannerUri && (isMediaVideo(bannerUri) || !isMediaVideo(userBanner))) {
           setBanner(bannerUri);
-        } else if (userData?.bannerUrl) {
-          setBanner(String(userData.bannerUrl));
+        } else if (userBanner) {
+          setBanner(userBanner);
+        } else if (bannerUri) {
+          setBanner(bannerUri);
         }
       }
     };
@@ -521,6 +545,10 @@ export default function OtherProfile({
               loop
               muted
               playsInline
+              preload="auto"
+              onError={() => {
+                console.warn('[OtherProfile] Video banner failed to play');
+              }}
             />
           ) : !banner ? (
             <div className="sh-banner-glow" />
