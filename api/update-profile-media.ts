@@ -124,16 +124,21 @@ export default {
           const currentUserDoc = await userRef.get();
           const currentUData = currentUserDoc.data() || {};
           const oldAssetId = isBanner ? currentUData.bannerAssetId : currentUData.profileAssetId;
+          const oldDriveFileId = isBanner
+            ? (currentUData.bannerDriveFileId || null)
+            : (currentUData.avatarDriveFileId || null);
 
           const userUpdates = isBanner
             ? {
                 bannerAssetId: finalAssetId,
                 bannerUrl: mediaUrl,
+                bannerDriveFileId: providerFileId,
                 updatedAt: FieldValue.serverTimestamp(),
               }
             : {
                 profileAssetId: finalAssetId,
                 photoURL: mediaUrl,
+                avatarDriveFileId: providerFileId,
                 updatedAt: FieldValue.serverTimestamp(),
               };
 
@@ -186,6 +191,8 @@ export default {
               assetId: finalAssetId,
               mediaUrl,
               type,
+              oldDriveFileId,
+              providerFileId,
             },
             { headers: CORS_HEADERS }
           );

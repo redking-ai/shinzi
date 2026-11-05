@@ -332,162 +332,144 @@ function clearStoredDriveToken() {
 //
 // ------------------------------------------------------------
 
-const uploadMultipart = async (
+const CHUNK_SIZE = 2 * 1024 * 1024; // 2 MiB chunks (multiple of 256 KiB)
+
+const uploadResumableDrive = async (
   token: string,
   options: {
     folderId: string;
     fileName: string;
     mimeType: string;
-    blob: Blob;
+    buffer: ArrayBuffer;
   }
 ): Promise<UploadedDriveFile> => {
-  const { folderId, fileName, mimeType, blob } =
-    options;
+  const { folderId, fileName, mimeType, buffer } = options;
+  const totalBytes = buffer.byteLength;
 
-  // 1. Try Google Drive Resumable Upload (standard for web browsers; avoids multipart CORS errors)
-  try {
-    const initRes = await fetch(
-      `${DRIVE_UPLOAD_API}/files?uploadType=resumable`,
-      {
-        method: 'POST',
-        headers: {
-          ...getAuthHeader(token),
-          'Content-Type': 'application/json; charset=UTF-8',
-          'X-Upload-Content-Type': mimeType,
-          'X-Upload-Content-Length': String(blob.size),
-        },
-        body: JSON.stringify({
-          name: fileName,
-          mimeType,
-          parents: [folderId],
-        }),
-      }
-    );
-
-    if (initRes.ok) {
-      const uploadUrl = initRes.headers.get('Location');
-      if (uploadUrl) {
-        let putRes: Response | null = null;
-        let lastPutError: unknown = null;
-
-        // Resilient upload: retry PUT up to 3 times on mobile network hiccups
-        for (let attempt = 0; attempt < 3; attempt++) {
-          try {
-            putRes = await fetch(uploadUrl, {
-              method: 'PUT',
-              headers: {
-                'Content-Type': mimeType,
-              },
-              body: blob,
-            });
-
-            if (putRes.ok) break;
-          } catch (err) {
-            lastPutError = err;
-            if (attempt < 2) {
-              await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
-            }
-          }
-        }
-
-        if (putRes && putRes.ok) {
-          const uploaded = await putRes.json();
-          if (uploaded?.id) {
-            try {
-              await fetch(
-                `${DRIVE_API}/files/${encodeURIComponent(uploaded.id)}/permissions`,
-                {
-                  method: 'POST',
-                  headers: {
-                    ...getAuthHeader(token),
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({
-                    role: 'reader',
-                    type: 'anyone',
-                  }),
-                }
-              );
-            } catch {}
-
-            return {
-              fileId: uploaded.id,
-              folderId,
-              fileName: uploaded.name || fileName,
-              mimeType: uploaded.mimeType || mimeType,
-              sizeBytes: uploaded.size ? Number(uploaded.size) : blob.size,
-            };
-          }
-        }
-
-        if (lastPutError) {
-          throw lastPutError;
-        }
-      }
-    }
-  } catch (resumableErr) {
-    console.warn('[DRIVE] Resumable upload attempt failed, falling back to multipart:', resumableErr);
-  }
-
-  // 2. Fallback to multipart upload
-  const boundary =
-    `shinzi_${Date.now().toString(36)}` +
-    `_${Math.random().toString(36).slice(2)}`;
-
-  const metadata = {
-    name: fileName,
-    mimeType,
-    parents: [folderId],
-  };
-
-  const body = new Blob([
-    `--${boundary}\r\n` +
-      'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
-      `${JSON.stringify(metadata)}\r\n`,
-
-    `--${boundary}\r\n` +
-      `Content-Type: ${mimeType}\r\n\r\n`,
-
-    blob,
-
-    `\r\n--${boundary}--`,
-  ]);
-
-  const response = await fetch(
-    `${DRIVE_UPLOAD_API}/files` +
-      '?uploadType=multipart' +
-      '&fields=id,name,mimeType,size,parents',
+  // 1. Session initiation
+  const initRes = await fetch(
+    `${DRIVE_UPLOAD_API}/files?uploadType=resumable`,
     {
       method: 'POST',
-
       headers: {
         ...getAuthHeader(token),
-
-        'Content-Type':
-          `multipart/related; boundary=${boundary}`,
+        'Content-Type': 'application/json; charset=UTF-8',
+        'X-Upload-Content-Type': mimeType,
+        'X-Upload-Content-Length': String(totalBytes),
       },
-
-      body,
+      body: JSON.stringify({
+        name: fileName,
+        mimeType,
+        parents: [folderId],
+      }),
     }
   );
 
   await throwDriveError(
-    response,
-    'Unable to upload file to Google Drive.'
+    initRes,
+    '[Drive Session] Unable to start Google Drive resumable upload session.'
   );
 
-  const uploaded = await response.json();
-
-  if (!uploaded?.id) {
+  const uploadUrl = initRes.headers.get('Location');
+  if (!uploadUrl) {
     throw new Error(
-      'Google Drive upload completed without returning a file ID.'
+      '[Drive Session] Google Drive did not return a resumable upload URL.'
     );
   }
 
-  // Attempt to grant public read permission so Google CDN and other users can view it
+  // 2. Upload in 2MB pieces with resume-on-failure
+  let offset = 0;
+  let finalUploaded: any = null;
+
+  while (offset < totalBytes) {
+    const chunkEnd = Math.min(offset + CHUNK_SIZE, totalBytes);
+    const chunkData = buffer.slice(offset, chunkEnd);
+    const contentRange = `bytes ${offset}-${chunkEnd - 1}/${totalBytes}`;
+
+    let chunkAccepted = false;
+    let retries = 0;
+
+    while (!chunkAccepted && retries < 4) {
+      retries++;
+      try {
+        const chunkRes = await fetch(uploadUrl, {
+          method: 'PUT',
+          headers: {
+            'Content-Range': contentRange,
+          },
+          body: chunkData,
+        });
+
+        if (chunkRes.status === 308) {
+          const rangeHeader = chunkRes.headers.get('Range');
+          if (rangeHeader) {
+            const match = rangeHeader.match(/bytes=0-(\d+)/);
+            if (match) {
+              offset = parseInt(match[1], 10) + 1;
+            } else {
+              offset = chunkEnd;
+            }
+          } else {
+            offset = chunkEnd;
+          }
+          chunkAccepted = true;
+        } else if (chunkRes.ok) {
+          finalUploaded = await chunkRes.json();
+          offset = totalBytes;
+          chunkAccepted = true;
+        } else {
+          throw new Error(`Drive upload chunk status: ${chunkRes.status}`);
+        }
+      } catch (chunkErr) {
+        console.warn(`[Drive Upload] Chunk attempt ${retries} failed for ${contentRange}:`, chunkErr);
+        if (retries >= 4) {
+          throw new Error(
+            `[Drive Upload] Network connection failed while uploading to Google Drive (${chunkErr instanceof Error ? chunkErr.message : 'aborted'}).`
+          );
+        }
+
+        await new Promise((r) => setTimeout(r, 1000 * retries));
+
+        // Query status from Drive to see what bytes were received
+        try {
+          const statusRes = await fetch(uploadUrl, {
+            method: 'PUT',
+            headers: {
+              'Content-Range': `bytes */${totalBytes}`,
+            },
+          });
+
+          if (statusRes.status === 308) {
+            const rangeHeader = statusRes.headers.get('Range');
+            if (rangeHeader) {
+              const match = rangeHeader.match(/bytes=0-(\d+)/);
+              if (match) {
+                offset = parseInt(match[1], 10) + 1;
+                chunkAccepted = true;
+                break;
+              }
+            }
+          } else if (statusRes.ok) {
+            finalUploaded = await statusRes.json();
+            offset = totalBytes;
+            chunkAccepted = true;
+            break;
+          }
+        } catch (statusErr) {
+          console.warn('[Drive Upload] Status check failed:', statusErr);
+        }
+      }
+    }
+  }
+
+  if (!finalUploaded?.id) {
+    throw new Error('[Drive Upload] Google Drive upload completed without returning a file ID.');
+  }
+
+  // Grant public read permission
   try {
     await fetch(
-      `${DRIVE_API}/files/${encodeURIComponent(uploaded.id)}/permissions`,
+      `${DRIVE_API}/files/${encodeURIComponent(finalUploaded.id)}/permissions`,
       {
         method: 'POST',
         headers: {
@@ -500,16 +482,14 @@ const uploadMultipart = async (
         }),
       }
     );
-  } catch {
-    // Non-blocking if permissions call fails
-  }
+  } catch {}
 
   return {
-    fileId: uploaded.id,
+    fileId: finalUploaded.id,
     folderId,
-    fileName: uploaded.name || fileName,
-    mimeType: uploaded.mimeType || mimeType,
-    sizeBytes: uploaded.size ? Number(uploaded.size) : blob.size,
+    fileName: finalUploaded.name || fileName,
+    mimeType: finalUploaded.mimeType || mimeType,
+    sizeBytes: finalUploaded.size ? Number(finalUploaded.size) : totalBytes,
   };
 };
 
@@ -1033,23 +1013,30 @@ export const useDriveStore = (): DriveStore => {
             );
           }
 
-          // Read the bytes first so a bad file fails
-          // before any Drive folders are created.
-          let blob: Blob;
+          // Read the bytes into memory first so a bad file fails
+          // before any Drive folders are created, and prevents detached
+          // native file handles on mobile Chrome.
+          let buffer: ArrayBuffer;
 
           if (file) {
-            blob = file;
+            try {
+              buffer = await file.arrayBuffer();
+            } catch (readErr) {
+              throw new Error(
+                `[File Read] Unable to read selected file into memory: ${readErr instanceof Error ? readErr.message : 'aborted'}`
+              );
+            }
           } else {
             const localResponse =
               await fetch(localUri as string);
 
             if (!localResponse.ok) {
               throw new Error(
-                'Unable to read the selected local file.'
+                '[File Read] Unable to read the selected local file.'
               );
             }
 
-            blob = await localResponse.blob();
+            buffer = await localResponse.arrayBuffer();
           }
 
           return withToken(async (token) => {
@@ -1059,11 +1046,11 @@ export const useDriveStore = (): DriveStore => {
                 folderType
               );
 
-            return uploadMultipart(token, {
+            return uploadResumableDrive(token, {
               folderId: folder.id,
               fileName,
               mimeType,
-              blob,
+              buffer,
             });
           });
         },
@@ -1095,9 +1082,7 @@ export const useDriveStore = (): DriveStore => {
             );
           }
 
-          const textBlob = new Blob([text], {
-            type: 'text/plain; charset=utf-8',
-          });
+          const textBuffer = new TextEncoder().encode(text).buffer;
 
           return withToken(async (token) => {
             const folder =
@@ -1106,12 +1091,12 @@ export const useDriveStore = (): DriveStore => {
                 folderType
               );
 
-            return uploadMultipart(token, {
+            return uploadResumableDrive(token, {
               folderId: folder.id,
               fileName,
               mimeType:
                 'text/plain; charset=utf-8',
-              blob: textBlob,
+              buffer: textBuffer,
             });
           });
         },

@@ -625,19 +625,28 @@ useEffect(() => {
     setError('');
 
     try {
+      // 1. File size check
       if (file.size > 10 * 1024 * 1024) {
-        throw new Error(`File is too large (${(file.size / (1024 * 1024)).toFixed(1)}MB). Maximum allowed is 10MB.`);
+        throw new Error(`[File Size] File is too large (${(file.size / (1024 * 1024)).toFixed(1)}MB). Maximum allowed is 10MB.`);
       }
 
-      if (!drive.hasActiveSession) {
-        const token = await drive.connectDrive(true);
+      // 2. Note old asset and Drive file ID before proceeding
+      const isBanner = type === 'banner';
+      const folderType: DriveFolderType = isBanner ? 'banners' : 'profiles';
+      const oldDriveFileId = isBanner
+        ? ((userData as any)?.bannerDriveFileId || null)
+        : ((userData as any)?.avatarDriveFileId || null);
+
+      // 3. Drive session check
+      setMediaUploadStatus(`Connecting Google Drive…`);
+      const hasSession = drive.hasActiveSession || (await drive.getValidAccessToken());
+      if (!hasSession) {
+        const token = await drive.connectDrive(false);
         if (!token) {
-          throw new Error('Google Drive authorization required.');
+          throw new Error('[Drive Auth] Google Drive authorization required.');
         }
       }
 
-      const isBanner = type === 'banner';
-      const folderType: DriveFolderType = isBanner ? 'banners' : 'profiles';
       const isVideoFile = file.type.startsWith('video/') || /\.(mp4|webm)$/i.test(file.name);
       const isGifFile = file.type === 'image/gif' || /\.gif$/i.test(file.name);
       const fileMime = file.type || (
@@ -647,90 +656,83 @@ useEffect(() => {
         file.name.endsWith('.webp') ? 'image/webp' : 'image/jpeg'
       );
 
-      // 1. Direct upload straight to user's Google Drive folder (Shinzi/Profiles or Shinzi/Banners) with retry
-      let uploadedFile: any = null;
-      let lastUploadErr: unknown = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          uploadedFile = await drive.uploadFile({
-            file,
-            fileName: file.name,
-            mimeType: fileMime,
-            folderType,
-          });
-          if (uploadedFile?.fileId) break;
-        } catch (uErr) {
-          lastUploadErr = uErr;
-          if (attempt < 2) {
-            await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
-          }
-        }
-      }
+      // 4. Resumable chunked upload directly to Google Drive (with Drive offset recovery)
+      setMediaUploadStatus(`Uploading ${type} to Google Drive…`);
+      const uploadedFile = await drive.uploadFile({
+        file,
+        fileName: file.name,
+        mimeType: fileMime,
+        folderType,
+      });
 
       if (!uploadedFile?.fileId) {
-        throw lastUploadErr || new Error('Upload to Google Drive failed.');
+        throw new Error('[Drive Upload] Google Drive upload completed without returning a file ID.');
       }
 
-      // 2. Make file publicly accessible in Google Drive (background)
-      drive.makeFilePublic(uploadedFile.fileId).catch((pubErr) => {
-        console.warn('Public permission error:', pubErr);
-      });
-
-      // 3. Delete all old files in this folder (Shinzi/Profiles or Shinzi/Banners) and any old root ast_*.gif (background)
-      drive.cleanOldFiles(folderType, uploadedFile.fileId).catch((cleanErr) => {
-        console.warn('Clean old files error:', cleanErr);
-      });
-
-      // 4. Update profile and save asset record via serverless API (with retry)
+      // 5. Update profile and save asset record via serverless API
+      setMediaUploadStatus(`Saving profile metadata…`);
       const assetId = `ast_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-      let finalUrl = dataUriPreview || `https://lh3.googleusercontent.com/d/${uploadedFile.fileId}=s800`;
 
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          const idToken = await currentUser.getIdToken(attempt > 0);
-          const apiRes = await fetch('/api/update-profile-media', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${idToken}`,
-            },
-            body: JSON.stringify({
-              type,
-              assetId,
-              providerFileId: uploadedFile.fileId,
-              driveFolderId: uploadedFile.folderId,
-              fileName: file.name,
-              mimeType: fileMime,
-              sizeBytes: file.size,
-              dataUriPreview:
-                dataUriPreview && dataUriPreview.length < 500000
-                  ? dataUriPreview
-                  : undefined,
-            }),
-          });
+      const idToken = await currentUser.getIdToken();
+      const apiRes = await fetch('/api/update-profile-media', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          type,
+          assetId,
+          providerFileId: uploadedFile.fileId,
+          driveFolderId: uploadedFile.folderId,
+          fileName: file.name,
+          mimeType: fileMime,
+          sizeBytes: uploadedFile.sizeBytes || file.size,
+          dataUriPreview:
+            dataUriPreview && dataUriPreview.length < 500000
+              ? dataUriPreview
+              : undefined,
+        }),
+      });
 
-          if (apiRes.ok) {
-            const resData = await apiRes.json();
-            if (resData.mediaUrl) {
-              finalUrl = resData.mediaUrl;
-            }
-            break;
-          }
-        } catch (apiErr) {
-          if (attempt < 2) {
-            await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
-          }
-        }
+      if (!apiRes.ok) {
+        const errorText = await apiRes.text().catch(() => '');
+        throw new Error(`[Metadata API] Server returned status ${apiRes.status}: ${errorText || 'Failed to save media metadata.'}`);
       }
 
-      // Update state for instant view
+      const resData = await apiRes.json();
+      if (!resData.ok) {
+        throw new Error(`[Metadata API] Failed to save media metadata: ${resData.error || 'Unknown error'}`);
+      }
+
+      // 6. Update state for instant view with cache-busting asset ID
+      let finalUrl = resData.mediaUrl || dataUriPreview || `https://lh3.googleusercontent.com/d/${uploadedFile.fileId}=s800`;
+      const cacheBustSep = finalUrl.includes('?') ? '&' : '?';
+      const cacheBustedUrl = `${finalUrl}${cacheBustSep}v=${assetId}`;
+
       if (type === 'banner') {
-        setBannerImageUri(finalUrl);
+        setBannerImageUri(cacheBustedUrl);
       } else {
-        setProfileImageUri(finalUrl);
+        setProfileImageUri(cacheBustedUrl);
       }
 
       await loadProfile();
+
+      // 7. Delete old Drive file only after metadata API confirms the new image
+      const fileIdToDelete = resData.oldDriveFileId || oldDriveFileId;
+      if (fileIdToDelete && fileIdToDelete !== uploadedFile.fileId) {
+        try {
+          await drive.deleteFile(fileIdToDelete);
+        } catch (delErr) {
+          console.warn('[PROFILE] Old Drive file delete failed:', delErr);
+        }
+      }
+
+      // Background cleanup pass for any orphaned files in this folder
+      drive.cleanOldFiles(folderType, uploadedFile.fileId).catch((cleanErr) => {
+        console.warn('[PROFILE] Background cleanOldFiles error:', cleanErr);
+      });
+
     } catch (uploadErr) {
       console.error('[PROFILE] Media upload failed:', uploadErr);
       setError(messageOf(uploadErr));
