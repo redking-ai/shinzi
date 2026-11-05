@@ -72,6 +72,57 @@ export default {
       const ownerUid = asset?.ownerUid || targetUid;
       const mimeType = asset?.mimeType || "image/jpeg";
 
+      // 1. If media is stored via Firestore chunks (supports GIFs / media up to 10MB)
+      if (asset?.chunkCount && typeof asset.chunkCount === "number" && asset.chunkCount > 0) {
+        const chunkCount = asset.chunkCount;
+        const chunkDocs = await Promise.all(
+          Array.from({ length: chunkCount }, (_, i) =>
+            adminDb.collection("mediaChunks").doc(`${targetAssetId}_${i}`).get()
+          )
+        );
+
+        const buffers = chunkDocs.map((doc) => {
+          const b64 = doc.data()?.data;
+          return typeof b64 === "string" ? Buffer.from(b64, "base64") : Buffer.alloc(0);
+        });
+
+        const stream = new ReadableStream({
+          start(controller) {
+            for (const buf of buffers) {
+              controller.enqueue(buf);
+            }
+            controller.close();
+          },
+        });
+
+        return new Response(stream, {
+          status: 200,
+          headers: {
+            "Content-Type": mimeType,
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "Access-Control-Allow-Origin": "*",
+          },
+        });
+      }
+
+      // 2. If media has a direct URL or data URI stored
+      if (asset?.mediaUrl && typeof asset.mediaUrl === "string") {
+        if (asset.mediaUrl.startsWith("http")) {
+          return Response.redirect(asset.mediaUrl, 302);
+        }
+        if (asset.mediaUrl.startsWith("data:")) {
+          const [header, b64] = asset.mediaUrl.split(",");
+          const mime = header.split(";")[0].replace("data:", "") || mimeType;
+          return new Response(Buffer.from(b64, "base64"), {
+            headers: {
+              "Content-Type": mime,
+              "Cache-Control": "public, max-age=31536000, immutable",
+              "Access-Control-Allow-Origin": "*",
+            },
+          });
+        }
+      }
+
       if (!providerFileId) {
         return new Response("Provider file ID not found", { status: 404 });
       }

@@ -1,16 +1,18 @@
-import { adminDb, adminAuth, adminStorage } from "./_lib/firebaseAdmin.js";
-import { decryptRefreshToken } from "./_lib/driveOAuth.js";
+import { adminDb, adminAuth } from "./_lib/firebaseAdmin.js";
 import { FieldValue } from "firebase-admin/firestore";
 
 export default {
   async fetch(request: Request): Promise<Response> {
     if (request.method !== "POST") {
-      return new Response("Method not allowed", { status: 405 });
+      return Response.json(
+        { ok: false, error: "Method not allowed. Use POST." },
+        { status: 405 }
+      );
     }
 
     try {
-      const authHeader = request.headers.get("Authorization");
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      const authHeader = request.headers.get("authorization") || request.headers.get("Authorization") || "";
+      if (!authHeader.startsWith("Bearer ")) {
         return Response.json(
           { ok: false, error: "Unauthorized: Missing or invalid Authorization header." },
           { status: 401 }
@@ -35,19 +37,16 @@ export default {
       let fileBuffer: Buffer | null = null;
       let fileName = "media";
       let mimeType = "image/jpeg";
-      let providerFileId: string | null = null;
-      let driveFolderId: string | null = null;
       let assetId = "";
 
       const contentType = request.headers.get("content-type") || "";
-      let uploadId = "";
       let chunkIndex = 0;
       let totalChunks = 1;
 
       if (contentType.includes("multipart/form-data")) {
         const formData = await request.formData();
         type = (formData.get("type") as string) || "avatar";
-        uploadId = (formData.get("uploadId") as string) || "";
+        assetId = (formData.get("assetId") as string) || "";
         const chunkIndexStr = formData.get("chunkIndex") as string | null;
         const totalChunksStr = formData.get("totalChunks") as string | null;
         chunkIndex = chunkIndexStr !== null ? parseInt(chunkIndexStr, 10) : 0;
@@ -64,8 +63,6 @@ export default {
         type = typeof body.type === "string" ? body.type : "avatar";
         fileName = typeof body.fileName === "string" ? body.fileName : "media";
         mimeType = typeof body.mimeType === "string" ? body.mimeType : "image/jpeg";
-        providerFileId = typeof body.providerFileId === "string" ? body.providerFileId : null;
-        driveFolderId = typeof body.driveFolderId === "string" ? body.driveFolderId : null;
         assetId = typeof body.assetId === "string" ? body.assetId : "";
 
         if (typeof body.base64Data === "string" && body.base64Data) {
@@ -99,7 +96,7 @@ export default {
         else mimeType = "image/jpeg";
       }
 
-      // Handle intermediate chunks for files > 3MB (avoids Vercel 4.5MB payload limit)
+      // Handle intermediate chunks for large files (e.g. 8.14MB GIFs / animations)
       if (totalChunks > 1 && chunkIndex < totalChunks - 1) {
         if (!fileBuffer || fileBuffer.length === 0) {
           return Response.json(
@@ -108,190 +105,62 @@ export default {
           );
         }
 
-        const bucket = adminStorage.bucket();
-        const safeUploadId = uploadId.replace(/[^a-zA-Z0-9_-]/g, "") || `upl_${Date.now()}`;
-        const chunkPath = `temp_chunks/${uid}_${safeUploadId}_part_${chunkIndex}`;
-        await bucket.file(chunkPath).save(fileBuffer, {
-          resumable: false,
-          contentType: "application/octet-stream",
-        });
+        await adminDb
+          .collection("mediaChunks")
+          .doc(`${finalAssetId}_${chunkIndex}`)
+          .set({
+            data: fileBuffer.toString("base64"),
+            index: chunkIndex,
+            ownerUid: uid,
+            assetId: finalAssetId,
+            createdAt: FieldValue.serverTimestamp(),
+          });
 
         return Response.json({
           ok: true,
           completed: false,
           chunkIndex,
           totalChunks,
+          assetId: finalAssetId,
         });
       }
 
       let mediaUrl = "";
 
-      // 1. Try Firebase Cloud Storage (Chunked completion or single-shot)
       if (totalChunks > 1 && chunkIndex === totalChunks - 1) {
-        try {
-          const bucket = adminStorage.bucket();
-          const safeUploadId = uploadId.replace(/[^a-zA-Z0-9_-]/g, "") || `upl_${Date.now()}`;
-          const lastChunkPath = `temp_chunks/${uid}_${safeUploadId}_part_${chunkIndex}`;
-          if (fileBuffer && fileBuffer.length > 0) {
-            await bucket.file(lastChunkPath).save(fileBuffer, {
-              resumable: false,
-              contentType: "application/octet-stream",
+        // Final chunk received
+        if (fileBuffer && fileBuffer.length > 0) {
+          await adminDb
+            .collection("mediaChunks")
+            .doc(`${finalAssetId}_${chunkIndex}`)
+            .set({
+              data: fileBuffer.toString("base64"),
+              index: chunkIndex,
+              ownerUid: uid,
+              assetId: finalAssetId,
+              createdAt: FieldValue.serverTimestamp(),
             });
-          }
-
-          const partNames = Array.from(
-            { length: totalChunks },
-            (_, i) => `temp_chunks/${uid}_${safeUploadId}_part_${i}`
-          );
-          const destination = `${isBanner ? "banners" : "profiles"}/${uid}_${Date.now()}.${ext}`;
-          const destFile = bucket.file(destination);
-
-          let combinedSuccessfully = false;
-          try {
-            await bucket.combine(partNames, destination);
-            combinedSuccessfully = true;
-          } catch (combineErr) {
-            console.warn(
-              "[update-profile-media] bucket.combine note, falling back to buffer stitch:",
-              combineErr
-            );
-            try {
-              const partBuffers = await Promise.all(
-                partNames.map(async (name) => {
-                  const [buf] = await bucket.file(name).download();
-                  return buf;
-                })
-              );
-              const fullBuffer = Buffer.concat(partBuffers);
-              await destFile.save(fullBuffer, {
-                contentType: mimeType,
-                resumable: false,
-              });
-              combinedSuccessfully = true;
-            } catch (fallbackErr) {
-              console.error("[update-profile-media] Buffer stitching failed:", fallbackErr);
-            }
-          }
-
-          if (combinedSuccessfully) {
-            await destFile.setMetadata({
-              contentType: mimeType,
-              cacheControl: "public, max-age=31536000",
-            }).catch(() => {});
-            try {
-              await destFile.makePublic();
-            } catch {}
-            mediaUrl = `https://storage.googleapis.com/${bucket.name}/${destination}`;
-
-            // Clean up temporary chunks in background
-            Promise.all(partNames.map((p) => bucket.file(p).delete().catch(() => {}))).catch(() => {});
-          }
-        } catch (multiErr) {
-          console.warn("[update-profile-media] Chunk combine error:", multiErr);
         }
+
+        mediaUrl = `/api/avatar?assetId=${finalAssetId}`;
       } else if (fileBuffer && fileBuffer.length > 0) {
-        try {
-          const bucket = adminStorage.bucket();
-          const destination = `${isBanner ? "banners" : "profiles"}/${uid}_${Date.now()}.${ext}`;
-          const gcsFile = bucket.file(destination);
-          await gcsFile.save(fileBuffer, {
-            contentType: mimeType,
-            resumable: false,
-            metadata: {
-              cacheControl: "public, max-age=31536000",
-            },
-          });
-          try {
-            await gcsFile.makePublic();
-          } catch {}
-          mediaUrl = `https://storage.googleapis.com/${bucket.name}/${destination}`;
-        } catch (stErr) {
-          console.warn("[update-profile-media] Firebase Storage upload note:", stErr);
-        }
-      }
-
-      // 2. Try Server-Side Google Drive Upload if user has connected Drive
-      if (!mediaUrl && fileBuffer && fileBuffer.length > 0) {
-        try {
-          const tokenDoc = await adminDb.collection("privateDriveTokens").doc(uid).get();
-          const encToken = tokenDoc.get("encryptedRefreshToken");
-          const clientId = process.env.GOOGLE_CLIENT_ID;
-          const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-
-          if (typeof encToken === "string" && clientId && clientSecret) {
-            const refreshToken = decryptRefreshToken(encToken);
-            const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-              method: "POST",
-              headers: { "Content-Type": "application/x-www-form-urlencoded" },
-              body: new URLSearchParams({
-                client_id: clientId,
-                client_secret: clientSecret,
-                refresh_token: refreshToken,
-                grant_type: "refresh_token",
-              }),
+        // Single chunk upload
+        if (fileBuffer.length <= 750 * 1024) {
+          mediaUrl = `data:${mimeType};base64,${fileBuffer.toString("base64")}`;
+        } else {
+          await adminDb
+            .collection("mediaChunks")
+            .doc(`${finalAssetId}_0`)
+            .set({
+              data: fileBuffer.toString("base64"),
+              index: 0,
+              ownerUid: uid,
+              assetId: finalAssetId,
+              createdAt: FieldValue.serverTimestamp(),
             });
-
-            if (tokenRes.ok) {
-              const { access_token } = await tokenRes.json();
-              const driveInitRes = await fetch(
-                "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable",
-                {
-                  method: "POST",
-                  headers: {
-                    Authorization: `Bearer ${access_token}`,
-                    "Content-Type": "application/json; charset=UTF-8",
-                    "X-Upload-Content-Type": mimeType,
-                    "X-Upload-Content-Length": String(fileBuffer.length),
-                  },
-                  body: JSON.stringify({
-                    name: `${finalAssetId}.${ext}`,
-                    mimeType,
-                  }),
-                }
-              );
-
-              const location = driveInitRes.headers.get("Location");
-              if (location) {
-                const putRes = await fetch(location, {
-                  method: "PUT",
-                  headers: { "Content-Type": mimeType },
-                  body: fileBuffer,
-                });
-
-                if (putRes.ok) {
-                  const driveFile = await putRes.json();
-                  if (driveFile?.id) {
-                    providerFileId = driveFile.id;
-                    await fetch(
-                      `https://www.googleapis.com/drive/v3/files/${driveFile.id}/permissions`,
-                      {
-                        method: "POST",
-                        headers: {
-                          Authorization: `Bearer ${access_token}`,
-                          "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({ role: "reader", type: "anyone" }),
-                      }
-                    ).catch(() => {});
-                    mediaUrl = `https://lh3.googleusercontent.com/d/${driveFile.id}=s800`;
-                  }
-                }
-              }
-            }
-          }
-        } catch (driveErr) {
-          console.warn("[update-profile-media] Server-side Drive upload note:", driveErr);
+          totalChunks = 1;
+          mediaUrl = `/api/avatar?assetId=${finalAssetId}`;
         }
-      }
-
-      // 3. Fallback: Base64 data URI if under 850KB (stored safely within Firestore 1MB doc limit)
-      if (!mediaUrl && fileBuffer && fileBuffer.length <= 850 * 1024) {
-        mediaUrl = `data:${mimeType};base64,${fileBuffer.toString("base64")}`;
-      }
-
-      // 4. Fallback if providerFileId was already supplied
-      if (!mediaUrl && providerFileId) {
-        mediaUrl = `https://lh3.googleusercontent.com/d/${providerFileId}=s800`;
       }
 
       if (!mediaUrl) {
@@ -301,16 +170,15 @@ export default {
         );
       }
 
-      // 5. Create or update asset record in 'assets' collection using Admin SDK
+      // Update asset record in 'assets' collection
       const assetRef = adminDb.collection("assets").doc(finalAssetId);
       await assetRef.set(
         {
           ownerUid: uid,
           type: assetType,
           visibility: "public",
-          provider: providerFileId ? "google_drive" : "firebase_storage",
-          providerFileId: providerFileId || "",
-          driveFolderId: driveFolderId || "",
+          provider: totalChunks > 1 || !mediaUrl.startsWith("data:") ? "firestore_chunks" : "data_uri",
+          chunkCount: totalChunks,
           fileName,
           mimeType,
           sizeBytes: fileBuffer ? fileBuffer.length : 0,
@@ -323,7 +191,7 @@ export default {
         { merge: true }
       );
 
-      // 6. Update user profile document in 'users' collection using Admin SDK
+      // Update user profile document in 'users' collection
       const userRef = adminDb.collection("users").doc(uid);
       const userUpdates = isBanner
         ? {
@@ -339,7 +207,7 @@ export default {
 
       await userRef.set(userUpdates, { merge: true });
 
-      // 7. If updating avatar, update conversation memberProfiles across all conversations
+      // If updating avatar, update conversation memberProfiles across all conversations
       if (!isBanner) {
         try {
           const convsSnap = await adminDb
@@ -364,6 +232,7 @@ export default {
 
       return Response.json({
         ok: true,
+        completed: true,
         assetId: finalAssetId,
         mediaUrl,
         type,

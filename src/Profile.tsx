@@ -614,7 +614,8 @@ useEffect(() => {
 
     try {
       const idToken = await currentUser.getIdToken();
-      const CHUNK_SIZE = 3 * 1024 * 1024; // 3 MB chunks to comfortably fit within Vercel's 4.5 MB request limit
+      const assetId = `ast_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      const CHUNK_SIZE = 650 * 1024; // 650 KB chunks (fits comfortably within Firestore 1MB document limit)
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
       const uploadId = `upl_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
@@ -624,6 +625,10 @@ useEffect(() => {
         const formData = new FormData();
         formData.append('file', file);
         formData.append('type', type);
+        formData.append('assetId', assetId);
+        formData.append('uploadId', uploadId);
+        formData.append('chunkIndex', '0');
+        formData.append('totalChunks', '1');
         formData.append('fileName', file.name);
         formData.append('mimeType', file.type);
 
@@ -642,7 +647,7 @@ useEffect(() => {
 
         resData = await res.json();
       } else {
-        // Multi-chunk upload for files > 3MB (e.g. 8.14MB GIFs / animations)
+        // Multi-chunk upload for files > 650KB (e.g. 8.14MB GIFs / animations)
         for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
           const percent = Math.round(((chunkIndex + 1) / totalChunks) * 100);
           setMediaUploadStatus(`Uploading ${type} (${percent}%)…`);
@@ -654,6 +659,7 @@ useEffect(() => {
           const formData = new FormData();
           formData.append('file', chunkBlob, file.name);
           formData.append('type', type);
+          formData.append('assetId', assetId);
           formData.append('uploadId', uploadId);
           formData.append('chunkIndex', String(chunkIndex));
           formData.append('totalChunks', String(totalChunks));
