@@ -55,6 +55,18 @@ function errorText(error: unknown): string {
     : 'Something went wrong. Please try again.';
 }
 
+function isMediaVideo(url?: string | null): boolean {
+  if (!url) return false;
+  const decoded = decodeURIComponent(url).toLowerCase();
+  return (
+    decoded.includes('video/') ||
+    decoded.includes('.mp4') ||
+    decoded.includes('.webm') ||
+    decoded.includes('mime=video') ||
+    decoded.includes('ext=mp4')
+  );
+}
+
 export default function OtherProfile({
   targetUid: targetUidProp,
   onClose,
@@ -493,7 +505,7 @@ export default function OtherProfile({
         <div
           className="sh-profile-banner"
           style={
-            banner && !(banner.includes('video/') || banner.includes('.mp4') || banner.includes('.webm'))
+            banner && !isMediaVideo(banner)
               ? {
                   backgroundImage:
                     `linear-gradient(180deg, transparent, #00000099), url("${banner}")`,
@@ -501,7 +513,7 @@ export default function OtherProfile({
               : undefined
           }
         >
-          {banner && (banner.includes('video/') || banner.includes('.mp4') || banner.includes('.webm')) ? (
+          {banner && isMediaVideo(banner) ? (
             <video
               className="sh-banner-video"
               src={banner}
@@ -550,7 +562,7 @@ export default function OtherProfile({
         <div className="sh-profile-identity">
           <div className="sh-avatar-thought-row">
             <div className="sh-avatar-wrap">
-              {avatar && (avatar.includes('video/') || avatar.includes('.mp4') || avatar.includes('.webm')) ? (
+              {avatar && isMediaVideo(avatar) ? (
                 <video
                   className="sh-avatar-video"
                   src={avatar}

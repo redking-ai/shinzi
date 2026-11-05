@@ -69,6 +69,18 @@ function dateLabel(value: any): string {
     : 'October 2026';
 }
 
+function isMediaVideo(url?: string | null): boolean {
+  if (!url) return false;
+  const decoded = decodeURIComponent(url).toLowerCase();
+  return (
+    decoded.includes('video/') ||
+    decoded.includes('.mp4') ||
+    decoded.includes('.webm') ||
+    decoded.includes('mime=video') ||
+    decoded.includes('ext=mp4')
+  );
+}
+
 function messageOf(error: unknown): string {
   return error instanceof Error
     ? error.message
@@ -615,7 +627,7 @@ useEffect(() => {
     try {
       const idToken = await currentUser.getIdToken();
       const assetId = `ast_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-      const CHUNK_SIZE = 2.5 * 1024 * 1024; // 2.5 MB chunks (fast upload and comfortably under Vercel's 4.5 MB limit)
+      const CHUNK_SIZE = 750 * 1024; // 750 KB chunks: ultra-reliable over mobile networks and writes 1 doc per chunk to Firestore
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
       const uploadId = `upl_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
       const isVideoFile = file.type.startsWith('video/') || /\.(mp4|webm)$/i.test(file.name);
@@ -653,7 +665,7 @@ useEffect(() => {
 
         resData = await res.json();
       } else {
-        // Fast multi-chunk upload for files up to 10MB (only 3-4 chunks total)
+        // Fast multi-chunk upload for files up to 10MB
         for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
           const percent = Math.round(((chunkIndex + 1) / totalChunks) * 100);
           setMediaUploadStatus(`Uploading ${type} (${percent}%)…`);
@@ -662,33 +674,52 @@ useEffect(() => {
           const end = Math.min(start + CHUNK_SIZE, file.size);
           const chunkBlob = file.slice(start, end, resolvedMime);
 
-          const formData = new FormData();
-          formData.append('file', chunkBlob, file.name);
-          formData.append('type', type);
-          formData.append('assetId', assetId);
-          formData.append('uploadId', uploadId);
-          formData.append('chunkIndex', String(chunkIndex));
-          formData.append('totalChunks', String(totalChunks));
-          formData.append('subChunkOffset', String(subChunkOffset));
-          formData.append('fileName', file.name);
-          formData.append('mimeType', resolvedMime);
+          let chunkSuccess = false;
+          let chunkErr: unknown = null;
 
-          const res = await fetch('/api/update-profile-media', {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${idToken}`,
-            },
-            body: formData,
-          });
+          // Retry each chunk up to 3 times with exponential backoff on transient network error
+          for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+              const formData = new FormData();
+              formData.append('file', chunkBlob, file.name);
+              formData.append('type', type);
+              formData.append('assetId', assetId);
+              formData.append('uploadId', uploadId);
+              formData.append('chunkIndex', String(chunkIndex));
+              formData.append('totalChunks', String(totalChunks));
+              formData.append('subChunkOffset', String(subChunkOffset));
+              formData.append('fileName', file.name);
+              formData.append('mimeType', resolvedMime);
 
-          if (!res.ok) {
-            const errJson = await res.json().catch(() => ({}));
-            throw new Error(errJson.error || `Upload failed on part ${chunkIndex + 1} (${res.status})`);
+              const res = await fetch('/api/update-profile-media', {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${idToken}`,
+                },
+                body: formData,
+              });
+
+              if (!res.ok) {
+                const errJson = await res.json().catch(() => ({}));
+                throw new Error(errJson.error || `Upload failed on part ${chunkIndex + 1} (${res.status})`);
+              }
+
+              resData = await res.json();
+              if (typeof resData?.nextSubChunkOffset === 'number') {
+                subChunkOffset = resData.nextSubChunkOffset;
+              }
+              chunkSuccess = true;
+              break;
+            } catch (e) {
+              chunkErr = e;
+              if (attempt < 2) {
+                await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+              }
+            }
           }
 
-          resData = await res.json();
-          if (typeof resData?.nextSubChunkOffset === 'number') {
-            subChunkOffset = resData.nextSubChunkOffset;
+          if (!chunkSuccess) {
+            throw chunkErr || new Error(`Upload failed on part ${chunkIndex + 1}`);
           }
         }
       }
@@ -755,7 +786,7 @@ useEffect(() => {
         <div
           className="sh-profile-banner"
           style={
-            bannerImageUri && !(bannerImageUri.includes('video/') || bannerImageUri.includes('.mp4') || bannerImageUri.includes('.webm'))
+            bannerImageUri && !isMediaVideo(bannerImageUri)
               ? {
                   backgroundImage:
                     `linear-gradient(180deg, transparent, #00000099), url("${bannerImageUri}")`,
@@ -763,7 +794,7 @@ useEffect(() => {
               : undefined
           }
         >
-          {bannerImageUri && (bannerImageUri.includes('video/') || bannerImageUri.includes('.mp4') || bannerImageUri.includes('.webm')) ? (
+          {bannerImageUri && isMediaVideo(bannerImageUri) ? (
             <video
               className="sh-banner-video"
               src={bannerImageUri}
@@ -872,7 +903,7 @@ useEffect(() => {
             <div className="sh-avatar-wrap">
               {assetLoading && !profileImageUri ? (
                 <div className="sh-avatar sh-avatar-skeleton" />
-              ) : profileImageUri && (profileImageUri.includes('video/') || profileImageUri.includes('.mp4') || profileImageUri.includes('.webm')) ? (
+              ) : profileImageUri && isMediaVideo(profileImageUri) ? (
                 <video
                   className="sh-avatar-video"
                   src={profileImageUri}
@@ -1145,6 +1176,15 @@ useEffect(() => {
         >
           {assetLoading && !profileImageUri ? (
             <div className="shc-avatar shc-avatar-nav shc-avatar-skeleton" />
+          ) : profileImageUri && isMediaVideo(profileImageUri) ? (
+            <video
+              src={profileImageUri}
+              className="shc-avatar-nav"
+              autoPlay
+              loop
+              muted
+              playsInline
+            />
           ) : profileImageUri ? (
             <img
               src={profileImageUri}

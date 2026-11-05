@@ -10,7 +10,7 @@ export default {
         headers: {
           "Access-Control-Allow-Origin": "*",
           "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
-          "Access-Control-Allow-Headers": "Authorization, Content-Type",
+          "Access-Control-Allow-Headers": "Authorization, Content-Type, Range",
         },
       });
     }
@@ -93,23 +93,46 @@ export default {
         );
 
         const buffers = chunkDocs.map((doc) => {
-          const b64 = doc.data()?.data;
-          return typeof b64 === "string" ? Buffer.from(b64, "base64") : Buffer.alloc(0);
+          const raw = doc.data()?.data;
+          if (Buffer.isBuffer(raw)) return raw;
+          if (raw && typeof (raw as any).toBuffer === "function") return (raw as any).toBuffer();
+          if (raw instanceof Uint8Array) return Buffer.from(raw);
+          if (typeof raw === "string") return Buffer.from(raw, "base64");
+          return Buffer.alloc(0);
         });
 
-        const stream = new ReadableStream({
-          start(controller) {
-            for (const buf of buffers) {
-              controller.enqueue(buf);
-            }
-            controller.close();
-          },
-        });
+        const fullBuffer = Buffer.concat(buffers);
+        const totalLength = fullBuffer.length;
+        const rangeHeader = request.headers.get("Range") || request.headers.get("range");
 
-        return new Response(stream, {
+        if (rangeHeader && rangeHeader.startsWith("bytes=")) {
+          const parts = rangeHeader.replace(/bytes=/, "").split("-");
+          const start = parseInt(parts[0], 10);
+          const end = parts[1] ? parseInt(parts[1], 10) : totalLength - 1;
+
+          if (!isNaN(start) && start < totalLength) {
+            const chunkEnd = Math.min(end, totalLength - 1);
+            const chunk = fullBuffer.subarray(start, chunkEnd + 1);
+            return new Response(chunk, {
+              status: 206,
+              headers: {
+                "Content-Range": `bytes ${start}-${chunkEnd}/${totalLength}`,
+                "Accept-Ranges": "bytes",
+                "Content-Length": String(chunk.length),
+                "Content-Type": mimeType,
+                "Cache-Control": "public, max-age=31536000, immutable",
+                "Access-Control-Allow-Origin": "*",
+              },
+            });
+          }
+        }
+
+        return new Response(fullBuffer, {
           status: 200,
           headers: {
             "Content-Type": mimeType,
+            "Content-Length": String(totalLength),
+            "Accept-Ranges": "bytes",
             "Cache-Control": "public, max-age=31536000, immutable",
             "Access-Control-Allow-Origin": "*",
           },

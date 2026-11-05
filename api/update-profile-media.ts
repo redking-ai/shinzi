@@ -115,8 +115,8 @@ export default {
         else mimeType = "image/jpeg";
       }
 
-      // Fast sub-chunking: split incoming chunk (e.g. 2.5MB) into 600KB pieces for Firestore 1MB doc limit
-      const SUB_CHUNK_SIZE = 600 * 1024;
+      // Fast sub-chunking: split incoming chunk into 800KB raw Buffer pieces (native binary in Firestore, limit 1MB)
+      const SUB_CHUNK_SIZE = 800 * 1024;
       const subChunks: Buffer[] = [];
       if (fileBuffer && fileBuffer.length > 0) {
         for (let offset = 0; offset < fileBuffer.length; offset += SUB_CHUNK_SIZE) {
@@ -135,7 +135,7 @@ export default {
           );
         }
 
-        // Save sub-chunks to Firestore in parallel
+        // Save raw binary Buffer sub-chunks to Firestore in parallel
         await Promise.all(
           subChunks.map((sub, idx) => {
             const globalIndex = subChunkOffset + idx;
@@ -143,7 +143,7 @@ export default {
               .collection("mediaChunks")
               .doc(`${finalAssetId}_${globalIndex}`)
               .set({
-                data: sub.toString("base64"),
+                data: sub,
                 index: globalIndex,
                 ownerUid: uid,
                 assetId: finalAssetId,
@@ -182,7 +182,7 @@ export default {
                 .collection("mediaChunks")
                 .doc(`${finalAssetId}_${globalIndex}`)
                 .set({
-                  data: sub.toString("base64"),
+                  data: sub,
                   index: globalIndex,
                   ownerUid: uid,
                   assetId: finalAssetId,
@@ -193,7 +193,7 @@ export default {
         }
 
         const totalSubChunks = subChunkOffset + subChunks.length;
-        mediaUrl = `/api/avatar?assetId=${finalAssetId}&mime=${encodeURIComponent(mimeType)}`;
+        mediaUrl = `/api/avatar?assetId=${finalAssetId}&ext=${ext}&mime=${encodeURIComponent(mimeType)}`;
 
         // Update asset record in 'assets' collection
         const assetRef = adminDb.collection("assets").doc(finalAssetId);
