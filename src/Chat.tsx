@@ -40,7 +40,6 @@ import {
   Copy,
   CornerUpLeft,
   ExternalLink,
-  FileText,
   Flag,
   Gamepad2,
   Image as ImageIcon,
@@ -80,6 +79,9 @@ import {
 } from './emojiData';
 import OtherProfile from './OtherProfile';
 import VoicePlayer from './VoicePlayer';
+import { GoogleStickerIcon, GoogleFileIcon } from './GoogleIcons';
+import { MediaGrid, type MediaItem } from './MediaGrid';
+import { FileMessage } from './FileMessage';
 import { cacheAudioBlob } from './voiceCache';
 import MuiAvatar from '@mui/material/Avatar';
 import './Chat.css';
@@ -1068,6 +1070,10 @@ export default function Chat({ onNavigate }: ChatProps) {
     originalUrl: string;
     fileName?: string;
   } | null>(null);
+  const [activeVideoViewer, setActiveVideoViewer] = useState<{
+    url: string;
+    fileName?: string;
+  } | null>(null);
   const [viewingProfileUid, setViewingProfileUid] = useState<string | null>(null);
   const pendingCaretRef = useRef<number | null>(null);
 
@@ -1155,6 +1161,7 @@ export default function Chat({ onNavigate }: ChatProps) {
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const backdropRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const docRef = useRef<HTMLInputElement | null>(null);
   const autoOpenedUserRef = useRef('');
 
   const syncBackdropScroll = () => {
@@ -1803,13 +1810,16 @@ export default function Chat({ onNavigate }: ChatProps) {
   };
 
   useEffect(() => {
-    if (!activeImageViewer) return;
+    if (!activeImageViewer && !activeVideoViewer) return;
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
-      if (e.key === 'Escape') setActiveImageViewer(null);
+      if (e.key === 'Escape') {
+        setActiveImageViewer(null);
+        setActiveVideoViewer(null);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeImageViewer]);
+  }, [activeImageViewer, activeVideoViewer]);
 
   // Clear mention suggestions whenever switching conversations, screens, or when text is empty
   const openConversation = async (conversation: Rec) => {
@@ -3119,14 +3129,39 @@ const handleSearchMessage = async (target: Rec) => {
   // MEDIA / VOICE / CALL (UI ONLY — NOT CONNECTED YET)
   // ----------------------------------------------------------
 
-  const sendImageMessage = async (params: {
-    driveFileId?: string;
-    mediaUrl: string;
-    originalUrl?: string;
-    fileName?: string;
-    width?: number;
-    height?: number;
-    size?: number;
+  const getMediaDimensions = async (file: File): Promise<{ width?: number; height?: number; duration?: number }> => {
+    if (file.type.startsWith('image/')) {
+      try {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.src = url;
+        await new Promise((r) => { img.onload = r; img.onerror = r; });
+        const dims = { width: img.naturalWidth || 0, height: img.naturalHeight || 0 };
+        URL.revokeObjectURL(url);
+        return dims;
+      } catch {
+        return {};
+      }
+    }
+    if (file.type.startsWith('video/')) {
+      try {
+        const url = URL.createObjectURL(file);
+        const vid = document.createElement('video');
+        vid.preload = 'metadata';
+        vid.src = url;
+        await new Promise((r) => { vid.onloadedmetadata = r; vid.onerror = r; });
+        const dims = { width: vid.videoWidth || 0, height: vid.videoHeight || 0, duration: Math.round(vid.duration || 0) };
+        URL.revokeObjectURL(url);
+        return dims;
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  };
+
+  const sendMediaMessage = async (params: {
+    mediaItems: MediaItem[];
     text?: string;
   }) => {
     if (!uid || !selected?.id) return;
@@ -3142,16 +3177,259 @@ const handleSearchMessage = async (target: Rec) => {
           ? replyTarget
           : null;
 
+      const firstItem = params.mediaItems[0];
       const messageData: Rec = {
-        type: 'image',
+        type: 'media',
+        mediaItems: params.mediaItems,
         text: params.text || '',
-        mediaUrl: params.mediaUrl,
-        originalUrl: params.originalUrl || params.mediaUrl,
+        mediaUrl: firstItem?.mediaUrl || '',
+        originalUrl: firstItem?.originalUrl || firstItem?.mediaUrl || '',
+        driveFileId: firstItem?.driveFileId || null,
+        fileName: firstItem?.fileName || 'media',
+        sizeBytes: firstItem?.sizeBytes || null,
+        senderId: uid,
+        senderName: profile?.displayName || profile?.username || 'User',
+        senderUsername: profile?.username || '',
+        senderPhotoURL: profile?.photoURL || '',
+        senderProfileAssetId: profile?.profileAssetId || '',
+        createdAt: serverTimestamp(),
+        editedAt: null,
+        deleted: false,
+      };
+
+      if (targetReply) {
+        messageData.replyToMessageId = targetReply.id;
+        messageData.replyTo = {
+          id: targetReply.id,
+          senderId: targetReply.senderId || '',
+          senderName:
+            targetReply.senderName || targetReply.senderUsername || 'User',
+          senderUsername: targetReply.senderUsername || '',
+          text: getReplyExcerpt(targetReply),
+        };
+      }
+
+      const messageRef = await addDoc(
+        collection(db, 'conversations', selected.id, 'messages'),
+        messageData,
+      );
+
+      const count = params.mediaItems.length;
+      let summaryText = '📷 Photo';
+      if (params.text) {
+        summaryText = params.text;
+      } else if (count > 1) {
+        summaryText = `📷 ${count} media items`;
+      } else if (firstItem?.type === 'video') {
+        summaryText = '🎥 Video';
+      }
+
+      const updates: Rec = {
+        lastMessageId: messageRef.id,
+        lastMessageText: summaryText,
+        lastMessageAt: serverTimestamp(),
+        lastSenderId: uid,
+        lastSenderName: profile?.displayName || profile?.username || 'You',
+        updatedAt: serverTimestamp(),
+      };
+
+      await updateDoc(doc(db, 'conversations', selected.id), updates);
+      setReplyTarget(null);
+    } catch (error) {
+      console.error('Send media error:', error);
+      notify('Unable to send media', messageOf(error));
+    } finally {
+      sendingRef.current = false;
+      setSending(false);
+    }
+  };
+
+  const onPickGallery = async (e: ChangeEvent<HTMLInputElement>) => {
+    const fileList = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!fileList.length) return;
+
+    if (!selected?.id) {
+      notify('No chat open', 'Please open a conversation to send media.');
+      return;
+    }
+
+    if (fileList.length > 10) {
+      notify('Limit: 10 items', 'Maximum 10 photos/videos can be sent at once. Taking first 10.');
+    }
+
+    const filesToSend = fileList.slice(0, 10);
+    const caption = messageText.trim();
+    setMessageText('');
+
+    if (!drive.hasActiveSession) {
+      // Offline fallback: small images only
+      const smallImages = filesToSend.filter((f) => f.type.startsWith('image/') && f.size <= 850 * 1024);
+      if (smallImages.length === filesToSend.length) {
+        setSending(true);
+        try {
+          const mediaItems: MediaItem[] = [];
+          for (let i = 0; i < smallImages.length; i++) {
+            const f = smallImages[i];
+            const dataUri = await blobToDataUri(f);
+            const dims = await getMediaDimensions(f);
+            mediaItems.push({
+              id: `local_${Date.now()}_${i}`,
+              type: 'image',
+              mediaUrl: dataUri,
+              originalUrl: dataUri,
+              fileName: f.name,
+              sizeBytes: f.size,
+              width: dims.width,
+              height: dims.height,
+            });
+          }
+          await sendMediaMessage({ mediaItems, text: caption });
+        } catch (err) {
+          notify('Upload failed', messageOf(err));
+        } finally {
+          setSending(false);
+        }
+        return;
+      }
+      notify(
+        'Google Drive Required',
+        'Connect Google Drive in settings to send high-res photos and videos.',
+      );
+      return;
+    }
+
+    setSending(true);
+    notify('Uploading media…', `Uploading ${filesToSend.length} item(s) to Google Drive.`);
+
+    try {
+      const mediaItems: MediaItem[] = [];
+
+      for (let i = 0; i < filesToSend.length; i++) {
+        const file = filesToSend[i];
+        const isVideo = file.type.startsWith('video/');
+        const isImage = file.type.startsWith('image/');
+        if (!isVideo && !isImage) continue;
+
+        const folderType = isVideo ? 'videos' : 'photos';
+        const uploaded = await drive.uploadFile({
+          file,
+          fileName: file.name,
+          mimeType: file.type || (isVideo ? 'video/mp4' : 'image/jpeg'),
+          folderType,
+        });
+
+        await drive.makeFilePublic(uploaded.fileId);
+
+        const dims = await getMediaDimensions(file);
+        const previewUrl = isImage
+          ? `https://lh3.googleusercontent.com/d/${uploaded.fileId}=s1600`
+          : `/api/media?fileId=${uploaded.fileId}`;
+        const originalUrl = `/api/media?fileId=${uploaded.fileId}&download=true&name=${encodeURIComponent(file.name)}`;
+
+        mediaItems.push({
+          id: `${uploaded.fileId}_${Date.now()}_${i}`,
+          type: isVideo ? 'video' : 'image',
+          mediaUrl: previewUrl,
+          originalUrl,
+          driveFileId: uploaded.fileId,
+          fileName: file.name,
+          sizeBytes: file.size,
+          width: dims.width,
+          height: dims.height,
+          duration: dims.duration,
+        });
+      }
+
+      if (!mediaItems.length) {
+        notify('Upload failed', 'No valid image or video files selected.');
+        return;
+      }
+
+      await sendMediaMessage({
+        mediaItems,
+        text: caption,
+      });
+    } catch (err) {
+      console.error('Drive gallery upload error:', err);
+      notify('Upload failed', messageOf(err));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const onPickDocument = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    if (!selected?.id) {
+      notify('No chat open', 'Please open a conversation to send a file.');
+      return;
+    }
+
+    if (!drive.hasActiveSession) {
+      notify('Google Drive Required', 'Connect Google Drive in settings to upload files.');
+      return;
+    }
+
+    setSending(true);
+    notify('Uploading file…', `Uploading ${file.name} to Google Drive.`);
+
+    try {
+      const uploaded = await drive.uploadFile({
+        file,
+        fileName: file.name,
+        mimeType: file.type || 'application/octet-stream',
+        folderType: 'files',
+      });
+
+      await drive.makeFilePublic(uploaded.fileId);
+
+      const downloadUrl = `/api/media?fileId=${uploaded.fileId}&download=true&name=${encodeURIComponent(file.name)}`;
+
+      await sendFileMessage({
+        fileName: file.name,
+        fileSize: file.size,
+        mimeType: file.type || 'application/octet-stream',
+        driveFileId: uploaded.fileId,
+        fileUrl: downloadUrl,
+      });
+    } catch (err) {
+      console.error('Drive document upload error:', err);
+      notify('Upload failed', messageOf(err));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const sendFileMessage = async (params: {
+    fileName: string;
+    fileSize: number;
+    mimeType: string;
+    driveFileId?: string;
+    fileUrl: string;
+  }) => {
+    if (!uid || !selected?.id) return;
+    const activeConv = selectedConversation || selected;
+    if (!activeConv) return;
+
+    sendingRef.current = true;
+    setSending(true);
+
+    try {
+      const targetReply =
+        replyTarget && messages.some((m) => m.id === replyTarget.id)
+          ? replyTarget
+          : null;
+
+      const messageData: Rec = {
+        type: 'file',
+        fileName: params.fileName,
+        fileSize: params.fileSize,
+        mimeType: params.mimeType,
         driveFileId: params.driveFileId || null,
-        fileName: params.fileName || 'photo.jpg',
-        width: params.width || null,
-        height: params.height || null,
-        sizeBytes: params.size || null,
+        fileUrl: params.fileUrl,
         senderId: uid,
         senderName: profile?.displayName || profile?.username || 'User',
         senderUsername: profile?.username || '',
@@ -3181,7 +3459,7 @@ const handleSearchMessage = async (target: Rec) => {
 
       const updates: Rec = {
         lastMessageId: messageRef.id,
-        lastMessageText: params.text ? `📷 ${params.text}` : '📷 Photo',
+        lastMessageText: `📄 ${params.fileName}`,
         lastMessageAt: serverTimestamp(),
         lastSenderId: uid,
         lastSenderName: profile?.displayName || profile?.username || 'You',
@@ -3191,108 +3469,12 @@ const handleSearchMessage = async (target: Rec) => {
       await updateDoc(doc(db, 'conversations', selected.id), updates);
       setReplyTarget(null);
     } catch (error) {
-      console.error('Send image error:', error);
-      notify('Unable to send photo', messageOf(error));
+      console.error('Send file error:', error);
+      notify('Unable to send file', messageOf(error));
     } finally {
       sendingRef.current = false;
       setSending(false);
     }
-  };
-
-  const onPickImage = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-
-    if (!selected?.id) {
-      notify('No chat open', 'Please open a conversation to send a photo.');
-      return;
-    }
-
-    if (!file.type.startsWith('image/')) {
-      notify('Invalid file', 'Please select an image file (PNG, JPG, GIF, WebP).');
-      return;
-    }
-
-    let width = 0;
-    let height = 0;
-    try {
-      const objectUrl = URL.createObjectURL(file);
-      const img = new Image();
-      img.src = objectUrl;
-      await new Promise((resolve) => {
-        img.onload = resolve;
-        img.onerror = resolve;
-      });
-      width = img.naturalWidth || 0;
-      height = img.naturalHeight || 0;
-      URL.revokeObjectURL(objectUrl);
-    } catch {}
-
-    const caption = messageText.trim();
-
-    if (drive.hasActiveSession) {
-      notify('Uploading photo…', 'Uploading in original high quality to Google Drive.');
-      setSending(true);
-      try {
-        const uploaded = await drive.uploadFile({
-          file,
-          fileName: file.name,
-          mimeType: file.type || 'image/jpeg',
-          folderType: 'photos',
-        });
-        await drive.makeFilePublic(uploaded.fileId);
-
-        const previewUrl = `https://lh3.googleusercontent.com/d/${uploaded.fileId}=s1600`;
-        const originalUrl = `https://lh3.googleusercontent.com/d/${uploaded.fileId}=s0`;
-
-        await sendImageMessage({
-          driveFileId: uploaded.fileId,
-          mediaUrl: previewUrl,
-          originalUrl,
-          fileName: file.name,
-          width,
-          height,
-          size: file.size,
-          text: caption,
-        });
-        setMessageText('');
-      } catch (err) {
-        console.error('Drive image upload error:', err);
-        notify('Upload failed', messageOf(err));
-      } finally {
-        setSending(false);
-      }
-      return;
-    }
-
-    if (file.size <= 850 * 1024) {
-      setSending(true);
-      try {
-        const dataUri = await blobToDataUri(file);
-        await sendImageMessage({
-          mediaUrl: dataUri,
-          originalUrl: dataUri,
-          fileName: file.name,
-          width,
-          height,
-          size: file.size,
-          text: caption,
-        });
-        setMessageText('');
-      } catch (err) {
-        console.error('Image processing error:', err);
-        notify('Unable to send photo', messageOf(err));
-      } finally {
-        setSending(false);
-      }
-      return;
-    }
-
-    notify(
-      'Photo requires Google Drive',
-      'This image is large (>850KB). Please connect Google Drive in settings to send high-res photos.',
-    );
   };
 
   const startRecording = async () => {
@@ -3897,38 +4079,104 @@ const handleSearchMessage = async (target: Rec) => {
           onNotify={notify}
         />
       );
+    } else if (item.type === 'file') {
+      contentNode = (
+        <FileMessage
+          message={item}
+          own={item.senderId === uid}
+          onNotify={notify}
+        />
+      );
+    } else if (item.type === 'media' || (Array.isArray(item.mediaItems) && item.mediaItems.length > 0)) {
+      contentNode = (
+        <MediaGrid
+          items={item.mediaItems || []}
+          caption={item.text}
+          own={item.senderId === uid}
+          messageId={item.id}
+          createdAt={item.createdAt}
+          deletedFromDrive={item.deletedFromDrive}
+          onOpenImage={(mediaItem) => {
+            setActiveImageViewer({
+              previewUrl: mediaItem.originalUrl || mediaItem.mediaUrl,
+              originalUrl: mediaItem.originalUrl || mediaItem.mediaUrl,
+              fileName: mediaItem.fileName || 'Image',
+            });
+          }}
+          onOpenVideo={(mediaItem) => {
+            setActiveVideoViewer({
+              url: mediaItem.originalUrl || mediaItem.mediaUrl,
+              fileName: mediaItem.fileName || 'Video',
+            });
+          }}
+          onOpenGallery={(galleryItems, startIndex) => {
+            const target = galleryItems[startIndex] || galleryItems[0];
+            if (target?.type === 'video') {
+              setActiveVideoViewer({
+                url: target.originalUrl || target.mediaUrl,
+                fileName: target.fileName || 'Video',
+              });
+            } else if (target) {
+              setActiveImageViewer({
+                previewUrl: target.originalUrl || target.mediaUrl,
+                originalUrl: target.originalUrl || target.mediaUrl,
+                fileName: target.fileName || 'Image',
+              });
+            }
+          }}
+          onNotify={notify}
+        />
+      );
     } else if (hasImageMessage) {
       const isStandaloneUrl = isStandaloneImageUrl(item.text);
+      const singleItem: MediaItem = {
+        type: 'image',
+        mediaUrl: imgPreview,
+        originalUrl: imgOriginal,
+        driveFileId: item.driveFileId || null,
+        fileName: item.fileName || 'photo.jpg',
+        sizeBytes: item.sizeBytes || undefined,
+        width: item.width || undefined,
+        height: item.height || undefined,
+      };
       contentNode = (
-        <div className="shc-msg-image-block">
-          {item.text && !isStandaloneUrl && (
-            <span className="shc-dc-text">{renderFormattedText(item.text)}</span>
-          )}
-          <div className="shc-msg-image-wrap">
-            <button
-              type="button"
-              className="shc-msg-image-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                setActiveImageViewer({
-                  previewUrl: imgPreview,
-                  originalUrl: imgOriginal,
-                  fileName: item.fileName || 'Image',
-                });
-              }}
-              title="Click to view full-size image"
-              aria-label={`View full image: ${item.fileName || 'Image'}`}
-            >
-              <img
-                src={imgPreview}
-                alt={item.fileName || 'Chat image'}
-                className="shc-chat-image"
-                loading="lazy"
-                decoding="async"
-              />
-            </button>
-          </div>
-        </div>
+        <MediaGrid
+          items={[singleItem]}
+          caption={item.text && !isStandaloneUrl ? item.text : undefined}
+          own={item.senderId === uid}
+          messageId={item.id}
+          createdAt={item.createdAt}
+          deletedFromDrive={item.deletedFromDrive}
+          onOpenImage={(mi) => {
+            setActiveImageViewer({
+              previewUrl: mi.originalUrl || mi.mediaUrl,
+              originalUrl: mi.originalUrl || mi.mediaUrl,
+              fileName: mi.fileName || 'Image',
+            });
+          }}
+          onOpenVideo={(mi) => {
+            setActiveVideoViewer({
+              url: mi.originalUrl || mi.mediaUrl,
+              fileName: mi.fileName || 'Video',
+            });
+          }}
+          onOpenGallery={(items, idx) => {
+            const mi = items[idx] || items[0];
+            if (mi?.type === 'video') {
+              setActiveVideoViewer({
+                url: mi.originalUrl || mi.mediaUrl,
+                fileName: mi.fileName || 'Video',
+              });
+            } else if (mi) {
+              setActiveImageViewer({
+                previewUrl: mi.originalUrl || mi.mediaUrl,
+                originalUrl: mi.originalUrl || mi.mediaUrl,
+                fileName: mi.fileName || 'Image',
+              });
+            }
+          }}
+          onNotify={notify}
+        />
       );
     } else {
       const emojiOnly = isEmojiOnly(item.text);
@@ -4917,9 +5165,17 @@ const handleSearchMessage = async (target: Rec) => {
         <input
           ref={fileRef}
           type="file"
-          accept="image/*"
+          accept="image/*,video/*"
+          multiple
           hidden
-          onChange={onPickImage}
+          onChange={onPickGallery}
+        />
+        <input
+          ref={docRef}
+          type="file"
+          accept="*/*"
+          hidden
+          onChange={onPickDocument}
         />
       </>
     );
@@ -5069,7 +5325,7 @@ const handleSearchMessage = async (target: Rec) => {
               }}
             >
               <ImageIcon size={30} />
-              Photo
+              Gallery
             </button>
 
             <button
@@ -5079,7 +5335,7 @@ const handleSearchMessage = async (target: Rec) => {
                 setPanel('gif');
               }}
             >
-              <Smile size={30} />
+              <GoogleStickerIcon size={30} />
               GIF / Sticker
             </button>
 
@@ -5120,10 +5376,10 @@ const handleSearchMessage = async (target: Rec) => {
               type="button"
               onClick={() => {
                 setShowAttach(false);
-                notify('File attachment', 'File upload is not connected yet.');
+                docRef.current?.click();
               }}
             >
-              <FileText size={30} />
+              <GoogleFileIcon size={30} />
               File
             </button>
           </div>
@@ -5528,6 +5784,56 @@ const handleSearchMessage = async (target: Rec) => {
               src={activeImageViewer.originalUrl || activeImageViewer.previewUrl}
               alt={activeImageViewer.fileName || 'Full image preview'}
               className="shc-lightbox-img"
+            />
+          </div>
+        </div>
+      )}
+
+      {activeVideoViewer && (
+        <div
+          className="shc-lightbox-backdrop"
+          onClick={() => setActiveVideoViewer(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Video player"
+        >
+          <div className="shc-lightbox-bar" onClick={(e) => e.stopPropagation()}>
+            <span className="shc-lightbox-title">
+              {activeVideoViewer.fileName || 'Video'}
+            </span>
+            <div className="shc-lightbox-actions">
+              <a
+                href={activeVideoViewer.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                download={activeVideoViewer.fileName || 'video.mp4'}
+                className="shc-lightbox-btn"
+                title="Download video"
+                aria-label="Download video"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <ExternalLink size={16} />
+                <span>Download</span>
+              </a>
+              <button
+                type="button"
+                className="shc-lightbox-btn shc-lightbox-close"
+                onClick={() => setActiveVideoViewer(null)}
+                title="Close video"
+                aria-label="Close video player"
+              >
+                <X size={22} />
+              </button>
+            </div>
+          </div>
+
+          <div className="shc-lightbox-content" onClick={(e) => e.stopPropagation()}>
+            <video
+              src={activeVideoViewer.url}
+              controls
+              autoPlay
+              playsInline
+              style={{ maxWidth: '92vw', maxHeight: '82vh', borderRadius: 8, outline: 'none' }}
             />
           </div>
         </div>

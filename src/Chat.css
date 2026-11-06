@@ -93,8 +93,8 @@
   height: 16px;
   padding: 0 4px;
   border-radius: 8px;
-  background: var(--danger);
-  color: #fff;
+  background: #ffffff !important;
+  color: #000000 !important;
   font-size: 9px;
   font-weight: 800;
   line-height: 16px;
@@ -1386,10 +1386,275 @@
   flex-shrink: 0;
 }
 
-.shc-voice-unavailable-text {
-  font-size: 12px;
+.shc-file-expired-box,
+.shc-media-expired-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px dashed rgba(248, 113, 113, 0.5);
   color: #fca5a5;
-  line-height: 1.3;
+  font-size: 13px;
+  max-width: 360px;
+}
+
+.shc-file-expired-icon,
+.shc-media-expired-icon {
+  color: #f87171;
+  flex-shrink: 0;
+}
+
+/* WhatsApp-style Adaptive Media Grid */
+.shc-media-group-container {
+  display: flex;
+  flex-direction: column;
+  max-width: 360px;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.shc-media-grid {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  max-width: 360px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #000000;
+}
+
+.shc-media-grid.shc-grid-1 {
+  grid-template-columns: 1fr;
+  max-height: 420px;
+}
+
+.shc-media-grid.shc-grid-1 .shc-media-cell {
+  min-height: 200px;
+  max-height: 420px;
+}
+
+.shc-media-grid.shc-grid-2 {
+  grid-template-columns: 1fr 1fr;
+  height: 200px;
+}
+
+.shc-media-grid.shc-grid-3 {
+  grid-template-columns: 1.2fr 1fr;
+  grid-template-rows: 100px 100px;
+  height: 204px;
+}
+
+.shc-media-grid.shc-grid-3 .cell-1 {
+  grid-row: 1 / 3;
+}
+
+.shc-media-grid.shc-grid-4 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 105px 105px;
+  height: 214px;
+}
+
+.shc-media-cell {
+  position: relative;
+  overflow: hidden;
+  background: #18191c;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.shc-media-content {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: filter 0.2s ease;
+}
+
+.shc-media-blurred {
+  filter: blur(12px) brightness(0.6);
+  transform: scale(1.05);
+}
+
+/* WhatsApp-style Download Pill */
+.shc-media-dl-pill {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  color: #ffffff;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+  z-index: 3;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.shc-media-dl-pill:hover {
+  background: rgba(0, 0, 0, 0.85);
+  transform: translate(-50%, -50%) scale(1.04);
+}
+
+.shc-media-dl-pill:active {
+  transform: translate(-50%, -50%) scale(0.96);
+}
+
+/* Video Play Button */
+.shc-video-play-btn {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(6px);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  z-index: 2;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.shc-video-play-btn:hover {
+  background: rgba(0, 0, 0, 0.85);
+  transform: translate(-50%, -50%) scale(1.06);
+}
+
+.shc-video-play-btn svg {
+  margin-left: 2px;
+}
+
+/* +N Remaining Overlay */
+.shc-media-more-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 28px;
+  font-weight: 800;
+  z-index: 2;
+}
+
+.shc-media-caption {
+  padding: 8px 10px;
+  font-size: 14px;
+  color: #ffffff;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* WhatsApp-style File / Document Card */
+.shc-file-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #1e1f22;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  max-width: 360px;
+  min-width: 240px;
+  box-sizing: border-box;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.shc-file-card:hover {
+  background: #25272a;
+}
+
+.shc-file-own {
+  background: #262142;
+  border-color: #3f3669;
+}
+
+.shc-file-own:hover {
+  background: #2d274f;
+}
+
+.shc-file-badge {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: #2b2d31;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 11px;
+  color: #949ba4;
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+
+.shc-file-own .shc-file-badge {
+  background: #38305c;
+  color: #c4b5fd;
+}
+
+.shc-file-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.shc-file-name {
+  font-size: 14px;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+
+.shc-file-meta {
+  font-size: 12px;
+  color: #949ba4;
+}
+
+.shc-file-dl-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.shc-file-dl-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+
+.shc-file-done-check {
+  color: #22c55e;
 }
 
 /* Poll + event cards */
