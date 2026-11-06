@@ -5380,6 +5380,7 @@ const handleSearchMessage = async (target: Rec) => {
               type="button"
               onClick={() => {
                 setShowAttach(false);
+                setGifSearch('');
                 setPanel('gif');
               }}
             >
@@ -5543,7 +5544,17 @@ const handleSearchMessage = async (target: Rec) => {
                 type="button"
                 key={type}
                 className={gifMode === type ? 'shc-segment shc-segment-on' : 'shc-segment'}
-                onClick={() => setGifMode(type)}
+                onClick={() => {
+                  if (gifMode !== type) {
+                    setGifMode(type);
+                    setGifSearch('');
+                  }
+                }}
+                style={
+                  gifMode === type
+                    ? { backgroundColor: '#ffffff', color: '#000000', borderColor: '#ffffff', fontWeight: 800 }
+                    : { backgroundColor: '#1e1f22', color: '#949ba4', borderColor: 'rgba(255,255,255,0.08)' }
+                }
               >
                 {type === 'gif' ? 'GIF' : 'Sticker'}
               </button>

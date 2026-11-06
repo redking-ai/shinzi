@@ -2831,17 +2831,21 @@
 .shc-segment {
   flex: 1;
   min-height: 40px;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
-  background: var(--surface-2);
-  color: var(--muted);
+  background: #1e1f22 !important;
+  color: #949ba4 !important;
   font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
+button.shc-segment.shc-segment-on,
 .shc-segment-on {
-  border-color: #ffffff;
-  background: #ffffff;
-  color: #000000;
+  border-color: #ffffff !important;
+  background: #ffffff !important;
+  color: #000000 !important;
+  font-weight: 800 !important;
 }
 
 .shc-gif-search {
