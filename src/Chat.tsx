@@ -82,7 +82,7 @@ import VoicePlayer from './VoicePlayer';
 import { GoogleStickerIcon, GoogleFileIcon, GoogleGifIcon } from './GoogleIcons';
 import { MediaGrid, type MediaItem } from './MediaGrid';
 import { FileMessage } from './FileMessage';
-import { searchKlipy, type KlipyItem } from './klipyService';
+import { searchKlipy, getCachedKlipy, type KlipyItem } from './klipyService';
 import { cacheAudioBlob } from './voiceCache';
 import MuiAvatar from '@mui/material/Avatar';
 import './Chat.css';
@@ -1875,26 +1875,38 @@ export default function Chat({ onNavigate }: ChatProps) {
   useEffect(() => {
     if (panel !== 'gif') return;
     let active = true;
+
+    // Check instant in-memory cache first (0ms load)
+    const cached = getCachedKlipy(gifMode, gifSearch);
+    if (cached) {
+      setKlipyItems(cached);
+      setKlipyLoading(false);
+      return;
+    }
+
     setKlipyLoading(true);
+    const controller = new AbortController();
 
     const timer = setTimeout(async () => {
       try {
-        const items = await searchKlipy(gifMode, gifSearch);
+        const items = await searchKlipy(gifMode, gifSearch, 24, controller.signal);
         if (active) {
           setKlipyItems(items);
           setKlipyLoading(false);
         }
-      } catch (err) {
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return;
         if (active) {
           console.error('Klipy fetch error:', err);
           setKlipyItems([]);
           setKlipyLoading(false);
         }
       }
-    }, gifSearch ? 300 : 0);
+    }, gifSearch ? 180 : 0);
 
     return () => {
       active = false;
+      controller.abort();
       clearTimeout(timer);
     };
   }, [panel, gifMode, gifSearch]);

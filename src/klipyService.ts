@@ -7,39 +7,55 @@ export interface KlipyItem {
   type: 'gif' | 'sticker';
   previewUrl: string;
   originalUrl: string;
-  width?: number;
-  height?: number;
+  width?: number | null;
+  height?: number | null;
 }
 
-const extractMediaUrl = (file: any): { previewUrl: string; originalUrl: string; width?: number; height?: number } => {
+// In-memory query cache for instant 0ms responses
+const klipyCache = new Map<string, KlipyItem[]>();
+
+const extractMediaUrl = (file: any, type: 'gif' | 'sticker'): { previewUrl: string; originalUrl: string; width?: number | null; height?: number | null } => {
   if (!file) return { previewUrl: '', originalUrl: '' };
 
-  // Preferred order: sm for preview, md/hd for original
-  const sm = file.sm?.webp?.url || file.sm?.gif?.url || file.sm?.png?.url;
-  const md = file.md?.gif?.url || file.md?.webp?.url || file.md?.png?.url;
-  const hd = file.hd?.gif?.url || file.hd?.webp?.url || file.hd?.png?.url;
+  // For lightning-fast previews, use high-efficiency animated WebP or PNG thumbnails
+  const smWebp = file.sm?.webp?.url || file.xs?.webp?.url;
+  const smPng = file.sm?.png?.url || file.md?.png?.url;
+  const smGif = file.sm?.gif?.url || file.xs?.gif?.url;
 
-  const originalUrl = md || hd || sm || '';
-  const previewUrl = sm || originalUrl;
+  // In sticker mode, PNG/WebP provides transparent background
+  const previewUrl = type === 'sticker'
+    ? (smPng || smWebp || smGif || '')
+    : (smWebp || smGif || smPng || '');
 
-  const width = file.sm?.gif?.width || file.md?.gif?.width || file.hd?.gif?.width;
-  const height = file.sm?.gif?.height || file.md?.gif?.height || file.hd?.gif?.height;
+  // For chat playback, use medium WebP / GIF
+  const mdWebp = file.md?.webp?.url || file.hd?.webp?.url;
+  const mdGif = file.md?.gif?.url || file.hd?.gif?.url;
+  const originalUrl = mdWebp || mdGif || previewUrl;
+
+  const width = file.sm?.webp?.width || file.sm?.gif?.width || null;
+  const height = file.sm?.webp?.height || file.sm?.gif?.height || null;
 
   return { previewUrl, originalUrl, width, height };
 };
 
 export const fetchKlipyTrending = async (
   type: 'gif' | 'sticker',
-  perPage = 30
+  perPage = 24,
+  signal?: AbortSignal
 ): Promise<KlipyItem[]> => {
+  const cacheKey = `trending_${type}_${perPage}`;
+  if (klipyCache.has(cacheKey)) {
+    return klipyCache.get(cacheKey)!;
+  }
+
   const endpoint = type === 'gif' ? 'gifs' : 'stickers';
-  const res = await fetch(`${KLIPY_BASE_URL}/${endpoint}/trending?per_page=${perPage}`);
+  const res = await fetch(`${KLIPY_BASE_URL}/${endpoint}/trending?per_page=${perPage}`, { signal });
   if (!res.ok) throw new Error(`Klipy trending error: ${res.status}`);
   const json = await res.json();
   const rawList = json?.data?.data || [];
 
-  return rawList.map((item: any) => {
-    const { previewUrl, originalUrl, width, height } = extractMediaUrl(item.file);
+  const items = rawList.map((item: any) => {
+    const { previewUrl, originalUrl, width, height } = extractMediaUrl(item.file, type);
     return {
       id: item.id,
       title: item.title || (type === 'gif' ? 'GIF' : 'Sticker'),
@@ -49,25 +65,37 @@ export const fetchKlipyTrending = async (
       width,
       height,
     };
-  }).filter((it: KlipyItem) => Boolean(it.originalUrl));
+  }).filter((it: KlipyItem) => Boolean(it.previewUrl && it.originalUrl));
+
+  klipyCache.set(cacheKey, items);
+  return items;
 };
 
 export const searchKlipy = async (
   type: 'gif' | 'sticker',
   query: string,
-  perPage = 30
+  perPage = 24,
+  signal?: AbortSignal
 ): Promise<KlipyItem[]> => {
-  const q = query.trim();
-  if (!q) return fetchKlipyTrending(type, perPage);
+  const q = query.trim().toLowerCase();
+  if (!q) return fetchKlipyTrending(type, perPage, signal);
+
+  const cacheKey = `search_${type}_${q}_${perPage}`;
+  if (klipyCache.has(cacheKey)) {
+    return klipyCache.get(cacheKey)!;
+  }
 
   const endpoint = type === 'gif' ? 'gifs' : 'stickers';
-  const res = await fetch(`${KLIPY_BASE_URL}/${endpoint}/search?q=${encodeURIComponent(q)}&per_page=${perPage}`);
+  const res = await fetch(
+    `${KLIPY_BASE_URL}/${endpoint}/search?q=${encodeURIComponent(q)}&per_page=${perPage}`,
+    { signal }
+  );
   if (!res.ok) throw new Error(`Klipy search error: ${res.status}`);
   const json = await res.json();
   const rawList = json?.data?.data || [];
 
-  return rawList.map((item: any) => {
-    const { previewUrl, originalUrl, width, height } = extractMediaUrl(item.file);
+  const items = rawList.map((item: any) => {
+    const { previewUrl, originalUrl, width, height } = extractMediaUrl(item.file, type);
     return {
       id: item.id,
       title: item.title || (type === 'gif' ? 'GIF' : 'Sticker'),
@@ -77,5 +105,14 @@ export const searchKlipy = async (
       width,
       height,
     };
-  }).filter((it: KlipyItem) => Boolean(it.originalUrl));
+  }).filter((it: KlipyItem) => Boolean(it.previewUrl && it.originalUrl));
+
+  klipyCache.set(cacheKey, items);
+  return items;
+};
+
+export const getCachedKlipy = (type: 'gif' | 'sticker', query: string, perPage = 24): KlipyItem[] | null => {
+  const q = query.trim().toLowerCase();
+  const cacheKey = q ? `search_${type}_${q}_${perPage}` : `trending_${type}_${perPage}`;
+  return klipyCache.get(cacheKey) || null;
 };
