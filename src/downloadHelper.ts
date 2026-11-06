@@ -22,6 +22,7 @@ const DOWNLOAD_PREFIX = 'shinzi_dl_';
 export const isMediaDownloaded = (id: string, own?: boolean): boolean => {
   if (own) return true; // Senders already possess the original files
   if (!id) return false;
+  if (id.startsWith('klipy_')) return true;
   try {
     return localStorage.getItem(DOWNLOAD_PREFIX + id) === '1';
   } catch {

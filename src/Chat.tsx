@@ -82,6 +82,7 @@ import VoicePlayer from './VoicePlayer';
 import { GoogleStickerIcon, GoogleFileIcon } from './GoogleIcons';
 import { MediaGrid, type MediaItem } from './MediaGrid';
 import { FileMessage } from './FileMessage';
+import { searchKlipy, type KlipyItem } from './klipyService';
 import { cacheAudioBlob } from './voiceCache';
 import MuiAvatar from '@mui/material/Avatar';
 import './Chat.css';
@@ -1137,8 +1138,9 @@ export default function Chat({ onNavigate }: ChatProps) {
   const [creatingEvent, setCreatingEvent] = useState(false);
 
   const [gifMode, setGifMode] = useState<'gif' | 'sticker'>('gif');
-  const [gifCategory, setGifCategory] = useState('normal');
   const [gifSearch, setGifSearch] = useState('');
+  const [klipyItems, setKlipyItems] = useState<KlipyItem[]>([]);
+  const [klipyLoading, setKlipyLoading] = useState(false);
 
   const [recording, setRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
@@ -1820,6 +1822,33 @@ export default function Chat({ onNavigate }: ChatProps) {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeImageViewer, activeVideoViewer]);
+
+  useEffect(() => {
+    if (panel !== 'gif') return;
+    let active = true;
+    setKlipyLoading(true);
+
+    const timer = setTimeout(async () => {
+      try {
+        const items = await searchKlipy(gifMode, gifSearch);
+        if (active) {
+          setKlipyItems(items);
+          setKlipyLoading(false);
+        }
+      } catch (err) {
+        if (active) {
+          console.error('Klipy fetch error:', err);
+          setKlipyItems([]);
+          setKlipyLoading(false);
+        }
+      }
+    }, gifSearch ? 300 : 0);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [panel, gifMode, gifSearch]);
 
   // Clear mention suggestions whenever switching conversations, screens, or when text is empty
   const openConversation = async (conversation: Rec) => {
@@ -3475,6 +3504,25 @@ const handleSearchMessage = async (target: Rec) => {
       sendingRef.current = false;
       setSending(false);
     }
+  };
+
+  const onSelectKlipyItem = async (item: KlipyItem) => {
+    if (!uid || !selected?.id) return;
+    setPanel(null);
+
+    await sendMediaMessage({
+      mediaItems: [
+        {
+          id: `klipy_${item.id}_${Date.now()}`,
+          type: 'image',
+          mediaUrl: item.originalUrl || item.previewUrl,
+          originalUrl: item.originalUrl || item.previewUrl,
+          fileName: `${item.title || item.type}.gif`,
+          width: item.width,
+          height: item.height,
+        },
+      ],
+    });
   };
 
   const startRecording = async () => {
@@ -5503,30 +5551,41 @@ const handleSearchMessage = async (target: Rec) => {
           </div>
 
           <input
-            className="shc-input"
-            placeholder={`Search ${gifMode}s`}
+            className="shc-gif-search"
+            placeholder={gifMode === 'gif' ? 'Search gifs' : 'Search stickers'}
             value={gifSearch}
             onChange={(e) => setGifSearch(e.target.value)}
           />
 
-          <div className="shc-chips">
-            {['normal', 'trending', 'funny', 'reaction', 'gaming'].map((category) => (
-              <button
-                type="button"
-                key={category}
-                className={gifCategory === category ? 'shc-chip shc-chip-on' : 'shc-chip'}
-                onClick={() => setGifCategory(category)}
-              >
-                {category}
-              </button>
-            ))}
-          </div>
-
-          <EmptyState
-            icon={gifMode === 'gif' ? <ImageIcon size={44} /> : <Smile size={44} />}
-            title={gifSearch.trim() ? 'Search is ready' : 'GIF and sticker browser'}
-            text="A GIF provider still needs to be connected, so nothing can be sent from here yet."
-          />
+          {klipyLoading ? (
+            <div className="shc-klipy-loading">
+              <span className="shc-spinner" />
+            </div>
+          ) : klipyItems.length === 0 ? (
+            <div className="shc-klipy-empty">
+              {gifSearch.trim()
+                ? `no result for "${gifSearch.trim()}" ${gifMode}`
+                : `No ${gifMode}s found`}
+            </div>
+          ) : (
+            <div className="shc-klipy-grid">
+              {klipyItems.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`shc-klipy-item ${item.type === 'sticker' ? 'shc-klipy-item-sticker' : ''}`}
+                  onClick={() => void onSelectKlipyItem(item)}
+                  title={item.title}
+                >
+                  <img
+                    src={item.previewUrl || item.originalUrl}
+                    alt={item.title}
+                    loading="lazy"
+                  />
+                </button>
+              ))}
+            </div>
+          )}
         </Sheet>
       )}
 
