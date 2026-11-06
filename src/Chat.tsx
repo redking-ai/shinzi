@@ -79,7 +79,7 @@ import {
 } from './emojiData';
 import OtherProfile from './OtherProfile';
 import VoicePlayer from './VoicePlayer';
-import { GoogleStickerIcon, GoogleFileIcon } from './GoogleIcons';
+import { GoogleStickerIcon, GoogleFileIcon, GoogleGifIcon } from './GoogleIcons';
 import { MediaGrid, type MediaItem } from './MediaGrid';
 import { FileMessage } from './FileMessage';
 import { searchKlipy, type KlipyItem } from './klipyService';
@@ -315,13 +315,62 @@ const isStandaloneImageUrl = (text?: string): string | null => {
   return null;
 };
 
+const sanitizeForFirestore = <T,>(obj: T): T => {
+  if (obj === undefined) return null as any;
+  if (obj === null || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(sanitizeForFirestore) as any;
+  }
+  const clean: Record<string, any> = {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (val !== undefined) {
+      clean[key] = sanitizeForFirestore(val);
+    }
+  }
+  return clean as any;
+};
+
+const isGifMessage = (msg: Rec | null | undefined): boolean => {
+  if (!msg) return false;
+  if (msg.type === 'gif') return true;
+  const first = msg.mediaItems?.[0];
+  if (first?.fileName?.toLowerCase().endsWith('.gif') || first?.mediaUrl?.includes('klipy')) return true;
+  if (msg.fileName?.toLowerCase().endsWith('.gif') || msg.mediaUrl?.includes('klipy')) return true;
+  return false;
+};
+
+const isStickerMessage = (msg: Rec | null | undefined): boolean => {
+  if (!msg) return false;
+  if (msg.type === 'sticker') return true;
+  const first = msg.mediaItems?.[0];
+  if (first?.fileName?.toLowerCase().endsWith('.sticker') || first?.type === 'sticker') return true;
+  if (msg.fileName?.toLowerCase().endsWith('.sticker')) return true;
+  return false;
+};
+
+const getReplyThumbnail = (msg: Rec | null | undefined): string | null => {
+  if (!msg || msg.deleted) return null;
+  if (msg.replyTo?.thumbnail) return msg.replyTo.thumbnail;
+  if (msg.mediaItems && msg.mediaItems.length > 0) {
+    return msg.mediaItems[0]?.previewUrl || msg.mediaItems[0]?.mediaUrl || null;
+  }
+  if (msg.mediaUrl) return msg.mediaUrl;
+  if (msg.imageUrl) return msg.imageUrl;
+  if (msg.driveFileId) return `https://lh3.googleusercontent.com/d/${msg.driveFileId}=s160`;
+  return null;
+};
+
 const getReplyExcerpt = (msg: Rec | null | undefined): string => {
   if (!msg) return '';
   if (msg.deleted) return 'This message was deleted';
   if (msg.type === 'poll') return `Poll: ${msg.question || ''}`;
   if (msg.type === 'event') return `Event: ${msg.name || ''}`;
   if (msg.type === 'voice') return 'Voice message';
-  if (msg.type === 'image' || msg.driveFileId || msg.mediaUrl) return msg.text ? `📷 ${msg.text}` : '📷 Photo';
+  if (msg.type === 'file') return `📄 ${msg.fileName || 'File'}`;
+  if (isStickerMessage(msg)) return 'Sticker';
+  if (isGifMessage(msg)) return msg.text ? `GIF: ${msg.text}` : 'GIF';
+  if (msg.type === 'video' || msg.mediaItems?.[0]?.type === 'video') return msg.text ? `🎥 ${msg.text}` : '🎥 Video';
+  if (msg.type === 'image' || msg.type === 'media' || msg.driveFileId || msg.mediaUrl) return msg.text ? `📷 ${msg.text}` : '📷 Photo';
   return String(msg.text || '').slice(0, 100);
 };
 
@@ -3192,6 +3241,8 @@ const handleSearchMessage = async (target: Rec) => {
   const sendMediaMessage = async (params: {
     mediaItems: MediaItem[];
     text?: string;
+    isGif?: boolean;
+    isSticker?: boolean;
   }) => {
     if (!uid || !selected?.id) return;
     const activeConv = selectedConversation || selected;
@@ -3207,9 +3258,27 @@ const handleSearchMessage = async (target: Rec) => {
           : null;
 
       const firstItem = params.mediaItems[0];
-      const messageData: Rec = {
-        type: 'media',
-        mediaItems: params.mediaItems,
+      const isGif = Boolean(
+        params.isGif ||
+        firstItem?.fileName?.toLowerCase().endsWith('.gif') ||
+        firstItem?.mediaUrl?.includes('klipy')
+      );
+      const isSticker = Boolean(
+        params.isSticker ||
+        firstItem?.fileName?.toLowerCase().endsWith('.sticker')
+      );
+
+      const messageType = isSticker ? 'sticker' : (isGif ? 'gif' : 'media');
+
+      const rawMessageData: Rec = {
+        type: messageType,
+        mediaItems: params.mediaItems.map((it) => ({
+          ...it,
+          width: it.width ?? null,
+          height: it.height ?? null,
+          duration: it.duration ?? null,
+          sizeBytes: it.sizeBytes ?? null,
+        })),
         text: params.text || '',
         mediaUrl: firstItem?.mediaUrl || '',
         originalUrl: firstItem?.originalUrl || firstItem?.mediaUrl || '',
@@ -3227,16 +3296,20 @@ const handleSearchMessage = async (target: Rec) => {
       };
 
       if (targetReply) {
-        messageData.replyToMessageId = targetReply.id;
-        messageData.replyTo = {
+        rawMessageData.replyToMessageId = targetReply.id;
+        rawMessageData.replyTo = {
           id: targetReply.id,
           senderId: targetReply.senderId || '',
           senderName:
             targetReply.senderName || targetReply.senderUsername || 'User',
           senderUsername: targetReply.senderUsername || '',
           text: getReplyExcerpt(targetReply),
+          thumbnail: getReplyThumbnail(targetReply) || null,
+          isGif: isGifMessage(targetReply),
         };
       }
+
+      const messageData = sanitizeForFirestore(rawMessageData);
 
       const messageRef = await addDoc(
         collection(db, 'conversations', selected.id, 'messages'),
@@ -3247,20 +3320,24 @@ const handleSearchMessage = async (target: Rec) => {
       let summaryText = '📷 Photo';
       if (params.text) {
         summaryText = params.text;
+      } else if (isSticker) {
+        summaryText = 'Sticker';
+      } else if (isGif) {
+        summaryText = 'GIF';
       } else if (count > 1) {
         summaryText = `📷 ${count} media items`;
       } else if (firstItem?.type === 'video') {
         summaryText = '🎥 Video';
       }
 
-      const updates: Rec = {
+      const updates: Rec = sanitizeForFirestore({
         lastMessageId: messageRef.id,
         lastMessageText: summaryText,
         lastMessageAt: serverTimestamp(),
         lastSenderId: uid,
         lastSenderName: profile?.displayName || profile?.username || 'You',
         updatedAt: serverTimestamp(),
-      };
+      });
 
       await updateDoc(doc(db, 'conversations', selected.id), updates);
       setReplyTarget(null);
@@ -3336,15 +3413,17 @@ const handleSearchMessage = async (target: Rec) => {
 
       for (let i = 0; i < filesToSend.length; i++) {
         const file = filesToSend[i];
+        const isHeic = file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif') || file.type.includes('heic') || file.type.includes('heif');
         const isVideo = file.type.startsWith('video/');
-        const isImage = file.type.startsWith('image/');
+        const isImage = file.type.startsWith('image/') || isHeic;
         if (!isVideo && !isImage) continue;
 
         const folderType = isVideo ? 'videos' : 'photos';
+        const mimeType = file.type || (isHeic ? 'image/heic' : (isVideo ? 'video/mp4' : 'image/jpeg'));
         const uploaded = await drive.uploadFile({
           file,
           fileName: file.name,
-          mimeType: file.type || (isVideo ? 'video/mp4' : 'image/jpeg'),
+          mimeType,
           folderType,
         });
 
@@ -3364,9 +3443,9 @@ const handleSearchMessage = async (target: Rec) => {
           driveFileId: uploaded.fileId,
           fileName: file.name,
           sizeBytes: file.size,
-          width: dims.width,
-          height: dims.height,
-          duration: dims.duration,
+          width: dims.width ?? null,
+          height: dims.height ?? null,
+          duration: dims.duration ?? null,
         });
       }
 
@@ -3517,11 +3596,13 @@ const handleSearchMessage = async (target: Rec) => {
           type: 'image',
           mediaUrl: item.originalUrl || item.previewUrl,
           originalUrl: item.originalUrl || item.previewUrl,
-          fileName: `${item.title || item.type}.gif`,
-          width: item.width,
-          height: item.height,
+          fileName: `${item.title || item.type}.${item.type === 'sticker' ? 'sticker' : 'gif'}`,
+          width: item.width ?? null,
+          height: item.height ?? null,
         },
       ],
+      isGif: item.type === 'gif',
+      isSticker: item.type === 'sticker',
     });
   };
 
@@ -4018,6 +4099,8 @@ const handleSearchMessage = async (target: Rec) => {
     let quotedSender = 'User';
     let quotedText = 'Original message unavailable';
     let quotedSenderId = '';
+    const quotedThumb = getReplyThumbnail(original) || item.replyTo?.thumbnail || null;
+    const quotedIsGif = isGifMessage(original) || Boolean(item.replyTo?.isGif);
 
     if (replyId) {
       if (original) {
@@ -4280,8 +4363,18 @@ const handleSearchMessage = async (target: Rec) => {
               }
               size="xs"
             />
+            {quotedThumb && (
+              <img
+                src={quotedThumb}
+                alt=""
+                className="shc-dc-reply-spine-thumb"
+              />
+            )}
             <span className="shc-dc-reply-sender">{quotedSender}</span>
-            <span className="shc-dc-reply-text">{quotedText}</span>
+            <span className="shc-dc-reply-text" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+              {quotedIsGif && <GoogleGifIcon size={14} />}
+              {quotedText}
+            </span>
           </div>
         )}
 
@@ -4494,11 +4587,28 @@ const handleSearchMessage = async (target: Rec) => {
                     : '') ||
                   (item.type === 'group' ? '' : name);
 
-            const previewText = item.lastMessageText
-              ? lastSenderName
-                ? `${lastSenderName}: ${item.lastMessageText}`
-                : item.lastMessageText
-              : 'No messages yet';
+            const isLastMsgGif = item.lastMessageText === 'GIF' || item.lastMessageText === 'gif';
+            const isLastMsgSticker = item.lastMessageText === 'Sticker' || item.lastMessageText === 'sticker';
+
+            const previewNode = item.lastMessageText ? (
+              isLastMsgGif ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  {lastSenderName ? `${lastSenderName}: ` : ''}
+                  <GoogleGifIcon size={16} /> GIF
+                </span>
+              ) : isLastMsgSticker ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  {lastSenderName ? `${lastSenderName}: ` : ''}
+                  <GoogleStickerIcon size={14} /> Sticker
+                </span>
+              ) : (
+                lastSenderName
+                  ? `${lastSenderName}: ${item.lastMessageText}`
+                  : item.lastMessageText
+              )
+            ) : (
+              'No messages yet'
+            );
 
             const otherId = otherMemberId(item);
             const otherProfile = userLiveProfiles[otherId] || (item.memberProfiles?.[otherId]);
@@ -4537,7 +4647,7 @@ const handleSearchMessage = async (target: Rec) => {
 
                   <span className="shc-conv-bottom">
                     <span className={unread ? 'shc-conv-preview shc-unread' : 'shc-conv-preview'}>
-                      {previewText}
+                      {previewNode}
                     </span>
 
                     <span className="shc-conv-icons">
@@ -5002,37 +5112,49 @@ const handleSearchMessage = async (target: Rec) => {
           </div>
         )}
 
-        {replyTarget && (
-          <div className="shc-reply-bar">
-            <div className="shc-reply-bar-left">
-              <Reply size={16} className="shc-reply-bar-icon" />
-              <div className="shc-reply-bar-content">
-                <span className="shc-reply-bar-sender">
-                  Replying to{' '}
-                  <span className="shc-reply-bar-target-name">
-                    {replyTarget.senderName ||
-                      replyTarget.senderUsername ||
-                      (replyTarget.senderId === uid
-                        ? profile?.displayName || profile?.username || 'You'
-                        : 'User')}
+        {replyTarget && (() => {
+          const thumb = getReplyThumbnail(replyTarget);
+          const isGif = isGifMessage(replyTarget);
+          return (
+            <div className="shc-reply-bar">
+              <div className="shc-reply-bar-left">
+                <Reply size={16} className="shc-reply-bar-icon" />
+                {thumb && (
+                  <img
+                    src={thumb}
+                    alt=""
+                    className="shc-reply-thumb"
+                  />
+                )}
+                <div className="shc-reply-bar-content">
+                  <span className="shc-reply-bar-sender">
+                    Replying to{' '}
+                    <span className="shc-reply-bar-target-name">
+                      {replyTarget.senderName ||
+                        replyTarget.senderUsername ||
+                        (replyTarget.senderId === uid
+                          ? profile?.displayName || profile?.username || 'You'
+                          : 'User')}
+                    </span>
                   </span>
-                </span>
-                <span className="shc-reply-bar-text">
-                  {getReplyExcerpt(replyTarget)}
-                </span>
+                  <span className="shc-reply-bar-text" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    {isGif && <GoogleGifIcon size={15} />}
+                    {getReplyExcerpt(replyTarget)}
+                  </span>
+                </div>
               </div>
+              <button
+                type="button"
+                className="shc-reply-bar-close"
+                onClick={() => setReplyTarget(null)}
+                title="Cancel reply"
+                aria-label="Cancel reply"
+              >
+                <X size={16} />
+              </button>
             </div>
-            <button
-              type="button"
-              className="shc-reply-bar-close"
-              onClick={() => setReplyTarget(null)}
-              title="Cancel reply"
-              aria-label="Cancel reply"
-            >
-              <X size={16} />
-            </button>
-          </div>
-        )}
+          );
+        })()}
 
         {editingMessage && (
           <div className="shc-editing-banner">

@@ -10,10 +10,10 @@ export interface MediaItem {
   originalUrl?: string;
   driveFileId?: string | null;
   fileName?: string;
-  sizeBytes?: number;
-  width?: number;
-  height?: number;
-  duration?: number;
+  sizeBytes?: number | null;
+  width?: number | null;
+  height?: number | null;
+  duration?: number | null;
 }
 
 interface MediaGridProps {

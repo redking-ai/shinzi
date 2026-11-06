@@ -1897,6 +1897,27 @@
   flex-shrink: 0;
 }
 
+.shc-reply-thumb {
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: #1e1f22;
+}
+
+.shc-dc-reply-spine-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  object-fit: cover;
+  flex-shrink: 0;
+  vertical-align: middle;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: inline-block;
+}
+
 .shc-reply-bar-content {
   display: flex;
   flex-direction: column;

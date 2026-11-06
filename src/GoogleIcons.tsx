@@ -49,3 +49,16 @@ export const GoogleFileIcon = ({ size = 24, className = '' }: { size?: number; c
     <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" />
   </svg>
 );
+
+export const GoogleGifIcon = ({ size = 22, className = '' }: { size?: number; className?: string }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    className={className}
+    style={{ display: 'inline-block', verticalAlign: 'middle' }}
+  >
+    <path d="M11.5 9H13v6h-1.5zM9 9H6c-.6 0-1 .5-1 1v4c0 .5.4 1 1 1h3c.6 0 1-.5 1-1v-2H7.5v1h-1v-4H9V9zm10 1.5V9h-4.5v6H16v-2h2v-1.5h-2v-1h3z" />
+  </svg>
+);

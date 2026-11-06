@@ -5,7 +5,7 @@
  * and tracking downloaded state in localStorage for WhatsApp-style media.
  */
 
-export const formatBytes = (bytes?: number): string => {
+export const formatBytes = (bytes?: number | null): string => {
   if (!bytes || isNaN(bytes) || bytes <= 0) return '0 B';
   const units = ['B', 'kB', 'MB', 'GB'];
   let val = bytes;
