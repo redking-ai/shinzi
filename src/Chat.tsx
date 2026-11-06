@@ -1544,11 +1544,13 @@ export default function Chat({ onNavigate }: ChatProps) {
   }, [conversations, uid, otherMemberId, userLiveAvatars, userLiveProfiles]);
 
   useEffect(() => {
-    if (!messages || messages.length === 0) return;
+    const fromMessages = (messages || []).map((m) => m.senderId);
+    const fromFriendReqs = (friendRequests || []).map((r) => r.fromUid || r.fromProfile?.uid);
+    const fromDmReqs = (dmRequests || []).map((r) => r.fromUid || r.fromProfile?.uid);
+
     const missingUids = Array.from(
       new Set(
-        messages
-          .map((m) => m.senderId)
+        [...fromMessages, ...fromFriendReqs, ...fromDmReqs]
           .filter((id) => Boolean(id) && id !== uid && !userLiveProfiles[id])
       )
     );
@@ -1571,7 +1573,7 @@ export default function Chat({ onNavigate }: ChatProps) {
     return () => {
       cancelled = true;
     };
-  }, [messages, uid, userLiveProfiles]);
+  }, [messages, friendRequests, dmRequests, uid, userLiveProfiles]);
 
   const unreadCount = useMemo(() => {
     if (!uid) return 0;
@@ -4321,23 +4323,33 @@ const handleSearchMessage = async (target: Rec) => {
     accept: (request: Rec) => Promise<void>,
   ) =>
     function Row(item: Rec) {
+      const fromUid = item.fromUid || item.fromProfile?.uid;
+      const live = fromUid ? userLiveProfiles[fromUid] : null;
+      const displayName =
+        live?.displayName ||
+        item.fromProfile?.displayName ||
+        item.fromProfile?.username ||
+        'User';
+      const username = live?.username || item.fromProfile?.username || 'user';
+      const photoURL = live?.photoURL || item.fromProfile?.photoURL;
+      const profileAssetId =
+        live?.profileAssetId || item.fromProfile?.profileAssetId;
+
       return (
         <div key={`${kind}:${item.id}`} className="shc-request">
           <UserAvatar
-            uid={item.fromUid || item.fromProfile?.uid}
-            name={item.fromProfile?.displayName || item.fromProfile?.username}
-            photoURL={item.fromProfile?.photoURL}
-            profileAssetId={item.fromProfile?.profileAssetId}
+            uid={fromUid}
+            name={displayName}
+            photoURL={photoURL}
+            profileAssetId={profileAssetId}
             size="md"
           />
 
           <span className="shc-person-info">
-            <strong>
-              {item.fromProfile?.displayName || item.fromProfile?.username || 'User'}
-            </strong>
+            <strong>{displayName}</strong>
             <span>
               {kind === 'friendRequests' ? 'Friend request' : 'DM request'}
-              {' · '}@{item.fromProfile?.username || 'user'}
+              {' · '}@{username}
             </span>
             {kind === 'dmRequests' && item.message && (
               <span className="shc-request-preview">“{item.message}”</span>

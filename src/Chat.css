@@ -718,20 +718,42 @@
 }
 
 .shc-accept {
-  border-color: #5865F2;
-  background: #5865F2;
-  color: #fff !important;
+  border-color: #ffffff !important;
+  background: #ffffff !important;
+  color: #000000 !important;
+}
+
+.shc-accept svg {
+  color: #000000 !important;
+  stroke: #000000 !important;
 }
 
 .shc-accept:hover {
-  border-color: #4752c4;
-  background: #4752c4;
+  border-color: #e5e5e5 !important;
+  background: #e5e5e5 !important;
 }
 
 .shc-reject {
-  border-color: var(--danger);
-  background: var(--danger);
-  color: #fff !important;
+  border-color: transparent !important;
+  background: transparent !important;
+  color: #949ba4 !important;
+  box-shadow: none !important;
+}
+
+.shc-reject svg {
+  color: #949ba4 !important;
+  stroke: #949ba4 !important;
+}
+
+.shc-reject:hover {
+  border-color: transparent !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
+}
+
+.shc-reject:hover svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
 }
 
 .shc-result {
@@ -1798,9 +1820,9 @@
   min-width: 0;
   min-height: 48px;
   max-height: 140px;
-  border: 1px solid #282828;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 24px;
-  background: #000000;
+  background: #2b2d31;
   display: flex;
   align-items: center;
   padding: 3px 6px;
@@ -1810,8 +1832,8 @@
 }
 
 .shc-composer-input-box:focus-within {
-  border-color: #444444;
-  background: #000000;
+  border-color: rgba(255, 255, 255, 0.16);
+  background: #2b2d31;
 }
 
 .shc-composer-icon-btn {
@@ -1829,7 +1851,7 @@
   border: none !important;
   border-radius: 0 !important;
   box-shadow: none !important;
-  color: #949ba4 !important;
+  color: #ffffff !important;
   cursor: pointer !important;
   flex-shrink: 0 !important;
   line-height: 1 !important;
@@ -1839,6 +1861,7 @@
 .shc-composer-icon-btn svg {
   display: block !important;
   margin: auto !important;
+  color: #ffffff !important;
 }
 
 .shc-composer-icon-btn:hover {
@@ -1850,7 +1873,11 @@
 }
 
 .shc-composer-attach-btn {
-  color: #949ba4 !important;
+  color: #ffffff !important;
+}
+
+.shc-composer-attach-btn svg {
+  color: #ffffff !important;
 }
 
 .shc-composer-attach-btn:hover {
@@ -1859,7 +1886,7 @@
 
 /* Emoji icon centered vertically, not pushed up */
 .shc-composer-emoji-btn {
-  color: #949ba4 !important;
+  color: #ffffff !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -1868,12 +1895,20 @@
   margin: 0 !important;
 }
 
+.shc-composer-emoji-btn svg {
+  color: #ffffff !important;
+}
+
 .shc-composer-emoji-btn:hover {
   color: #FFFFFF !important;
 }
 
 .shc-composer-voice-btn {
-  color: #949ba4 !important;
+  color: #ffffff !important;
+}
+
+.shc-composer-voice-btn svg {
+  color: #ffffff !important;
 }
 
 .shc-composer-voice-btn:hover {
@@ -1881,6 +1916,10 @@
 }
 
 .shc-composer-voice-btn.shc-rec-on {
+  color: #ef4444 !important;
+}
+
+.shc-composer-voice-btn.shc-rec-on svg {
   color: #ef4444 !important;
 }
 
@@ -2475,7 +2514,7 @@
 }
 
 .shc-attach-grid button svg {
-  color: #949ba4 !important;
+  color: #ffffff !important;
   transition: color 0.15s ease;
 }
 
