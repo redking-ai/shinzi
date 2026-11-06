@@ -418,9 +418,9 @@
   width: 100%;
   font: inherit;
   font-size: 14px;
-  color: #f5f7ff;
-  background: #0b0b12;
-  border: 1px solid #343449;
+  color: #ffffff;
+  background: #2b2d31;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 11px;
   padding: 12px 13px;
   outline: none;
@@ -789,18 +789,20 @@ body {
   cursor: not-allowed;
 }
 
-/* Edit fields use the same surfaces */
+/* Edit fields use Discord gray */
 .sh-edit-panel input,
-.sh-edit-panel textarea {
-  background: var(--sh-surface-2);
-  border-color: var(--sh-line);
-  color: #FFFFFF;
+.sh-edit-panel textarea,
+.sh-bubble-editing input {
+  background: #2b2d31 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #FFFFFF !important;
 }
 
 .sh-edit-panel input:focus,
-.sh-edit-panel textarea:focus {
-  border-color: #555555;
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
+.sh-edit-panel textarea:focus,
+.sh-bubble-editing input:focus {
+  border-color: #555555 !important;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1) !important;
 }
 
 .sh-profile-tabs button.active {

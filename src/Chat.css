@@ -312,9 +312,9 @@
   align-items: center;
   gap: 8px;
   padding: 0 12px;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 14px;
-  background: var(--surface);
+  background: #2b2d31 !important;
   color: var(--muted);
 }
 
@@ -2659,11 +2659,11 @@
   width: 100%;
   min-height: 46px;
   padding: 10px 13px;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   outline: 0;
-  background: var(--surface-2);
-  color: var(--text);
+  background: #2b2d31 !important;
+  color: #ffffff !important;
   font: inherit;
   font-size: 16px;
 }
@@ -3419,11 +3419,11 @@ button {
 /* Search input with sleek border */
 .shc-emoji-picker .epr-search-container input,
 .shc-emoji-picker .epr-search-input {
-  border: 1px solid #282828 !important;
-  background: #0a0a0a !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  background: #2b2d31 !important;
   outline: none !important;
   box-shadow: none !important;
-  border-radius: 8px !important;
+  border-radius: 10px !important;
   color: #FFFFFF !important;
 }
 
