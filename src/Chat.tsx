@@ -5047,7 +5047,7 @@ const handleSearchMessage = async (target: Rec) => {
       )}
 
       {screen === 'conversation' && showAttach && (
-        <Sheet title="Attach" onClose={() => setShowAttach(false)}>
+        <Sheet title="More" onClose={() => setShowAttach(false)}>
           <div className="shc-attach-grid">
             <button
               type="button"

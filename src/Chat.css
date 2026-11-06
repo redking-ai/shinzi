@@ -1249,8 +1249,8 @@
 }
 
 .shc-voice-own {
-  border-color: #4a2fa8;
-  background: linear-gradient(135deg, #2c1c78, #4a2bb5);
+  border-color: #3b3e45;
+  background: var(--surface-2);
 }
 
 .shc-voice-btn {
@@ -1258,14 +1258,19 @@
   height: 34px;
   border-radius: 50%;
   border: none;
-  background: var(--accent, #5865f2);
-  color: #fff;
+  background: #ffffff !important;
+  color: #000000 !important;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
   transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.shc-voice-btn svg {
+  color: #000000 !important;
+  fill: #000000 !important;
 }
 
 .shc-voice-btn:disabled {
@@ -1291,19 +1296,31 @@
   right: 0;
   height: 4px;
   border-radius: 2px;
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.22);
   pointer-events: none;
 }
 
 .shc-voice-fill {
   height: 100%;
   border-radius: 2px;
-  background: var(--accent, #5865f2);
+  background: #ffffff !important;
   transition: width 0.05s linear;
 }
 
+.shc-voice-thumb {
+  position: absolute;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ffffff;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
 .shc-voice-own .shc-voice-fill {
-  background: #a78bfa;
+  background: #ffffff !important;
 }
 
 .shc-voice-slider {
@@ -1812,7 +1829,7 @@
   border: none !important;
   border-radius: 0 !important;
   box-shadow: none !important;
-  color: #666666 !important;
+  color: #949ba4 !important;
   cursor: pointer !important;
   flex-shrink: 0 !important;
   line-height: 1 !important;
@@ -1833,7 +1850,7 @@
 }
 
 .shc-composer-attach-btn {
-  color: #666666 !important;
+  color: #949ba4 !important;
 }
 
 .shc-composer-attach-btn:hover {
@@ -1842,7 +1859,7 @@
 
 /* Emoji icon centered vertically, not pushed up */
 .shc-composer-emoji-btn {
-  color: #666666 !important;
+  color: #949ba4 !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -1856,7 +1873,11 @@
 }
 
 .shc-composer-voice-btn {
-  color: #666666 !important;
+  color: #949ba4 !important;
+}
+
+.shc-composer-voice-btn:hover {
+  color: #ffffff !important;
 }
 
 .shc-composer-voice-btn.shc-rec-on {
@@ -2450,15 +2471,16 @@
   background: var(--surface-2);
   font-size: 12px;
   font-weight: 600;
-  color: #c0c0c0;
+  color: #ffffff !important;
 }
 
 .shc-attach-grid button svg {
-  color: #888888;
+  color: #949ba4 !important;
+  transition: color 0.15s ease;
 }
 
 .shc-attach-grid button:hover svg {
-  color: #ffffff;
+  color: #ffffff !important;
 }
 
 .shc-mode {

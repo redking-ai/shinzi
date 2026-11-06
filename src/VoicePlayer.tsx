@@ -56,6 +56,30 @@ export const VoicePlayer: React.FC<VoicePlayerProps> = ({
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // Smooth 60fps playback animation for the progress bar
+  useEffect(() => {
+    if (!isPlaying) return;
+    let animId: number;
+    const tick = () => {
+      if (audioRef.current && !audioRef.current.paused) {
+        const cur = audioRef.current.currentTime || 0;
+        setCurrentTime(cur);
+        if (
+          audioRef.current.duration &&
+          isFinite(audioRef.current.duration) &&
+          audioRef.current.duration > 0
+        ) {
+          setDuration(audioRef.current.duration);
+        }
+        animId = requestAnimationFrame(tick);
+      }
+    };
+    animId = requestAnimationFrame(tick);
+    return () => {
+      if (animId) cancelAnimationFrame(animId);
+    };
+  }, [isPlaying]);
+
   // Check 30-day expiry or 2-day listened expiry
   useEffect(() => {
     if (message.deletedFromDrive) {
@@ -302,11 +326,11 @@ export const VoicePlayer: React.FC<VoicePlayerProps> = ({
         aria-label={isPlaying ? 'Pause voice message' : 'Play voice message'}
       >
         {isLoading || message.status === 'uploading' ? (
-          <Loader2 size={18} className="shc-spin" />
+          <Loader2 size={17} className="shc-spin" />
         ) : isPlaying ? (
-          <Pause size={18} />
+          <Pause size={17} fill="#000000" />
         ) : (
-          <Play size={18} />
+          <Play size={17} fill="#000000" style={{ marginLeft: 2 }} />
         )}
       </button>
 
@@ -314,14 +338,18 @@ export const VoicePlayer: React.FC<VoicePlayerProps> = ({
         <div className="shc-voice-track">
           <div
             className="shc-voice-fill"
-            style={{ width: `${progressPercent}%` }}
+            style={{ width: `${Math.min(100, Math.max(0, progressPercent))}%` }}
+          />
+          <div
+            className="shc-voice-thumb"
+            style={{ left: `${Math.min(100, Math.max(0, progressPercent))}%` }}
           />
         </div>
         <input
           type="range"
           min="0"
           max={duration || 1}
-          step="0.1"
+          step="0.05"
           value={currentTime}
           onChange={handleSeek}
           className="shc-voice-slider"
