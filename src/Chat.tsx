@@ -24,6 +24,7 @@ import {
   runTransaction,
   serverTimestamp,
   setDoc,
+  Timestamp,
   updateDoc,
   where,
 } from 'firebase/firestore';
@@ -79,7 +80,13 @@ import {
 } from './emojiData';
 import OtherProfile from './OtherProfile';
 import VoicePlayer from './VoicePlayer';
-import { GoogleStickerIcon, GoogleFileIcon, GoogleGifIcon } from './GoogleIcons';
+import {
+  GoogleStickerIcon,
+  GoogleFileIcon,
+  GoogleGifIcon,
+  GoogleImageIcon,
+  GooglePlayIcon,
+} from './GoogleIcons';
 import { MediaGrid, type MediaItem } from './MediaGrid';
 import { FileMessage } from './FileMessage';
 import { searchKlipy, getCachedKlipy, type KlipyItem } from './klipyService';
@@ -348,30 +355,134 @@ const isStickerMessage = (msg: Rec | null | undefined): boolean => {
   return false;
 };
 
-const getReplyThumbnail = (msg: Rec | null | undefined): string | null => {
-  if (!msg || msg.deleted) return null;
-  if (msg.replyTo?.thumbnail) return msg.replyTo.thumbnail;
-  if (msg.mediaItems && msg.mediaItems.length > 0) {
-    return msg.mediaItems[0]?.previewUrl || msg.mediaItems[0]?.mediaUrl || null;
-  }
-  if (msg.mediaUrl) return msg.mediaUrl;
-  if (msg.imageUrl) return msg.imageUrl;
-  if (msg.driveFileId) return `https://lh3.googleusercontent.com/d/${msg.driveFileId}=s160`;
-  return null;
-};
-
 const getReplyExcerpt = (msg: Rec | null | undefined): string => {
   if (!msg) return '';
   if (msg.deleted) return 'This message was deleted';
   if (msg.type === 'poll') return `Poll: ${msg.question || ''}`;
   if (msg.type === 'event') return `Event: ${msg.name || ''}`;
   if (msg.type === 'voice') return 'Voice message';
-  if (msg.type === 'file') return `📄 ${msg.fileName || 'File'}`;
-  if (isStickerMessage(msg)) return 'Sticker';
-  if (isGifMessage(msg)) return msg.text ? `GIF: ${msg.text}` : 'GIF';
-  if (msg.type === 'video' || msg.mediaItems?.[0]?.type === 'video') return msg.text ? `🎥 ${msg.text}` : '🎥 Video';
-  if (msg.type === 'image' || msg.type === 'media' || msg.driveFileId || msg.mediaUrl) return msg.text ? `📷 ${msg.text}` : '📷 Photo';
+  if (msg.type === 'file') return msg.fileName || 'File';
+  if (isStickerMessage(msg)) return msg.text || 'Sticker';
+  if (isGifMessage(msg)) return msg.text || 'GIF';
+  if (msg.type === 'video' || msg.mediaItems?.[0]?.type === 'video') return msg.text || 'Video';
+  if (msg.type === 'image' || msg.type === 'media' || msg.driveFileId || msg.mediaUrl) return msg.text || 'Photo';
   return String(msg.text || '').slice(0, 100);
+};
+
+const renderReplyContent = (msg: Rec | null | undefined, textFallback?: string) => {
+  if (!msg) return textFallback || '';
+  if (msg.deleted) return 'This message was deleted';
+  if (isGifMessage(msg)) {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <GoogleGifIcon size={15} />
+        {msg.text || 'GIF'}
+      </span>
+    );
+  }
+  if (isStickerMessage(msg)) {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <GoogleStickerIcon size={14} />
+        {msg.text || 'Sticker'}
+      </span>
+    );
+  }
+  const isVideo = msg.type === 'video' || msg.mediaItems?.[0]?.type === 'video';
+  if (isVideo) {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <GooglePlayIcon size={14} />
+        {msg.text || 'Video'}
+      </span>
+    );
+  }
+  const isPhoto = msg.type === 'image' || msg.type === 'media' || Boolean(msg.driveFileId) || Boolean(msg.mediaUrl);
+  if (isPhoto) {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <GoogleImageIcon size={14} />
+        {msg.text || 'Photo'}
+      </span>
+    );
+  }
+  if (msg.type === 'file') {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <GoogleFileIcon size={14} />
+        {msg.fileName || 'File'}
+      </span>
+    );
+  }
+  if (msg.type === 'voice') return '🎤 Voice message';
+  if (msg.type === 'poll') return `Poll: ${msg.question || ''}`;
+  if (msg.type === 'event') return `Event: ${msg.name || ''}`;
+  return textFallback || String(msg.text || '').slice(0, 100);
+};
+
+const renderReplyFromReplyTo = (replyTo: any, fallbackText: string) => {
+  if (!replyTo) return fallbackText;
+  if (replyTo.isGif || replyTo.mediaType === 'gif') {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <GoogleGifIcon size={15} />
+        {replyTo.text || 'GIF'}
+      </span>
+    );
+  }
+  if (replyTo.isSticker || replyTo.mediaType === 'sticker') {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <GoogleStickerIcon size={14} />
+        {replyTo.text || 'Sticker'}
+      </span>
+    );
+  }
+  if (replyTo.mediaType === 'video') {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <GooglePlayIcon size={14} />
+        {replyTo.text || 'Video'}
+      </span>
+    );
+  }
+  if (replyTo.mediaType === 'photo' || replyTo.text === 'Photo' || replyTo.text?.includes('📷')) {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <GoogleImageIcon size={14} />
+        {replyTo.text ? replyTo.text.replace('📷 ', '') : 'Photo'}
+      </span>
+    );
+  }
+  if (replyTo.mediaType === 'file') {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <GoogleFileIcon size={14} />
+        {replyTo.text || 'File'}
+      </span>
+    );
+  }
+  return fallbackText;
+};
+
+const buildReplyToPayload = (targetReply: Rec): Rec => {
+  const targetIsGif = isGifMessage(targetReply);
+  const targetIsSticker = isStickerMessage(targetReply);
+  const targetIsVideo = targetReply.type === 'video' || targetReply.mediaItems?.[0]?.type === 'video';
+  const targetIsPhoto = targetReply.type === 'image' || targetReply.type === 'media' || Boolean(targetReply.driveFileId) || Boolean(targetReply.mediaUrl);
+  const targetIsFile = targetReply.type === 'file';
+
+  const mediaType = targetIsGif ? 'gif' : (targetIsSticker ? 'sticker' : (targetIsVideo ? 'video' : (targetIsPhoto ? 'photo' : (targetIsFile ? 'file' : 'text'))));
+
+  return {
+    id: targetReply.id,
+    senderId: targetReply.senderId || '',
+    senderName: targetReply.senderName || targetReply.senderUsername || 'User',
+    senderUsername: targetReply.senderUsername || '',
+    text: getReplyExcerpt(targetReply),
+    mediaType,
+    isGif: targetIsGif,
+  };
 };
 
 
@@ -2470,14 +2581,7 @@ const handleSearchMessage = async (target: Rec) => {
 
       if (targetReply) {
         messageData.replyToMessageId = targetReply.id;
-        messageData.replyTo = {
-          id: targetReply.id,
-          senderId: targetReply.senderId || '',
-          senderName:
-            targetReply.senderName || targetReply.senderUsername || 'User',
-          senderUsername: targetReply.senderUsername || '',
-          text: getReplyExcerpt(targetReply),
-        };
+        messageData.replyTo = buildReplyToPayload(targetReply);
       }
 
       const messageRef = await addDoc(
@@ -3255,6 +3359,7 @@ const handleSearchMessage = async (target: Rec) => {
     text?: string;
     isGif?: boolean;
     isSticker?: boolean;
+    initiatedAt?: any;
   }) => {
     if (!uid || !selected?.id) return;
     const activeConv = selectedConversation || selected;
@@ -3302,23 +3407,14 @@ const handleSearchMessage = async (target: Rec) => {
         senderUsername: profile?.username || '',
         senderPhotoURL: profile?.photoURL || '',
         senderProfileAssetId: profile?.profileAssetId || '',
-        createdAt: serverTimestamp(),
+        createdAt: params.initiatedAt || Timestamp.now(),
         editedAt: null,
         deleted: false,
       };
 
       if (targetReply) {
         rawMessageData.replyToMessageId = targetReply.id;
-        rawMessageData.replyTo = {
-          id: targetReply.id,
-          senderId: targetReply.senderId || '',
-          senderName:
-            targetReply.senderName || targetReply.senderUsername || 'User',
-          senderUsername: targetReply.senderUsername || '',
-          text: getReplyExcerpt(targetReply),
-          thumbnail: getReplyThumbnail(targetReply) || null,
-          isGif: isGifMessage(targetReply),
-        };
+        rawMessageData.replyTo = buildReplyToPayload(targetReply);
       }
 
       const messageData = sanitizeForFirestore(rawMessageData);
@@ -3345,10 +3441,10 @@ const handleSearchMessage = async (target: Rec) => {
       const updates: Rec = sanitizeForFirestore({
         lastMessageId: messageRef.id,
         lastMessageText: summaryText,
-        lastMessageAt: serverTimestamp(),
+        lastMessageAt: params.initiatedAt || Timestamp.now(),
         lastSenderId: uid,
         lastSenderName: profile?.displayName || profile?.username || 'You',
-        updatedAt: serverTimestamp(),
+        updatedAt: Timestamp.now(),
       });
 
       await updateDoc(doc(db, 'conversations', selected.id), updates);
@@ -3379,6 +3475,7 @@ const handleSearchMessage = async (target: Rec) => {
     const filesToSend = fileList.slice(0, 10);
     const caption = messageText.trim();
     setMessageText('');
+    const initiatedAt = Timestamp.now();
 
     if (!drive.hasActiveSession) {
       // Offline fallback: small images only
@@ -3402,7 +3499,7 @@ const handleSearchMessage = async (target: Rec) => {
               height: dims.height,
             });
           }
-          await sendMediaMessage({ mediaItems, text: caption });
+          await sendMediaMessage({ mediaItems, text: caption, initiatedAt });
         } catch (err) {
           notify('Upload failed', messageOf(err));
         } finally {
@@ -3469,6 +3566,7 @@ const handleSearchMessage = async (target: Rec) => {
       await sendMediaMessage({
         mediaItems,
         text: caption,
+        initiatedAt,
       });
     } catch (err) {
       console.error('Drive gallery upload error:', err);
@@ -3562,14 +3660,7 @@ const handleSearchMessage = async (target: Rec) => {
 
       if (targetReply) {
         messageData.replyToMessageId = targetReply.id;
-        messageData.replyTo = {
-          id: targetReply.id,
-          senderId: targetReply.senderId || '',
-          senderName:
-            targetReply.senderName || targetReply.senderUsername || 'User',
-          senderUsername: targetReply.senderUsername || '',
-          text: getReplyExcerpt(targetReply),
-        };
+        messageData.replyTo = buildReplyToPayload(targetReply);
       }
 
       const messageRef = await addDoc(
@@ -3792,14 +3883,7 @@ const handleSearchMessage = async (target: Rec) => {
 
       if (targetReply) {
         messageData.replyToMessageId = targetReply.id;
-        messageData.replyTo = {
-          id: targetReply.id,
-          senderId: targetReply.senderId || '',
-          senderName:
-            targetReply.senderName || targetReply.senderUsername || 'User',
-          senderUsername: targetReply.senderUsername || '',
-          text: getReplyExcerpt(targetReply),
-        };
+        messageData.replyTo = buildReplyToPayload(targetReply);
       }
 
       const messageRef = await addDoc(
@@ -4111,8 +4195,6 @@ const handleSearchMessage = async (target: Rec) => {
     let quotedSender = 'User';
     let quotedText = 'Original message unavailable';
     let quotedSenderId = '';
-    const quotedThumb = getReplyThumbnail(original) || item.replyTo?.thumbnail || null;
-    const quotedIsGif = isGifMessage(original) || Boolean(item.replyTo?.isGif);
 
     if (replyId) {
       if (original) {
@@ -4375,17 +4457,9 @@ const handleSearchMessage = async (target: Rec) => {
               }
               size="xs"
             />
-            {quotedThumb && (
-              <img
-                src={quotedThumb}
-                alt=""
-                className="shc-dc-reply-spine-thumb"
-              />
-            )}
-            <span className="shc-dc-reply-sender">{quotedSender}</span>
-            <span className="shc-dc-reply-text" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-              {quotedIsGif && <GoogleGifIcon size={14} />}
-              {quotedText}
+            <span className="shc-dc-reply-sender">{quotedSender}:</span>
+            <span className="shc-dc-reply-text">
+              {original ? renderReplyContent(original, quotedText) : renderReplyFromReplyTo(item.replyTo, quotedText)}
             </span>
           </div>
         )}
@@ -5124,49 +5198,44 @@ const handleSearchMessage = async (target: Rec) => {
           </div>
         )}
 
-        {replyTarget && (() => {
-          const thumb = getReplyThumbnail(replyTarget);
-          const isGif = isGifMessage(replyTarget);
-          return (
-            <div className="shc-reply-bar">
-              <div className="shc-reply-bar-left">
-                <Reply size={16} className="shc-reply-bar-icon" />
-                {thumb && (
-                  <img
-                    src={thumb}
-                    alt=""
-                    className="shc-reply-thumb"
-                  />
-                )}
-                <div className="shc-reply-bar-content">
-                  <span className="shc-reply-bar-sender">
-                    Replying to{' '}
-                    <span className="shc-reply-bar-target-name">
-                      {replyTarget.senderName ||
-                        replyTarget.senderUsername ||
-                        (replyTarget.senderId === uid
-                          ? profile?.displayName || profile?.username || 'You'
-                          : 'User')}
-                    </span>
+        {replyTarget && (
+          <div className="shc-reply-bar">
+            <div className="shc-reply-bar-left">
+              <Reply size={16} className="shc-reply-bar-icon" />
+              <UserAvatar
+                uid={replyTarget.senderId}
+                name={replyTarget.senderName || replyTarget.senderUsername || 'User'}
+                photoURL={replyTarget.senderPhotoURL}
+                profileAssetId={replyTarget.senderProfileAssetId}
+                size="xs"
+              />
+              <div className="shc-reply-bar-content">
+                <span className="shc-reply-bar-sender">
+                  Replying to{' '}
+                  <span className="shc-reply-bar-target-name">
+                    {(replyTarget.senderName ||
+                      replyTarget.senderUsername ||
+                      (replyTarget.senderId === uid
+                        ? profile?.displayName || profile?.username || 'You'
+                        : 'User'))}:
                   </span>
-                  <span className="shc-reply-bar-text" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    {isGif && <GoogleGifIcon size={15} />}
-                    {getReplyExcerpt(replyTarget)}
-                  </span>
-                </div>
+                </span>
+                <span className="shc-reply-bar-text">
+                  {renderReplyContent(replyTarget)}
+                </span>
               </div>
-              <button
-                type="button"
-                className="shc-reply-bar-close"
-                onClick={() => setReplyTarget(null)}
-                title="Cancel reply"
-                aria-label="Cancel reply"
-              >
-                <X size={16} />
-              </button>
             </div>
-          );
-        })()}
+            <button
+              type="button"
+              className="shc-reply-bar-close"
+              onClick={() => setReplyTarget(null)}
+              title="Cancel reply"
+              aria-label="Cancel reply"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
 
         {editingMessage && (
           <div className="shc-editing-banner">
