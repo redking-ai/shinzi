@@ -227,6 +227,9 @@ if (currentPath === '/chat') {
               navigateTo('/chat');
             }
           }}
+          onOpenChat={(uid) => {
+            navigateTo(`/chat?user=${encodeURIComponent(uid)}`);
+          }}
         />
       );
     }

@@ -620,6 +620,18 @@ function useResolvedAvatarUri(
       return;
     }
 
+    if (photoURL === null && !profileAssetId) {
+      if (targetUid) {
+        avatarMemoryCache.delete(targetUid);
+        try {
+          localStorage.removeItem(`shinzi_avatar_${targetUid}`);
+        } catch {}
+      }
+      setImageUri(null);
+      setLoading(false);
+      return;
+    }
+
     if (isValidMediaUrl(photoURL)) {
       setImageUri(photoURL!);
       if (targetUid) {
@@ -680,6 +692,21 @@ function useResolvedAvatarUri(
           } catch {}
         }
 
+        // If the user has neither a photo URL nor a profile asset ID, they have no avatar
+        if (!directUrl && !assetId) {
+          if (targetUid) {
+            avatarMemoryCache.delete(targetUid);
+            try {
+              localStorage.removeItem(`shinzi_avatar_${targetUid}`);
+            } catch {}
+          }
+          if (!cancelled) {
+            setImageUri(null);
+            setLoading(false);
+          }
+          return;
+        }
+
         if (isValidMediaUrl(directUrl)) {
           if (!cancelled) {
             setImageUri(directUrl!);
@@ -694,8 +721,8 @@ function useResolvedAvatarUri(
           return;
         }
 
-        // Try backend /api/avatar endpoint (resolves any user's Drive file via server OAuth + edge CDN)
-        if (targetUid) {
+        // Try backend /api/avatar endpoint only if user has an assetId or avatar attached
+        if (targetUid && assetId) {
           const apiAvatarUrl = `/api/avatar?uid=${encodeURIComponent(targetUid)}`;
           const canLoadFromApi = await testImageLoad(apiAvatarUrl);
           if (canLoadFromApi && !cancelled) {
@@ -2155,8 +2182,20 @@ export default function Chat({ onNavigate }: ChatProps) {
   const openMessageEntry = async (otherUser: Rec) => {
     if (!uid || !otherUser?.id || otherUser.id === uid) return;
 
-    const conversationId = directId(uid, otherUser.id);
-    const isFriend = friends.some((friend) => friend.id === otherUser.id || friend.uid === otherUser.id);
+    let targetUser = otherUser;
+    if (!targetUser.displayName && !targetUser.username) {
+      try {
+        const uSnap = await getDoc(doc(db, 'users', otherUser.id));
+        if (uSnap.exists()) {
+          targetUser = { id: otherUser.id, ...uSnap.data() };
+        }
+      } catch (e) {
+        console.warn('Could not fetch target user profile', e);
+      }
+    }
+
+    const conversationId = directId(uid, targetUser.id);
+    const isFriend = friends.some((friend) => friend.id === targetUser.id || friend.uid === targetUser.id);
     const existingConversation = conversations.find((item) => item.id === conversationId);
 
     if (isFriend && existingConversation) {
@@ -2164,14 +2203,14 @@ export default function Chat({ onNavigate }: ChatProps) {
       return;
     }
     if (isFriend) {
-      await openDirectConversation(otherUser);
+      await openDirectConversation(targetUser);
       return;
     }
 
     try {
       const [outgoingSnap, incomingSnap] = await Promise.all([
-        getDoc(doc(db, 'dmRequests', `${uid}_${otherUser.id}`)),
-        getDoc(doc(db, 'dmRequests', `${otherUser.id}_${uid}`)),
+        getDoc(doc(db, 'dmRequests', `${uid}_${targetUser.id}`)),
+        getDoc(doc(db, 'dmRequests', `${targetUser.id}_${uid}`)),
       ]);
       const outgoing = outgoingSnap.exists() ? outgoingSnap.data() : null;
       const incoming = incomingSnap.exists() ? incomingSnap.data() : null;
@@ -2212,7 +2251,7 @@ export default function Chat({ onNavigate }: ChatProps) {
       setSelected({
         id: conversationId,
         type: 'direct',
-        memberIds: [uid, otherUser.id],
+        memberIds: [uid, targetUser.id],
         memberProfiles: {
           [uid]: {
             displayName: profile?.displayName || user?.displayName || 'User',
@@ -2220,11 +2259,11 @@ export default function Chat({ onNavigate }: ChatProps) {
             photoURL: profile?.photoURL || '',
             profileAssetId: profile?.profileAssetId || '',
           },
-          [otherUser.id]: {
-            displayName: otherUser.displayName || otherUser.username || 'User',
-            username: otherUser.username || '',
-            photoURL: otherUser.photoURL || '',
-            profileAssetId: otherUser.profileAssetId || '',
+          [targetUser.id]: {
+            displayName: targetUser.displayName || targetUser.username || 'User',
+            username: targetUser.username || '',
+            photoURL: targetUser.photoURL || '',
+            profileAssetId: targetUser.profileAssetId || '',
           },
         },
         requestStatus,
@@ -3008,11 +3047,13 @@ const handleSearchMessage = async (target: Rec) => {
   // USER SEARCH
   // ----------------------------------------------------------
 
-  const searchUser = async () => {
-    const username = userQuery.trim().toLowerCase().replace(/^@/, '');
+  const searchUser = async (explicitQuery?: string, isManual = false) => {
+    const raw = typeof explicitQuery === 'string' ? explicitQuery : userQuery;
+    const username = raw.trim().toLowerCase().replace(/^@/, '');
 
     if (!username) {
       setSearchResult(null);
+      setSearching(false);
       return;
     }
 
@@ -3023,7 +3064,9 @@ const handleSearchMessage = async (target: Rec) => {
 
       if (!usernameSnap.exists()) {
         setSearchResult(null);
-        notify('Not found', 'No user was found with that username.');
+        if (isManual) {
+          notify('Not found', 'No user was found with that username.');
+        }
         return;
       }
 
@@ -3043,11 +3086,29 @@ const handleSearchMessage = async (target: Rec) => {
 
       if (!userSnap.exists()) {
         setSearchResult(null);
-        notify('Not found', 'That user profile could not be loaded.');
+        if (isManual) {
+          notify('Not found', 'That user profile could not be loaded.');
+        }
         return;
       }
 
-      setSearchResult({ id: userSnap.id, ...userSnap.data() });
+      const data = userSnap.data() || {};
+      const finalPhotoURL = data.photoURL || data.photoUrl || data.avatarUrl || null;
+      const finalProfileAssetId = data.profileAssetId || null;
+
+      if (!finalPhotoURL && !finalProfileAssetId) {
+        avatarMemoryCache.delete(userSnap.id);
+        try {
+          localStorage.removeItem(`shinzi_avatar_${userSnap.id}`);
+        } catch {}
+      }
+
+      setSearchResult({
+        id: userSnap.id,
+        ...data,
+        photoURL: finalPhotoURL,
+        profileAssetId: finalProfileAssetId,
+      });
 
       if (uid && targetUid) {
         try {
@@ -3065,11 +3126,28 @@ const handleSearchMessage = async (target: Rec) => {
       }
     } catch (error) {
       console.error('User search error:', error);
-      notify('Search failed', messageOf(error, 'Unable to search right now.'));
+      if (isManual) {
+        notify('Search failed', messageOf(error, 'Unable to search right now.'));
+      }
     } finally {
       setSearching(false);
     }
   };
+
+  useEffect(() => {
+    const trimmed = userQuery.trim().toLowerCase().replace(/^@/, '');
+    if (!trimmed) {
+      setSearchResult(null);
+      setSearching(false);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      void searchUser(trimmed, false);
+    }, 450);
+
+    return () => clearTimeout(timer);
+  }, [userQuery]);
 
   // ----------------------------------------------------------
   // GROUPS, POLLS, EVENTS
@@ -4971,9 +5049,16 @@ const handleSearchMessage = async (target: Rec) => {
           <input
             placeholder="Username"
             value={userQuery}
-            onChange={(e) => setUserQuery(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              setUserQuery(val);
+              if (!val.trim()) {
+                setSearchResult(null);
+                setSearching(false);
+              }
+            }}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') void searchUser();
+              if (e.key === 'Enter') void searchUser(undefined, true);
             }}
             autoCapitalize="none"
             autoCorrect="off"
@@ -6172,6 +6257,10 @@ const handleSearchMessage = async (target: Rec) => {
                 navigateToUrl('/chat');
               }
             }
+          }}
+          onOpenChat={async (targetUid) => {
+            setViewingProfileUid(null);
+            await handleSearchMessage({ id: targetUid });
           }}
         />
       )}

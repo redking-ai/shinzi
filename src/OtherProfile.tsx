@@ -70,9 +70,11 @@ function isMediaVideo(url?: string | null): boolean {
 export default function OtherProfile({
   targetUid: targetUidProp,
   onClose,
+  onOpenChat,
 }: {
   targetUid?: string;
   onClose?: () => void;
+  onOpenChat?: (targetUid: string) => void;
 }) {
   const drive = useDriveStore();
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(
@@ -182,8 +184,10 @@ export default function OtherProfile({
 
       setUserData(data);
       setCachedProfile(targetUid, data);
-      setAvatar((prev) => prev || String(data.photoURL ?? ''));
-      setBanner((prev) => prev || String(data.bannerUrl ?? ''));
+      const freshPhoto = String(data.photoURL ?? '');
+      setAvatar(isMediaVideo(freshPhoto) ? '' : freshPhoto);
+      const freshBanner = String(data.bannerUrl ?? '');
+      setBanner(isMediaVideo(freshBanner) ? '' : freshBanner);
       setLoading(false); // Reveal profile immediately
 
       if (currentUser) {
@@ -457,6 +461,10 @@ export default function OtherProfile({
   };
 
   const openMessage = () => {
+    if (onOpenChat && targetUid) {
+      onOpenChat(targetUid);
+      return;
+    }
     if (onClose) {
       onClose();
       return;

@@ -319,8 +319,8 @@
 }
 
 .shc-searchbox:focus-within {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(32, 217, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: none;
 }
 
 .shc-searchbox input {
