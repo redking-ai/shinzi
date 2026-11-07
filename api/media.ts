@@ -130,7 +130,7 @@ export default {
     try {
       const fileId = url.searchParams.get("fileId");
       const ownerUid = url.searchParams.get("ownerUid");
-      const download = url.searchParams.get("dl") === "1";
+      const download = url.searchParams.get("dl") === "1" || url.searchParams.get("download") === "true";
       const fileName = url.searchParams.get("name") || "download";
 
       if (!fileId) {
@@ -173,32 +173,53 @@ export default {
         }
       }
 
-      const driveHeaders: Record<string, string> = {};
+      let driveRes: Response | null = null;
       if (accessToken) {
-        driveHeaders["Authorization"] = `Bearer ${accessToken}`;
+        try {
+          driveRes = await fetch(
+            `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`,
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+          );
+        } catch (fetchErr) {
+          console.warn("[api/media] Authenticated fetch error:", fetchErr);
+        }
       }
 
-      const driveRes = await fetch(
-        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`,
-        { headers: driveHeaders }
-      );
-
-      if (!driveRes.ok) {
-        if (driveRes.status === 404 || driveRes.status === 403) {
-          return Response.json(
-            {
-              ok: false,
-              unavailable: true,
-              error: "File is unavailable. Please ask sender to send again.",
-            },
-            { status: 410, headers: CORS_HEADERS }
+      // If no access token or OAuth request returned 401/403/404, fall back to Google public Drive CDN
+      if (!driveRes || !driveRes.ok) {
+        try {
+          // 1. Try Google User Content CDN (instant for images, photos, GIFs, thumbnails)
+          const lh3Res = await fetch(
+            `https://lh3.googleusercontent.com/d/${encodeURIComponent(fileId)}=s0`
           );
+          if (lh3Res.ok && (lh3Res.headers.get("content-type") || "").startsWith("image/")) {
+            driveRes = lh3Res;
+          }
+        } catch {}
+
+        if (!driveRes || !driveRes.ok) {
+          try {
+            // 2. Try Google Drive direct export download
+            const publicRes = await fetch(
+              `https://drive.google.com/uc?export=download&id=${encodeURIComponent(fileId)}`,
+              { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" } }
+            );
+            if (publicRes.ok) {
+              driveRes = publicRes;
+            }
+          } catch {}
         }
-        const errText = await driveRes.text();
-        return new Response(`Drive error: ${errText}`, {
-          status: driveRes.status,
-          headers: CORS_HEADERS,
-        });
+      }
+
+      if (!driveRes || !driveRes.ok) {
+        return Response.json(
+          {
+            ok: false,
+            unavailable: true,
+            error: "File is unavailable. Please ask sender to send again.",
+          },
+          { status: 410, headers: CORS_HEADERS }
+        );
       }
 
       const mimeType = driveRes.headers.get("content-type") || "application/octet-stream";

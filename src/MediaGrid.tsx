@@ -134,6 +134,7 @@ export const MediaGrid: React.FC<MediaGridProps> = ({
 
   return (
     <div className="shc-media-group-container">
+      {caption && <div className="shc-media-caption">{caption}</div>}
       <div className={`shc-media-grid ${layoutClass}`}>
         {visibleItems.map((it, idx) => {
           const key = it.id || `${messageId}_${idx}`;
@@ -202,8 +203,6 @@ export const MediaGrid: React.FC<MediaGridProps> = ({
           );
         })}
       </div>
-
-      {caption && <div className="shc-media-caption">{caption}</div>}
     </div>
   );
 };

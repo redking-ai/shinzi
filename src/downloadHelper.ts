@@ -56,8 +56,25 @@ export const downloadToDevice = async (url: string, fileName: string): Promise<b
     }
 
     // Remote URL: fetch blob to force browser download prompt
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    let res: Response | null = null;
+    try {
+      res = await fetch(url);
+    } catch {}
+
+    if (!res || !res.ok) {
+      // If URL has a Google Drive fileId, try Google LH3 CDN fallback directly
+      const match = url.match(/(?:fileId=|lh3\.googleusercontent\.com\/d\/|id=)([a-zA-Z0-9_-]+)/);
+      if (match && match[1]) {
+        try {
+          const fallbackRes = await fetch(`https://lh3.googleusercontent.com/d/${match[1]}=s0`);
+          if (fallbackRes.ok) {
+            res = fallbackRes;
+          }
+        } catch {}
+      }
+    }
+
+    if (!res || !res.ok) throw new Error(`HTTP ${res ? res.status : 'fetch failed'}`);
     const blob = await res.blob();
     const objectUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');

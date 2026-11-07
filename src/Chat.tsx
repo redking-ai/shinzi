@@ -29,8 +29,8 @@ import {
   where,
 } from 'firebase/firestore';
 import {
-  AlertCircle,
   ArrowLeft,
+  AtSign,
   Ban,
   BarChart3,
   Bell,
@@ -93,6 +93,13 @@ import { searchKlipy, getCachedKlipy, type KlipyItem } from './klipyService';
 import { cacheAudioBlob } from './voiceCache';
 import MuiAvatar from '@mui/material/Avatar';
 import './Chat.css';
+
+interface StagedAttachment {
+  id: string;
+  file: File;
+  previewUrl: string;
+  type: 'image' | 'video';
+}
 
 const EmojiPicker = lazy(() => import('emoji-picker-react'));
 
@@ -1282,7 +1289,20 @@ export default function Chat({ onNavigate }: ChatProps) {
     fileName?: string;
   } | null>(null);
   const [viewingProfileUid, setViewingProfileUid] = useState<string | null>(null);
+  const [stagedMedia, setStagedMedia] = useState<StagedAttachment[]>([]);
   const pendingCaretRef = useRef<number | null>(null);
+
+  const removeStagedMedia = (id: string) => {
+    setStagedMedia((prev) => {
+      const target = prev.find((item) => item.id === id);
+      if (target?.previewUrl) {
+        try {
+          URL.revokeObjectURL(target.previewUrl);
+        } catch {}
+      }
+      return prev.filter((item) => item.id !== id);
+    });
+  };
 
   // Caret restoration layoutEffect: sets selection synchronously after React commits the messageText update
   useLayoutEffect(() => {
@@ -1717,7 +1737,25 @@ export default function Chat({ onNavigate }: ChatProps) {
 
   const [liveTargetProfile, setLiveTargetProfile] = useState<Rec | null>(null);
   const [userLiveAvatars, setUserLiveAvatars] = useState<Record<string, string>>({});
-  const [userLiveProfiles, setUserLiveProfiles] = useState<Record<string, Rec>>({});
+  const [userLiveProfiles, setUserLiveProfiles] = useState<Record<string, Rec>>(() => {
+    const initial: Record<string, Rec> = {};
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('shinzi_profile_')) {
+            const targetUid = key.replace('shinzi_profile_', '');
+            const val = localStorage.getItem(key);
+            if (val) {
+              initial[targetUid] = JSON.parse(val);
+            }
+          }
+        }
+      }
+    } catch {}
+    return initial;
+  });
+  const checkedProfilesRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     setToast(null);
@@ -1736,6 +1774,9 @@ export default function Chat({ onNavigate }: ChatProps) {
           const data = snap.data() as Rec;
           setLiveTargetProfile(data);
           setUserLiveProfiles((prev) => ({ ...prev, [activeDmTargetUid]: data }));
+          try {
+            localStorage.setItem(`shinzi_profile_${activeDmTargetUid}`, JSON.stringify(data));
+          } catch {}
           if (data?.photoURL) {
             setUserLiveAvatars((prev) => ({ ...prev, [activeDmTargetUid]: data.photoURL }));
             avatarMemoryCache.set(activeDmTargetUid, data.photoURL);
@@ -1757,17 +1798,21 @@ export default function Chat({ onNavigate }: ChatProps) {
     const directOtherUids = conversations
       .filter((c) => c.type !== 'group')
       .map((c) => otherMemberId(c))
-      .filter((id) => Boolean(id) && (!userLiveAvatars[id] || !userLiveProfiles[id]));
+      .filter((id) => Boolean(id) && !checkedProfilesRef.current.has(id));
 
     if (directOtherUids.length === 0) return;
 
     let cancelled = false;
     directOtherUids.forEach(async (targetId) => {
+      checkedProfilesRef.current.add(targetId);
       try {
         const snap = await getDoc(doc(db, 'users', targetId));
         if (snap.exists() && !cancelled) {
           const udata = snap.data() as Rec;
           setUserLiveProfiles((prev) => ({ ...prev, [targetId]: udata }));
+          try {
+            localStorage.setItem(`shinzi_profile_${targetId}`, JSON.stringify(udata));
+          } catch {}
           if (udata?.photoURL) {
             setUserLiveAvatars((prev) => ({
               ...prev,
@@ -1778,6 +1823,19 @@ export default function Chat({ onNavigate }: ChatProps) {
               localStorage.setItem(`shinzi_avatar_${targetId}`, udata.photoURL);
             } catch {}
           }
+          const liveName = udata.displayName || udata.username;
+          if (liveName) {
+            conversations.forEach((conv) => {
+              if (
+                conv.memberProfiles?.[targetId]?.displayName &&
+                conv.memberProfiles[targetId].displayName !== liveName
+              ) {
+                updateDoc(doc(db, 'conversations', conv.id), {
+                  [`memberProfiles.${targetId}.displayName`]: liveName,
+                }).catch(() => {});
+              }
+            });
+          }
         }
       } catch {}
     });
@@ -1785,7 +1843,7 @@ export default function Chat({ onNavigate }: ChatProps) {
     return () => {
       cancelled = true;
     };
-  }, [conversations, uid, otherMemberId, userLiveAvatars, userLiveProfiles]);
+  }, [conversations, uid, otherMemberId]);
 
   useEffect(() => {
     const fromMessages = (messages || []).map((m) => m.senderId);
@@ -2100,6 +2158,15 @@ export default function Chat({ onNavigate }: ChatProps) {
   // Clear mention suggestions whenever switching conversations, screens, or when text is empty
   const openConversation = async (conversation: Rec) => {
     if (!conversation?.id) return;
+
+    setStagedMedia((prev) => {
+      prev.forEach((item) => {
+        try {
+          URL.revokeObjectURL(item.previewUrl);
+        } catch {}
+      });
+      return [];
+    });
 
     setSelected(conversation);
     setScreen('conversation');
@@ -2550,7 +2617,24 @@ const handleSearchMessage = async (target: Rec) => {
     }
 
     const text = messageText.trim();
-    if (!text) return;
+    if (!text && stagedMedia.length === 0) return;
+
+    if (stagedMedia.length > 0) {
+      const itemsToUpload = [...stagedMedia];
+      const caption = text;
+      setStagedMedia([]);
+      setMessageText('');
+      if (inputRef.current) {
+        inputRef.current.style.height = 'auto';
+      }
+      if (selected?.id) {
+        try {
+          localStorage.removeItem(`shinzi_draft_${selected.id}`);
+        } catch {}
+      }
+      void uploadAndSendStagedMedia(itemsToUpload, caption);
+      return;
+    }
 
     const activeConv = selectedConversation || selected;
     const directTargetUid = activeConv?.type === 'group' ? '' : otherMemberId(activeConv);
@@ -3584,34 +3668,60 @@ const handleSearchMessage = async (target: Rec) => {
     }
   };
 
-  const onPickGallery = async (e: ChangeEvent<HTMLInputElement>) => {
+  const onPickGallery = (e: ChangeEvent<HTMLInputElement>) => {
     const fileList = Array.from(e.target.files || []);
     e.target.value = '';
     if (!fileList.length) return;
 
     if (!selected?.id) {
-      notify('No chat open', 'Please open a conversation to send media.');
+      notify('No chat open', 'Please open a conversation to attach media.');
       return;
     }
 
-    if (fileList.length > 10) {
-      notify('Limit: 10 items', 'Maximum 10 photos/videos can be sent at once. Taking first 10.');
+    const availableSlots = Math.max(0, 10 - stagedMedia.length);
+    if (availableSlots <= 0) {
+      notify('Limit reached', 'Maximum 10 attachments allowed at a time.');
+      return;
     }
 
-    const filesToSend = fileList.slice(0, 10);
-    const caption = messageText.trim();
-    setMessageText('');
+    if (fileList.length > availableSlots) {
+      notify('Limit: 10 items', `Maximum 10 attachments allowed. Adding first ${availableSlots}.`);
+    }
+
+    const validFiles = fileList.filter((f) => {
+      const isHeic = f.name.toLowerCase().endsWith('.heic') || f.name.toLowerCase().endsWith('.heif') || f.type.includes('heic') || f.type.includes('heif');
+      return f.type.startsWith('image/') || f.type.startsWith('video/') || isHeic;
+    }).slice(0, availableSlots);
+
+    if (!validFiles.length) {
+      notify('Invalid file', 'Please select valid image or video files.');
+      return;
+    }
+
+    const newStaged: StagedAttachment[] = validFiles.map((file, idx) => ({
+      id: `${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`,
+      file,
+      previewUrl: URL.createObjectURL(file),
+      type: file.type.startsWith('video/') ? 'video' : 'image',
+    }));
+
+    setStagedMedia((prev) => [...prev, ...newStaged]);
+  };
+
+  async function uploadAndSendStagedMedia(items: StagedAttachment[], caption: string) {
+    if (!selected?.id || sendingRef.current) return;
     const initiatedAt = Timestamp.now();
+    sendingRef.current = true;
+    setSending(true);
 
     if (!drive.hasActiveSession) {
       // Offline fallback: small images only
-      const smallImages = filesToSend.filter((f) => f.type.startsWith('image/') && f.size <= 850 * 1024);
-      if (smallImages.length === filesToSend.length) {
-        setSending(true);
+      const smallImages = items.filter((it) => it.file.type.startsWith('image/') && it.file.size <= 850 * 1024);
+      if (smallImages.length === items.length) {
         try {
           const mediaItems: MediaItem[] = [];
           for (let i = 0; i < smallImages.length; i++) {
-            const f = smallImages[i];
+            const f = smallImages[i].file;
             const dataUri = await blobToDataUri(f);
             const dims = await getMediaDimensions(f);
             mediaItems.push({
@@ -3628,8 +3738,14 @@ const handleSearchMessage = async (target: Rec) => {
           await sendMediaMessage({ mediaItems, text: caption, initiatedAt });
         } catch (err) {
           notify('Upload failed', messageOf(err));
-        } finally {
+          sendingRef.current = false;
           setSending(false);
+        } finally {
+          items.forEach((it) => {
+            try {
+              URL.revokeObjectURL(it.previewUrl);
+            } catch {}
+          });
         }
         return;
       }
@@ -3637,17 +3753,18 @@ const handleSearchMessage = async (target: Rec) => {
         'Google Drive Required',
         'Connect Google Drive in settings to send high-res photos and videos.',
       );
+      sendingRef.current = false;
+      setSending(false);
       return;
     }
 
-    setSending(true);
-    notify('Uploading media…', `Uploading ${filesToSend.length} item(s) to Google Drive.`);
+    notify('Uploading media…', `Uploading ${items.length} item(s) to Google Drive.`);
 
     try {
       const mediaItems: MediaItem[] = [];
 
-      for (let i = 0; i < filesToSend.length; i++) {
-        const file = filesToSend[i];
+      for (let i = 0; i < items.length; i++) {
+        const file = items[i].file;
         const isHeic = file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif') || file.type.includes('heic') || file.type.includes('heif');
         const isVideo = file.type.startsWith('video/');
         const isImage = file.type.startsWith('image/') || isHeic;
@@ -3668,7 +3785,9 @@ const handleSearchMessage = async (target: Rec) => {
         const previewUrl = isImage
           ? `https://lh3.googleusercontent.com/d/${uploaded.fileId}=s1600`
           : `/api/media?fileId=${uploaded.fileId}`;
-        const originalUrl = `/api/media?fileId=${uploaded.fileId}&download=true&name=${encodeURIComponent(file.name)}`;
+        const originalUrl = isImage
+          ? `https://lh3.googleusercontent.com/d/${uploaded.fileId}=s0`
+          : `/api/media?fileId=${uploaded.fileId}&download=true&name=${encodeURIComponent(file.name)}`;
 
         mediaItems.push({
           id: `${uploaded.fileId}_${Date.now()}_${i}`,
@@ -3686,6 +3805,8 @@ const handleSearchMessage = async (target: Rec) => {
 
       if (!mediaItems.length) {
         notify('Upload failed', 'No valid image or video files selected.');
+        sendingRef.current = false;
+        setSending(false);
         return;
       }
 
@@ -3694,13 +3815,24 @@ const handleSearchMessage = async (target: Rec) => {
         text: caption,
         initiatedAt,
       });
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        isNearBottomRef.current = true;
+        setShowScrollBottom(false);
+      }
     } catch (err) {
       console.error('Drive gallery upload error:', err);
       notify('Upload failed', messageOf(err));
-    } finally {
+      sendingRef.current = false;
       setSending(false);
+    } finally {
+      items.forEach((it) => {
+        try {
+          URL.revokeObjectURL(it.previewUrl);
+        } catch {}
+      });
     }
-  };
+  }
 
   const onPickDocument = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -3898,7 +4030,12 @@ const handleSearchMessage = async (target: Rec) => {
       }, 1000);
     } catch (err: unknown) {
       console.error('Microphone error:', err);
-      notify('Microphone permission needed', 'Please allow microphone access to record voice notes.');
+      const isNotAllowed = (err as any)?.name === 'NotAllowedError' || (err as any)?.name === 'PermissionDeniedError';
+      if (isNotAllowed) {
+        notify('Microphone blocked', 'Microphone access is blocked in your browser. Tap the tune/lock icon in your address bar to allow microphone.');
+      } else {
+        notify('Microphone permission needed', 'Please allow microphone access to record voice notes.');
+      }
     }
   };
 
@@ -4863,7 +5000,7 @@ const handleSearchMessage = async (target: Rec) => {
                     </span>
 
                     <span className="shc-conv-icons">
-                      {isUrgent(item) && <AlertCircle size={16} className="shc-urgent" />}
+                      {isUrgent(item) && <AtSign size={15} className="shc-mention-badge" />}
                       {unread && <span className="shc-unread-dot" />}
                     </span>
                   </span>
@@ -5438,6 +5575,40 @@ const handleSearchMessage = async (target: Rec) => {
             </div>
           )}
 
+          {stagedMedia.length > 0 && (
+            <div className="shc-composer-staged-tray">
+              {stagedMedia.map((item) => (
+                <div key={item.id} className="shc-composer-staged-item">
+                  {item.type === 'video' ? (
+                    <video
+                      src={item.previewUrl}
+                      className="shc-composer-staged-thumb"
+                      muted
+                      playsInline
+                    />
+                  ) : (
+                    <img
+                      src={item.previewUrl}
+                      alt="Staged attachment"
+                      className="shc-composer-staged-thumb"
+                    />
+                  )}
+                  <button
+                    type="button"
+                    className="shc-composer-staged-delete"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeStagedMedia(item.id);
+                    }}
+                    aria-label="Remove attachment"
+                  >
+                    <X size={13} strokeWidth={2.5} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div
             className={
               isKeyboardOpen ? 'shc-composer shc-composer-kb' : 'shc-composer'
@@ -5507,7 +5678,7 @@ const handleSearchMessage = async (target: Rec) => {
                 <Smile size={21} />
               </button>
 
-              {!messageText.trim() && (
+              {!messageText.trim() && stagedMedia.length === 0 && (
                 <button
                   type="button"
                   className={`shc-composer-icon-btn shc-composer-voice-btn ${recording ? 'shc-rec-on' : ''}`}
@@ -5520,8 +5691,8 @@ const handleSearchMessage = async (target: Rec) => {
 
               <button
                 type="button"
-                className={`shc-composer-icon-btn shc-composer-send-btn ${messageText.trim() ? 'shc-send-active' : ''}`}
-                disabled={!messageText.trim() || sending || (Boolean(targetUid) && dmRequestState === 'incoming')}
+                className={`shc-composer-icon-btn shc-composer-send-btn ${(messageText.trim() || stagedMedia.length > 0) ? 'shc-send-active' : ''}`}
+                disabled={(!messageText.trim() && stagedMedia.length === 0) || sending || (Boolean(targetUid) && dmRequestState === 'incoming')}
                 onPointerDown={(e) => {
                   // Crucial for mobile virtual keyboards:
                   // Calling preventDefault on pointerdown stops the button tap from blurring the textarea,
