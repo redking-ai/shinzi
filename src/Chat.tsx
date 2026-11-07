@@ -177,6 +177,16 @@ const millis = (value: any): number => {
   if (typeof value.toMillis === 'function') return value.toMillis();
   if (value instanceof Date) return value.getTime();
   if (typeof value === 'number') return value;
+  if (typeof value.seconds === 'number') {
+    return value.seconds * 1000 + Math.floor((value.nanoseconds || 0) / 1000000);
+  }
+  if (typeof value._seconds === 'number') {
+    return value._seconds * 1000 + Math.floor((value._nanoseconds || 0) / 1000000);
+  }
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    if (!isNaN(parsed)) return parsed;
+  }
   return 0;
 };
 
@@ -219,8 +229,8 @@ const dateLabel = (value: any) => {
 };
 
 const formatDiscordTimestamp = (value: any) => {
-  if (!millis(value)) return '';
-  const d = new Date(millis(value));
+  const ms = millis(value);
+  const d = ms > 0 ? new Date(ms) : new Date();
   const now = new Date();
   const y = new Date();
   y.setDate(y.getDate() - 1);
@@ -322,11 +332,20 @@ const isStandaloneImageUrl = (text?: string): string | null => {
   return null;
 };
 
+const isPlainObject = (val: any): boolean => {
+  if (!val || typeof val !== 'object') return false;
+  const proto = Object.getPrototypeOf(val);
+  return proto === null || proto === Object.prototype;
+};
+
 const sanitizeForFirestore = <T,>(obj: T): T => {
   if (obj === undefined) return null as any;
-  if (obj === null || typeof obj !== 'object') return obj;
+  if (!obj || typeof obj !== 'object') return obj;
   if (Array.isArray(obj)) {
     return obj.map(sanitizeForFirestore) as any;
+  }
+  if (!isPlainObject(obj)) {
+    return obj;
   }
   const clean: Record<string, any> = {};
   for (const [key, val] of Object.entries(obj)) {
@@ -1532,7 +1551,36 @@ export default function Chat({ onNavigate }: ChatProps) {
         );
         unsubscribeMessages = onSnapshot(
           messagesQuery,
-          (snap) => setMessages(snap.docs.map((item) => ({ id: item.id, ...item.data() }))),
+          (snap) => {
+            const rawDocs: Rec[] = snap.docs.map((item) => ({ id: item.id, ...item.data() }));
+
+            // Auto-heal any messages with corrupted or map-based createdAt in Firestore
+            rawDocs.forEach((docItem) => {
+              if (!selected?.id || !docItem.id) return;
+              const rawCreatedAt = (docItem as any).createdAt;
+              const isCorrupted =
+                rawCreatedAt &&
+                typeof rawCreatedAt === 'object' &&
+                typeof rawCreatedAt.toMillis !== 'function';
+
+              if (isCorrupted) {
+                const parsedMs = millis(rawCreatedAt);
+                const realTs = parsedMs > 0 ? Timestamp.fromMillis(parsedMs) : Timestamp.now();
+                updateDoc(doc(db, 'conversations', selected.id, 'messages', docItem.id), {
+                  createdAt: realTs,
+                }).catch((err) => console.warn('Could not auto-heal message createdAt:', err));
+              }
+            });
+
+            // Ensure messages are strictly sorted chronologically
+            rawDocs.sort((a, b) => {
+              const aTime = millis(a.createdAt) || Date.now();
+              const bTime = millis(b.createdAt) || Date.now();
+              return aTime - bTime;
+            });
+
+            setMessages(rawDocs);
+          },
           (error) => console.error('Messages listener error:', error),
         );
       },
