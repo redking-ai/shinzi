@@ -89,6 +89,7 @@ import {
 } from './GoogleIcons';
 import { MediaGrid, type MediaItem } from './MediaGrid';
 import { FileMessage } from './FileMessage';
+import { compressImageToWebP } from './imageCompressor';
 import { searchKlipy, getCachedKlipy, type KlipyItem } from './klipyService';
 import { cacheAudioBlob } from './voiceCache';
 import MuiAvatar from '@mui/material/Avatar';
@@ -3714,16 +3715,53 @@ const handleSearchMessage = async (target: Rec) => {
     sendingRef.current = true;
     setSending(true);
 
+    // 1. Optimize images (compress to fast WebP in parallel, in milliseconds)
+    const processedItems: Array<{
+      file: File;
+      type: 'image' | 'video';
+      previewUrl: string;
+      width?: number;
+      height?: number;
+    }> = await Promise.all(
+      items.map(async (item) => {
+        if (item.type === 'image') {
+          try {
+            const comp = await compressImageToWebP(item.file);
+            return {
+              file: comp.file,
+              type: 'image' as const,
+              previewUrl: item.previewUrl,
+              width: comp.width || undefined,
+              height: comp.height || undefined,
+            };
+          } catch {
+            return {
+              file: item.file,
+              type: 'image' as const,
+              previewUrl: item.previewUrl,
+            };
+          }
+        }
+        return {
+          file: item.file,
+          type: 'video' as const,
+          previewUrl: item.previewUrl,
+        };
+      })
+    );
+
     if (!drive.hasActiveSession) {
       // Offline fallback: small images only
-      const smallImages = items.filter((it) => it.file.type.startsWith('image/') && it.file.size <= 850 * 1024);
-      if (smallImages.length === items.length) {
+      const smallImages = processedItems.filter((it) => it.file.type.startsWith('image/') && it.file.size <= 850 * 1024);
+      if (smallImages.length === processedItems.length) {
         try {
           const mediaItems: MediaItem[] = [];
           for (let i = 0; i < smallImages.length; i++) {
             const f = smallImages[i].file;
             const dataUri = await blobToDataUri(f);
-            const dims = await getMediaDimensions(f);
+            const dims = (smallImages[i].width && smallImages[i].height)
+              ? { width: smallImages[i].width, height: smallImages[i].height }
+              : await getMediaDimensions(f);
             mediaItems.push({
               id: `local_${Date.now()}_${i}`,
               type: 'image',
@@ -3758,13 +3796,14 @@ const handleSearchMessage = async (target: Rec) => {
       return;
     }
 
-    notify('Uploading media…', `Uploading ${items.length} item(s) to Google Drive.`);
+    notify('Uploading media…', `Uploading ${processedItems.length} item(s) to Google Drive.`);
 
     try {
       const mediaItems: MediaItem[] = [];
 
-      for (let i = 0; i < items.length; i++) {
-        const file = items[i].file;
+      for (let i = 0; i < processedItems.length; i++) {
+        const item = processedItems[i];
+        const file = item.file;
         const isHeic = file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif') || file.type.includes('heic') || file.type.includes('heif');
         const isVideo = file.type.startsWith('video/');
         const isImage = file.type.startsWith('image/') || isHeic;
@@ -3781,7 +3820,10 @@ const handleSearchMessage = async (target: Rec) => {
 
         await drive.makeFilePublic(uploaded.fileId);
 
-        const dims = await getMediaDimensions(file);
+        const dims = (item.width && item.height)
+          ? { width: item.width, height: item.height, duration: undefined }
+          : await getMediaDimensions(file);
+
         const previewUrl = isImage
           ? `https://lh3.googleusercontent.com/d/${uploaded.fileId}=s1600`
           : `/api/media?fileId=${uploaded.fileId}`;
