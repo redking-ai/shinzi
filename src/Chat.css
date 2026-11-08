@@ -2753,10 +2753,20 @@
   background: #ffffff !important;
   box-shadow: 0 2px 12px rgba(255, 255, 255, 0.15) !important;
   color: #000000 !important;
-  font-size: 16px;
-  font-weight: 700;
+  -webkit-text-fill-color: #000000 !important;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700 !important;
+  letter-spacing: -0.01em;
+  text-shadow: none !important;
   cursor: pointer;
   transition: opacity 0.15s ease, transform 0.1s ease;
+}
+
+.shc-primary,
+.shc-primary * {
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
 }
 
 .shc-primary:hover {
@@ -3846,17 +3856,22 @@ button {
 
 /* Primary / Active Button - Pure White with Black text */
 .shc-btn,
-.shc-btn-primary {
+.shc-btn-primary,
+.shc-primary {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 10px 20px;
   background: #FFFFFF !important;
   color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
   border: 1px solid #FFFFFF !important;
   border-radius: 20px;
-  font-weight: 700;
+  font: inherit;
+  font-weight: 700 !important;
   font-size: 14px;
+  letter-spacing: -0.01em;
+  text-shadow: none !important;
   cursor: pointer;
   transition: opacity 0.15s ease, transform 0.1s ease;
 }
