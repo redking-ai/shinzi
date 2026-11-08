@@ -38,6 +38,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Clock,
   Copy,
   CornerUpLeft,
   ExternalLink,
@@ -90,6 +91,7 @@ import {
 import { MediaGrid, type MediaItem } from './MediaGrid';
 import { FileMessage } from './FileMessage';
 import { compressImageToWebP } from './imageCompressor';
+import { DateTimePickerModal } from './DateTimePickerModal';
 import { searchKlipy, getCachedKlipy, type KlipyItem } from './klipyService';
 import { cacheAudioBlob } from './voiceCache';
 import MuiAvatar from '@mui/material/Avatar';
@@ -1363,6 +1365,7 @@ export default function Chat({ onNavigate }: ChatProps) {
   const [eventStart, setEventStart] = useState('');
   const [eventEnd, setEventEnd] = useState('');
   const [creatingEvent, setCreatingEvent] = useState(false);
+  const [openDatePicker, setOpenDatePicker] = useState<'start' | 'end' | null>(null);
 
   const [gifMode, setGifMode] = useState<'gif' | 'sticker'>('gif');
   const [gifSearch, setGifSearch] = useState('');
@@ -6058,21 +6061,39 @@ const handleSearchMessage = async (target: Rec) => {
             onChange={(e) => setEventDescription(e.target.value)}
           />
 
-          <input
-            className="shc-input"
-            placeholder="Start date / time"
-            value={eventStart}
-            maxLength={100}
-            onChange={(e) => setEventStart(e.target.value)}
-          />
+          <button
+            type="button"
+            className="shc-input shc-datetime-field"
+            onClick={() => setOpenDatePicker('start')}
+          >
+            <div className="shc-datetime-field-content">
+              <span className="shc-datetime-label">Start:</span>
+              <span className={eventStart ? 'shc-datetime-value' : 'shc-datetime-placeholder'}>
+                {eventStart || 'Pick start date & time'}
+              </span>
+            </div>
+            <div className="shc-datetime-icons">
+              <Calendar size={17} />
+              <Clock size={16} />
+            </div>
+          </button>
 
-          <input
-            className="shc-input"
-            placeholder="End date / time"
-            value={eventEnd}
-            maxLength={100}
-            onChange={(e) => setEventEnd(e.target.value)}
-          />
+          <button
+            type="button"
+            className="shc-input shc-datetime-field"
+            onClick={() => setOpenDatePicker('end')}
+          >
+            <div className="shc-datetime-field-content">
+              <span className="shc-datetime-label">End:</span>
+              <span className={eventEnd ? 'shc-datetime-value' : 'shc-datetime-placeholder'}>
+                {eventEnd || 'Pick end date & time'}
+              </span>
+            </div>
+            <div className="shc-datetime-icons">
+              <Calendar size={17} />
+              <Clock size={16} />
+            </div>
+          </button>
 
           <button
             type="button"
@@ -6475,6 +6496,22 @@ const handleSearchMessage = async (target: Rec) => {
             setViewingProfileUid(null);
             await handleSearchMessage({ id: targetUid });
           }}
+        />
+      )}
+
+      {openDatePicker && (
+        <DateTimePickerModal
+          title={openDatePicker === 'start' ? 'Select Start Date & Time' : 'Select End Date & Time'}
+          initialValue={openDatePicker === 'start' ? eventStart : eventEnd}
+          onConfirm={(val) => {
+            if (openDatePicker === 'start') {
+              setEventStart(val);
+            } else {
+              setEventEnd(val);
+            }
+            setOpenDatePicker(null);
+          }}
+          onClose={() => setOpenDatePicker(null)}
         />
       )}
     </>

@@ -2748,13 +2748,33 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid #5865F2;
+  border: 1px solid #ffffff !important;
   border-radius: 16px;
-  background: #5865F2;
-  box-shadow: 0 0 14px rgba(88, 101, 242, 0.25);
-  color: #fff;
+  background: #ffffff !important;
+  box-shadow: 0 2px 12px rgba(255, 255, 255, 0.15) !important;
+  color: #000000 !important;
   font-size: 16px;
   font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+}
+
+.shc-primary:hover {
+  background: #f0f0f0 !important;
+}
+
+.shc-primary:active {
+  transform: scale(0.98);
+}
+
+.shc-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.shc-primary .shc-spinner {
+  border-color: rgba(0, 0, 0, 0.2) !important;
+  border-top-color: #000000 !important;
 }
 
 .shc-secondary {
