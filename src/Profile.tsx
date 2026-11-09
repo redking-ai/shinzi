@@ -18,6 +18,7 @@ import {
 import { auth, db } from './firebaseConfig';
 import { useDriveStore, type DriveFolderType } from './driveStore';
 import MediaCropModal from './MediaCropModal';
+import Settings from './Settings';
 import {
   getCachedProfile,
   setCachedProfile,
@@ -150,6 +151,7 @@ useEffect(() => {
     return String(cached?.bannerUrl ?? '');
   });
   const [isEditing, setIsEditing] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -834,11 +836,7 @@ useEffect(() => {
                 className="sh-banner-settings-button"
                 title="Settings"
                 aria-label="Settings"
-                onClick={() =>
-                  setError(
-                    'Settings are not connected to this profile screen yet.',
-                  )
-                }
+                onClick={() => setShowSettings(true)}
               >
                 ⚙
               </button>
@@ -1226,6 +1224,10 @@ useEffect(() => {
           }}
           onCancel={() => setCropModalData(null)}
         />
+      )}
+
+      {showSettings && (
+        <Settings onBack={() => setShowSettings(false)} />
       )}
     </main>
   );

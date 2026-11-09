@@ -16,6 +16,7 @@ import {
 } from 'firebase/firestore';
 import Profile from './Profile';
 import OtherProfile from './OtherProfile';
+import Settings from './Settings';
 import { auth, db } from './firebaseConfig';
 import Privacy from './Privacy';
 import Terms from './Terms';
@@ -229,6 +230,21 @@ if (currentPath === '/chat') {
           }}
           onOpenChat={(uid) => {
             navigateTo(`/chat?user=${encodeURIComponent(uid)}`);
+          }}
+        />
+      );
+    }
+
+    // Settings
+    if (currentPath === '/settings') {
+      return (
+        <Settings
+          onBack={() => {
+            if (window.history.length > 1) {
+              window.history.back();
+            } else {
+              navigateTo('/profile');
+            }
           }}
         />
       );
