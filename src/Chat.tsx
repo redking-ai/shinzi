@@ -17,6 +17,8 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
+  limit,
   limitToLast,
   onSnapshot,
   orderBy,
@@ -280,18 +282,52 @@ const isMentioned = (text: string, username?: string, displayName?: string) => {
   });
 };
 
-const renderFormattedText = (text: string) => {
+const renderFormattedText = (
+  text: string,
+  onMentionClick?: (mention: string) => void,
+) => {
   if (!text) return null;
-  const parts = text.split(/((?:^|\s)[@#][a-zA-Z0-9_-]+(?![a-zA-Z0-9_-]))/g);
+  const parts = text.split(/((?:^|[^\w@#])[@#][a-zA-Z0-9_-]+(?![a-zA-Z0-9_-]))/g);
   return parts.map((part, i) => {
-    const match = part.match(/^(\s*)([@#][a-zA-Z0-9_-]+)$/);
+    const match = part.match(/^([^\w@#]*)([@#][a-zA-Z0-9_-]+)$/);
     if (match) {
       const [, space, mention] = match;
       const isChannel = mention.startsWith('#');
+      const isClickable = !isChannel && Boolean(onMentionClick);
       return (
         <span key={i}>
           {space}
-          <span className={isChannel ? 'shc-channel-mention' : 'shc-mention'}>{mention}</span>
+          <span
+            className={
+              isChannel
+                ? 'shc-channel-mention'
+                : `shc-mention ${isClickable ? 'shc-mention-clickable' : ''}`
+            }
+            role={isClickable ? 'button' : undefined}
+            tabIndex={isClickable ? 0 : undefined}
+            onClick={
+              isClickable
+                ? (e) => {
+                    e.stopPropagation();
+                    onMentionClick?.(mention);
+                  }
+                : undefined
+            }
+            onKeyDown={
+              isClickable
+                ? (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onMentionClick?.(mention);
+                    }
+                  }
+                : undefined
+            }
+            title={isClickable ? `View profile of ${mention}` : undefined}
+          >
+            {mention}
+          </span>
         </span>
       );
     }
@@ -4328,6 +4364,91 @@ const handleSearchMessage = async (target: Rec) => {
     );
   };
 
+  const handleMentionClick = async (rawMention: string) => {
+    if (!rawMention) return;
+    const clean = rawMention.replace(/^[@#]+/, '').trim();
+    if (!clean) return;
+    const lower = clean.toLowerCase();
+    if (lower === 'here' || lower === 'everyone') return;
+
+    // 1. Current user (including self-mention e.g. @shinzi)
+    const myUsername = (profile?.username || '').trim().toLowerCase();
+    const myDisplayNameHandle = (profile?.displayName || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '_');
+    const myDisplayName = (profile?.displayName || '').trim().toLowerCase();
+    if (uid && (lower === myUsername || lower === myDisplayNameHandle || lower === myDisplayName)) {
+      openUserProfile(uid);
+      return;
+    }
+
+    // 2. Members of the active conversation
+    const activeConv = selectedConversation || selected;
+    if (activeConv?.memberProfiles) {
+      for (const [memberId, prof] of Object.entries(activeConv.memberProfiles)) {
+        const p = prof as Rec | undefined;
+        const u = (p?.username || '').trim().toLowerCase();
+        const d = (p?.displayName || '').trim().toLowerCase().replace(/\s+/g, '_');
+        const dRaw = (p?.displayName || '').trim().toLowerCase();
+        if (u === lower || d === lower || dRaw === lower) {
+          openUserProfile(memberId);
+          return;
+        }
+      }
+    }
+
+    // 3. User live profiles cache
+    for (const [mid, liveProf] of Object.entries(userLiveProfiles)) {
+      const u = (liveProf?.username || '').trim().toLowerCase();
+      const d = (liveProf?.displayName || '').trim().toLowerCase().replace(/\s+/g, '_');
+      const dRaw = (liveProf?.displayName || '').trim().toLowerCase();
+      if (u === lower || d === lower || dRaw === lower) {
+        openUserProfile(mid);
+        return;
+      }
+    }
+
+    // 4. Friends list
+    for (const f of friends) {
+      const u = String(f?.username || '').trim().toLowerCase();
+      const d = String(f?.displayName || '').trim().toLowerCase().replace(/\s+/g, '_');
+      const dRaw = String(f?.displayName || '').trim().toLowerCase();
+      if (u === lower || d === lower || dRaw === lower) {
+        openUserProfile(f.id);
+        return;
+      }
+    }
+
+    // 5. Query Firestore usernames collection
+    try {
+      const snap = await getDoc(doc(db, 'usernames', lower));
+      if (snap.exists()) {
+        const targetUid = snap.data()?.uid;
+        if (targetUid) {
+          openUserProfile(targetUid);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to resolve mention via usernames doc:', err);
+    }
+
+    // 6. Query Firestore users collection as fallback
+    try {
+      const q = query(collection(db, 'users'), where('username', '==', lower), limit(1));
+      const userSnap = await getDocs(q);
+      if (!userSnap.empty) {
+        openUserProfile(userSnap.docs[0].id);
+        return;
+      }
+    } catch (err) {
+      console.warn('Failed to resolve mention via users query:', err);
+    }
+
+    notify('Profile not found', `Could not find a user with @${clean}`);
+  };
+
   const goBack = () => {
     if (screen === 'conversation') {
       void publishTyping(false);
@@ -4642,7 +4763,7 @@ const handleSearchMessage = async (target: Rec) => {
       contentNode = (
         <MediaGrid
           items={item.mediaItems || []}
-          caption={item.text}
+          caption={item.text ? renderFormattedText(item.text, handleMentionClick) : undefined}
           own={item.senderId === uid}
           messageId={item.id}
           createdAt={item.createdAt}
@@ -4693,7 +4814,7 @@ const handleSearchMessage = async (target: Rec) => {
       contentNode = (
         <MediaGrid
           items={[singleItem]}
-          caption={item.text && !isStandaloneUrl ? item.text : undefined}
+          caption={item.text && !isStandaloneUrl ? renderFormattedText(item.text, handleMentionClick) : undefined}
           own={item.senderId === uid}
           messageId={item.id}
           createdAt={item.createdAt}
@@ -4734,7 +4855,7 @@ const handleSearchMessage = async (target: Rec) => {
       contentNode = emojiOnly ? (
         <span className="shc-dc-jumbo-emoji">{item.text.trim()}</span>
       ) : (
-        <span className="shc-dc-text">{renderFormattedText(item.text)}</span>
+        <span className="shc-dc-text">{renderFormattedText(item.text, handleMentionClick)}</span>
       );
     }
 

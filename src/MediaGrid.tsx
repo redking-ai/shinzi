@@ -18,7 +18,7 @@ export interface MediaItem {
 
 interface MediaGridProps {
   items: MediaItem[];
-  caption?: string;
+  caption?: string | React.ReactNode;
   own: boolean;
   messageId: string;
   createdAt?: any;

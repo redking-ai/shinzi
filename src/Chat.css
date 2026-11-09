@@ -2366,6 +2366,23 @@
   color: #5865F2;
   font-weight: 600;
   vertical-align: baseline;
+  transition: background 0.15s ease, transform 0.08s ease;
+  user-select: text;
+}
+
+.shc-mention-clickable {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.shc-mention-clickable:hover {
+  background: rgba(88, 101, 242, 0.35);
+  text-decoration: underline;
+}
+
+.shc-mention-clickable:active {
+  transform: scale(0.97);
+  background: rgba(88, 101, 242, 0.45);
 }
 
 .shc-channel-mention {
@@ -2384,6 +2401,10 @@
   background: rgba(88, 101, 242, 0.35);
   border: none;
   color: #FFFFFF;
+}
+
+.shc-bubble-own .shc-mention-clickable:hover {
+  background: rgba(88, 101, 242, 0.55);
 }
 
 .shc-composer-mentions {
