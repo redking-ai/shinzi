@@ -1384,6 +1384,8 @@ export default function Chat({ onNavigate }: ChatProps) {
   );
 
   const typingTimer = useRef<number | null>(null);
+  const draftTimer = useRef<number | null>(null);
+  const lastTypingPingRef = useRef<number>(0);
   const recordingTimer = useRef<number | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -2460,14 +2462,19 @@ const handleSearchMessage = async (target: Rec) => {
 
     setMessageText(text);
 
+    // Debounce localStorage writes so typing never stutters or drops frames
     if (selected?.id) {
-      try {
-        if (text.trim()) {
-          localStorage.setItem(`shinzi_draft_${selected.id}`, text);
-        } else {
-          localStorage.removeItem(`shinzi_draft_${selected.id}`);
-        }
-      } catch {}
+      if (draftTimer.current) window.clearTimeout(draftTimer.current);
+      const selId = selected.id;
+      draftTimer.current = window.setTimeout(() => {
+        try {
+          if (text.trim()) {
+            localStorage.setItem(`shinzi_draft_${selId}`, text);
+          } else {
+            localStorage.removeItem(`shinzi_draft_${selId}`);
+          }
+        } catch {}
+      }, 400);
     }
 
     const cursor = el ? (el.selectionStart ?? text.length) : text.length;
@@ -2475,23 +2482,32 @@ const handleSearchMessage = async (target: Rec) => {
     if (ctx) {
       setMentionQuery(ctx.query);
       setMentionSelectedIndex(0);
-    } else {
+    } else if (mentionQuery !== null) {
       setMentionQuery(null);
     }
 
     if (el) {
-      el.style.height = 'auto';
-      el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+      const targetHeight = Math.min(el.scrollHeight, 120);
+      if (Math.abs(el.clientHeight - targetHeight) > 4) {
+        el.style.height = 'auto';
+        el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+      }
     }
 
     if (!selected?.id || !uid) return;
 
-    void publishTyping(Boolean(text.trim()));
+    // Throttle typing activity network calls to at most once every 3.5s
+    const now = Date.now();
+    if (now - lastTypingPingRef.current > 3500) {
+      lastTypingPingRef.current = now;
+      void publishTyping(Boolean(text.trim()));
+    }
 
     if (typingTimer.current) window.clearTimeout(typingTimer.current);
     typingTimer.current = window.setTimeout(() => {
       void publishTyping(false);
-    }, 5000);
+      lastTypingPingRef.current = 0;
+    }, 4500);
   };
 
   const showToast = (msg: string) => {
@@ -2631,6 +2647,7 @@ const handleSearchMessage = async (target: Rec) => {
       if (inputRef.current) {
         inputRef.current.style.height = 'auto';
       }
+      if (draftTimer.current) window.clearTimeout(draftTimer.current);
       if (selected?.id) {
         try {
           localStorage.removeItem(`shinzi_draft_${selected.id}`);
@@ -2789,6 +2806,7 @@ const handleSearchMessage = async (target: Rec) => {
 
       await updateDoc(doc(db, 'conversations', selected.id), updates);
 
+      if (draftTimer.current) window.clearTimeout(draftTimer.current);
       if (selected?.id) {
         try {
           localStorage.removeItem(`shinzi_draft_${selected.id}`);

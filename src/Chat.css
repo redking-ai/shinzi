@@ -48,7 +48,7 @@
 .shc-page button:focus-visible,
 .shc-page input:focus-visible,
 .shc-page textarea:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid #ffffff;
   outline-offset: 2px;
 }
 
@@ -1710,7 +1710,8 @@
 }
 
 .shc-poll-chosen {
-  border-color: var(--accent);
+  border-color: #ffffff !important;
+  box-shadow: 0 0 0 1px #ffffff !important;
 }
 
 .shc-poll-top {
@@ -1733,7 +1734,7 @@
   display: block;
   height: 100%;
   border-radius: 3px;
-  background: linear-gradient(90deg, #3020a0, var(--accent));
+  background: #ffffff !important;
   transition: width 0.25s ease;
 }
 
@@ -1757,7 +1758,7 @@
   justify-content: center;
   border-radius: 13px;
   background: var(--surface-2);
-  color: var(--danger);
+  color: #ffffff !important;
 }
 
 .shc-event-body {
@@ -1770,20 +1771,34 @@
 
 .shc-join {
   align-self: flex-start;
-  margin-top: 4px;
-  padding: 7px 18px;
-  border: 1px solid var(--violet);
-  border-radius: 16px;
-  background: transparent;
+  margin-top: 6px;
+  padding: 8px 22px;
+  border: 1px solid #ffffff !important;
+  border-radius: 20px;
+  background: #ffffff !important;
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
+  font: inherit;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 700 !important;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+}
+
+.shc-join:hover {
+  background: #f0f0f0 !important;
+}
+
+.shc-join:active {
+  transform: scale(0.97);
 }
 
 .shc-join-on {
-  background: #5865F2;
-  border-color: #5865F2;
-  color: #fff;
-  box-shadow: 0 0 10px rgba(88, 101, 242, 0.35);
+  background: #ffffff !important;
+  border-color: #ffffff !important;
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
+  box-shadow: none !important;
 }
 
 /* Typing, recording, composer */
@@ -2675,9 +2690,11 @@
   font-size: 16px;
 }
 
-.shc-input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(32, 217, 255, 0.14);
+.shc-input:focus,
+.shc-input:focus-visible {
+  border-color: #ffffff !important;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25) !important;
+  outline: none !important;
 }
 
 .shc-input::placeholder {
