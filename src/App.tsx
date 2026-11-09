@@ -23,6 +23,7 @@ import Terms from './Terms';
 import SignUp from './SignUp';
 import Login from './Login';
 import Chat from './Chat';
+import Servers from './Servers';
 import { getCachedProfile, setCachedProfile, navigateTo } from './profileCache';
 
 import logo from './assets/logo.png';
@@ -183,6 +184,26 @@ if (currentPath === '/privacy') {
 
 if (currentPath === '/chat') {
   return <Chat />;
+}
+
+// ==========================================================
+// SHINZI SERVERS
+// ==========================================================
+
+if (currentPath === '/servers') {
+  return (
+    <Servers
+      onBack={() => {
+        if (window.history.length > 1) {
+          window.history.back();
+        } else {
+          navigateTo('/chat');
+        }
+      }}
+      onOpenChat={() => navigateTo('/chat')}
+      onOpenProfile={() => navigateTo('/profile')}
+    />
+  );
 }
   // ==========================================================
   // AUTH LOADING

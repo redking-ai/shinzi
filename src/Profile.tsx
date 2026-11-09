@@ -1137,7 +1137,9 @@ useEffect(() => {
 
         <button
           type="button"
-          onClick={() => setError('Servers are not connected yet.')}
+          onClick={() => {
+            navigateTo('/servers');
+          }}
           aria-label="Servers"
         >
           <Server size={22} />

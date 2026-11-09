@@ -4349,6 +4349,8 @@ const handleSearchMessage = async (target: Rec) => {
       onNavigate(target);
     } else if (target === 'profile') {
       navigateToUrl('/profile');
+    } else if (target === 'servers') {
+      navigateToUrl('/servers');
     } else {
       notify(target === 'ai' ? 'AI' : 'Servers', 'This screen is not connected yet.');
     }

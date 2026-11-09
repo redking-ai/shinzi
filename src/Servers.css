@@ -1,0 +1,1033 @@
+/* ==========================================================
+   SHINZI SERVERS INTERFACE STYLES
+   ========================================================== */
+
+.sh-servers-page {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  background: #000000;
+  color: #ffffff;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  touch-action: pan-y;
+  overscroll-behavior-y: contain;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+/* Sticky Top Bar (No 3-dot menu per user request) */
+.sh-servers-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 56px;
+  padding: 0 16px;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sh-servers-topbar-title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: #ffffff;
+  margin: 0;
+}
+
+.sh-servers-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sh-servers-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sh-servers-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.sh-servers-icon-btn:active {
+  transform: scale(0.94);
+}
+
+/* Main Scrollable Content */
+.sh-servers-content {
+  flex: 1;
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 14px 14px calc(90px + env(safe-area-inset-bottom, 20px));
+  box-sizing: border-box;
+}
+
+/* Section Titles */
+.sh-servers-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #949ba4;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin: 16px 4px 10px;
+}
+
+/* Server Grid Layout (2 columns responsive) */
+.sh-servers-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 480px) {
+  .sh-servers-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+}
+
+/* Server Card with Full-bleed Background Thumbnail (No favorites per user request) */
+.sh-server-card {
+  position: relative;
+  height: 124px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 12px;
+  box-sizing: border-box;
+}
+
+.sh-server-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+
+.sh-server-card:active {
+  transform: scale(0.98);
+}
+
+/* Dark Gradient Overlay for Text Readability */
+.sh-server-card-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.25) 0%, rgba(0, 0, 0, 0.85) 100%);
+  pointer-events: none;
+}
+
+.sh-server-card-body {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  width: 100%;
+}
+
+.sh-server-card-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  object-fit: cover;
+  background: #1e1f22;
+  margin-bottom: 6px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.sh-server-card-avatar-placeholder {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  background: #2b2d31;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  flex-shrink: 0;
+}
+
+.sh-server-card-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.sh-server-card-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 90%;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+.sh-server-badge-official {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #5865F2;
+  color: #ffffff;
+  font-size: 9px;
+  flex-shrink: 0;
+}
+
+.sh-server-card-members {
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.75);
+  margin-top: 1px;
+}
+
+/* Empty State Box */
+.sh-servers-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 36px 16px;
+  text-align: center;
+  color: #949ba4;
+  background: #111215;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  margin-bottom: 20px;
+}
+
+.sh-servers-empty-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #ffffff;
+  margin-top: 10px;
+}
+
+.sh-servers-empty-desc {
+  font-size: 13px;
+  color: #949ba4;
+  margin-top: 4px;
+}
+
+/* ==========================================================
+   CREATE SERVER MODAL (Full Box Thumbnail & Profile Upload)
+   ========================================================== */
+
+.sh-create-server-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 1050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: shFadeIn 0.18s ease-out;
+}
+
+.sh-create-server-modal {
+  width: 100%;
+  max-width: 480px;
+  background: #111215;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.8);
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+}
+
+.sh-create-server-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sh-create-server-header h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0;
+}
+
+.sh-create-server-body {
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Banner / Thumbnail Upload Box */
+.sh-create-thumbnail-box {
+  position: relative;
+  width: 100%;
+  height: 120px;
+  border-radius: 12px;
+  border: 2px dashed rgba(255, 255, 255, 0.2);
+  background-size: cover;
+  background-position: center;
+  background-color: #1a1b20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+  overflow: hidden;
+}
+
+.sh-create-thumbnail-box:hover {
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.sh-create-thumbnail-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+  margin-top: 6px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+/* Avatar Upload Circle */
+.sh-create-avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.sh-create-avatar-circle {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 2px dashed rgba(255, 255, 255, 0.25);
+  background-size: cover;
+  background-position: center;
+  background-color: #1a1b20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.sh-create-avatar-circle:hover {
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.sh-create-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sh-create-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #949ba4;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.sh-create-input,
+.sh-create-textarea {
+  width: 100%;
+  background: #1e1f24;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 14px;
+  color: #ffffff;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sh-create-input:focus,
+.sh-create-textarea:focus {
+  border-color: #ffffff !important;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2) !important;
+}
+
+.sh-create-textarea {
+  min-height: 70px;
+  resize: vertical;
+}
+
+/* Private Server Toggle Row */
+.sh-create-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #1a1b20;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sh-create-toggle-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.sh-create-toggle-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.sh-create-toggle-desc {
+  font-size: 11px;
+  color: #949ba4;
+  margin-top: 2px;
+}
+
+/* Create Button */
+.sh-create-submit-btn {
+  width: 100%;
+  padding: 12px;
+  border-radius: 20px;
+  background: #ffffff;
+  color: #000000;
+  font-size: 15px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.08s ease;
+  margin-top: 6px;
+}
+
+.sh-create-submit-btn:hover {
+  opacity: 0.9;
+}
+
+.sh-create-submit-btn:active {
+  transform: scale(0.98);
+}
+
+/* ==========================================================
+   SEARCH SERVERS UI (20261109_222742 & 20261109_222850)
+   ========================================================== */
+
+.sh-search-page {
+  position: fixed;
+  inset: 0;
+  background: #000000;
+  color: #ffffff;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+}
+
+.sh-search-topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #111215;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sh-search-input-wrap {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.sh-search-input {
+  width: 100%;
+  background: #1e1f24;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  padding: 9px 36px 9px 14px;
+  color: #ffffff;
+  font-size: 14px;
+  outline: none;
+}
+
+.sh-search-input:focus {
+  border-color: #ffffff !important;
+}
+
+.sh-search-clear-btn {
+  position: absolute;
+  right: 10px;
+  background: transparent;
+  border: none;
+  color: #949ba4;
+  cursor: pointer;
+}
+
+.sh-search-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Search Result List & Card (Full Thumbnail in here btw full box again) */
+.sh-search-result-card {
+  position: relative;
+  width: 100%;
+  height: 80px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background-size: cover;
+  background-position: center;
+  background-color: #1a1b20;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 14px;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.sh-search-result-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+}
+
+.sh-search-result-body {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.sh-search-result-avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  object-fit: cover;
+  background: #2b2d31;
+  flex-shrink: 0;
+}
+
+.sh-search-result-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sh-search-result-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sh-search-result-creator {
+  font-size: 12px;
+  color: #949ba4;
+}
+
+/* ==========================================================
+   SERVER CHANNEL & CATEGORY VIEW (20261109_222903 & 222918)
+   ========================================================== */
+
+.sh-server-view-page {
+  position: fixed;
+  inset: 0;
+  background: #000000;
+  color: #ffffff;
+  z-index: 950;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+/* Expandable Banner Header */
+.sh-server-banner-header {
+  position: relative;
+  width: 100%;
+  height: 160px;
+  background-size: cover;
+  background-position: center;
+  background-color: #1a1b20;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 14px;
+  box-sizing: border-box;
+}
+
+.sh-server-banner-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  z-index: 5;
+}
+
+.sh-server-banner-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.3) 0%, rgba(0, 0, 0, 0.85) 100%);
+  pointer-events: none;
+}
+
+/* Header Text & 4 Side Actions (Event, Invite, Search, >) */
+.sh-server-header-info {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.sh-server-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sh-server-header-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  object-fit: cover;
+  background: #2b2d31;
+}
+
+.sh-server-header-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.sh-server-header-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.sh-server-header-sub {
+  font-size: 12px;
+  color: #949ba4;
+  margin-top: 2px;
+}
+
+.sh-server-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 5;
+}
+
+/* Channel & Category List */
+.sh-server-channels-content {
+  flex: 1;
+  padding: 14px;
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.sh-category-group {
+  margin-bottom: 16px;
+}
+
+.sh-category-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 4px;
+  cursor: pointer;
+  color: #949ba4;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  user-select: none;
+}
+
+.sh-channel-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: #949ba4;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+  user-select: none;
+}
+
+.sh-channel-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+}
+
+.sh-channel-item-active {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+}
+
+.sh-channel-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14.5px;
+  font-weight: 500;
+}
+
+.sh-channel-icon-hash {
+  font-size: 18px;
+  font-weight: 700;
+  color: #636b75;
+}
+
+.sh-channel-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: #949ba4;
+}
+
+/* ==========================================================
+   INVITE POPUP BOTTOM SHEET (20261109_222945 & 222957)
+   ========================================================== */
+
+.sh-invite-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(6px);
+  z-index: 1100;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.sh-invite-sheet {
+  width: 100%;
+  max-width: 520px;
+  background: #111215;
+  border-radius: 20px 20px 0 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: none;
+  padding: 20px;
+  box-sizing: border-box;
+  animation: shSheetSlideUp 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes shSheetSlideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.sh-invite-sheet-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0 0 16px;
+}
+
+.sh-invite-share-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.sh-invite-share-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.sh-invite-share-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  transition: background 0.15s ease;
+}
+
+.sh-invite-share-item:hover .sh-invite-share-icon {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.sh-invite-share-label {
+  font-size: 11px;
+  color: #949ba4;
+}
+
+.sh-invite-field {
+  margin-bottom: 14px;
+}
+
+.sh-invite-field label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #949ba4;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.sh-invite-select {
+  width: 100%;
+  background: #1e1f24;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: #ffffff;
+  font-size: 14px;
+  outline: none;
+}
+
+.sh-invite-done-btn {
+  width: 100%;
+  padding: 12px;
+  border-radius: 20px;
+  background: #ffffff;
+  color: #000000;
+  font-size: 15px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  margin-top: 10px;
+}
+
+/* ==========================================================
+   FULL SERVER DETAILS VIEW (20261109_223029)
+   ========================================================== */
+
+.sh-server-details-page {
+  position: fixed;
+  inset: 0;
+  background: #000000;
+  color: #ffffff;
+  z-index: 1020;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.sh-server-details-banner {
+  position: relative;
+  width: 100%;
+  height: 180px;
+  background-size: cover;
+  background-position: center;
+  background-color: #1a1b20;
+}
+
+.sh-server-details-body {
+  flex: 1;
+  padding: 0 16px 40px;
+  max-width: 680px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.sh-server-details-avatar-wrap {
+  margin-top: -36px;
+  margin-bottom: 12px;
+}
+
+.sh-server-details-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 3px solid #000000;
+  object-fit: cover;
+  background: #2b2d31;
+}
+
+.sh-server-details-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sh-server-details-title {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.sh-server-details-desc {
+  font-size: 14px;
+  color: #dbdee1;
+  margin: 8px 0 12px;
+  line-height: 1.4;
+}
+
+.sh-server-details-stats {
+  font-size: 12.5px;
+  color: #949ba4;
+  margin-bottom: 14px;
+}
+
+.sh-server-details-mutual {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: #949ba4;
+  margin-bottom: 20px;
+  padding: 8px 12px;
+  background: #111215;
+  border-radius: 10px;
+}
+
+/* 3 Quick Action Cards */
+.sh-server-action-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.sh-server-action-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 14px 8px;
+  background: #111215;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  color: #ffffff;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.sh-server-action-card:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.sh-server-action-card-label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Menu Items List */
+.sh-server-menu-list {
+  background: #111215;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.sh-server-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 14px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: #ffffff;
+  font-size: 14.5px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.sh-server-menu-item:last-child {
+  border-bottom: none;
+}
+
+.sh-server-menu-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.sh-server-menu-danger {
+  color: #ff4b4b !important;
+}
+
+.sh-server-menu-danger:hover {
+  background: rgba(255, 75, 75, 0.08) !important;
+}
