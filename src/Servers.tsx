@@ -23,6 +23,7 @@ import {
   Ban,
   Trash2,
   CheckCircle2,
+  Calendar,
   Pencil,
   ArrowUpDown,
   Send,
@@ -1014,8 +1015,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
           )}
           <button
             type="button"
-            className="sh-servers-icon-btn"
-            style={{ position: 'absolute', top: 14, left: 14, zIndex: 10 }}
+            className="sh-server-details-back-btn"
             onClick={() => setShowDetailsModal(false)}
             aria-label="Back"
           >
@@ -1032,10 +1032,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                 className="sh-server-details-avatar"
               />
             ) : (
-              <div
-                className="sh-server-card-avatar-placeholder"
-                style={{ width: 68, height: 68, fontSize: 28, margin: 0 }}
-              >
+              <div className="sh-server-details-avatar-placeholder">
                 {activeServer.name.charAt(0).toUpperCase()}
               </div>
             )}
@@ -1302,92 +1299,154 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
               className="sh-server-banner-bg-img"
             />
             <div className="sh-server-banner-overlay" />
-            <button
-              type="button"
-              className="sh-servers-icon-btn"
-              style={{ position: 'absolute', top: 12, left: 12, zIndex: 10 }}
-              onClick={handleBack}
-              aria-label="Back to Servers"
-            >
-              <ArrowLeft size={20} />
-            </button>
-          </div>
-        ) : (
-          <div className="sh-server-banner-header-nobanner">
-            <button
-              type="button"
-              className="sh-servers-icon-btn"
-              onClick={handleBack}
-              aria-label="Back to Servers"
-            >
-              <ArrowLeft size={20} />
-            </button>
-          </div>
-        )}
-
-        {/* Server Header Container: identity row, stats pills, and Action Bar below banner */}
-        <div className="sh-server-header-container">
-          {/* Identity Row - tapping anywhere opens details sheet */}
-          <div
-            className="sh-server-identity-trigger"
-            onClick={() => setShowDetailsModal(true)}
-          >
-            {activeServer.iconUrl ? (
-              <img
-                src={activeServer.iconUrl}
-                alt={activeServer.name}
-                className="sh-server-header-avatar"
-              />
-            ) : (
-              <div
-                className="sh-server-card-avatar-placeholder"
-                style={{ width: 44, height: 44, fontSize: 18, margin: 0 }}
+            
+            <div className="sh-server-banner-top">
+              <button
+                type="button"
+                className="sh-servers-icon-btn"
+                onClick={handleBack}
+                aria-label="Back to Servers"
               >
-                {activeServer.name.charAt(0).toUpperCase()}
-              </div>
-            )}
-
-            <div className="sh-server-identity-details">
-              <h1 className="sh-server-header-name">
-                {activeServer.name}
-                {activeServer.isOfficial && <CheckCircle2 size={16} color="#5865F2" fill="#5865F2" />}
-              </h1>
-              {/* Online & Member pills */}
-              <div className="sh-server-details-status-row" style={{ marginTop: 4 }}>
-                <div className="sh-server-status-pill">
-                  <span className="sh-status-dot-green"></span>
-                  <span>{onlineMembersCount} Online</span>
-                </div>
-                <div className="sh-server-status-pill">
-                  <span className="sh-status-dot-gray"></span>
-                  <span>{activeServer.memberIds?.length || 1} Members</span>
-                </div>
-              </div>
+                <ArrowLeft size={20} />
+              </button>
             </div>
 
-            <ChevronRight size={22} className="sh-server-chevron-btn" />
-          </div>
+            {/* Server Header info & 4 action buttons directly in header (Screenshot_20261110-180907_Chrome) */}
+            <div className="sh-server-header-info">
+              <div className="sh-server-header-left">
+                {activeServer.iconUrl ? (
+                  <img
+                    src={activeServer.iconUrl}
+                    alt={activeServer.name}
+                    className="sh-server-header-avatar"
+                  />
+                ) : (
+                  <div
+                    className="sh-server-card-avatar-placeholder"
+                    style={{ width: 48, height: 48, fontSize: 18, margin: 0 }}
+                  >
+                    {activeServer.name.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div className="sh-server-header-details">
+                  <h1 className="sh-server-header-name">
+                    {activeServer.name}
+                    {activeServer.isOfficial && <CheckCircle2 size={16} color="#5865F2" fill="#5865F2" />}
+                  </h1>
+                  <span className="sh-server-header-sub">{activeServer.memberCount}</span>
+                </div>
+              </div>
 
-          {/* Action Bar Row matching IMG-20261109-WA0007 */}
-          <div className="sh-server-action-bar-row">
-            <button
-              type="button"
-              className="sh-server-search-btn-pill"
-              onClick={() => setShowSearchModal(true)}
-            >
-              <Search size={16} />
-              <span>Search</span>
-            </button>
-            <button
-              type="button"
-              className="sh-server-invite-btn-pill"
-              onClick={() => setShowInviteSheet(true)}
-            >
-              <UserPlus size={16} />
-              <span>Invite</span>
-            </button>
+              <div className="sh-server-header-actions">
+                <button
+                  type="button"
+                  className="sh-servers-icon-btn"
+                  title="Events"
+                  onClick={() => alert('No active server events currently.')}
+                >
+                  <Calendar size={18} />
+                </button>
+                <button
+                  type="button"
+                  className="sh-servers-icon-btn"
+                  title="Invite"
+                  onClick={() => setShowInviteSheet(true)}
+                >
+                  <UserPlus size={18} />
+                </button>
+                <button
+                  type="button"
+                  className="sh-servers-icon-btn"
+                  title="Search"
+                  onClick={() => setShowSearchModal(true)}
+                >
+                  <Search size={18} />
+                </button>
+                <button
+                  type="button"
+                  className="sh-servers-icon-btn"
+                  title="Server Details"
+                  onClick={() => setShowDetailsModal(true)}
+                >
+                  <ChevronRight size={20} />
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="sh-server-nobanner-header">
+            <div className="sh-server-nobanner-top">
+              <button
+                type="button"
+                className="sh-servers-icon-btn"
+                onClick={handleBack}
+                aria-label="Back to Servers"
+              >
+                <ArrowLeft size={20} />
+              </button>
+            </div>
+            <div className="sh-server-header-info" style={{ position: 'relative', bottom: 'auto', left: 'auto', right: 'auto' }}>
+              <div className="sh-server-header-left">
+                {activeServer.iconUrl ? (
+                  <img
+                    src={activeServer.iconUrl}
+                    alt={activeServer.name}
+                    className="sh-server-header-avatar"
+                  />
+                ) : (
+                  <div
+                    className="sh-server-card-avatar-placeholder"
+                    style={{ width: 48, height: 48, fontSize: 18, margin: 0 }}
+                  >
+                    {activeServer.name.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div className="sh-server-header-details">
+                  <h1 className="sh-server-header-name">
+                    {activeServer.name}
+                    {activeServer.isOfficial && <CheckCircle2 size={16} color="#5865F2" fill="#5865F2" />}
+                  </h1>
+                  <span className="sh-server-header-sub">{activeServer.memberCount}</span>
+                </div>
+              </div>
+
+              <div className="sh-server-header-actions">
+                <button
+                  type="button"
+                  className="sh-servers-icon-btn"
+                  title="Events"
+                  onClick={() => alert('No active server events currently.')}
+                >
+                  <Calendar size={18} />
+                </button>
+                <button
+                  type="button"
+                  className="sh-servers-icon-btn"
+                  title="Invite"
+                  onClick={() => setShowInviteSheet(true)}
+                >
+                  <UserPlus size={18} />
+                </button>
+                <button
+                  type="button"
+                  className="sh-servers-icon-btn"
+                  title="Search"
+                  onClick={() => setShowSearchModal(true)}
+                >
+                  <Search size={18} />
+                </button>
+                <button
+                  type="button"
+                  className="sh-servers-icon-btn"
+                  title="Server Details"
+                  onClick={() => setShowDetailsModal(true)}
+                >
+                  <ChevronRight size={20} />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Channels & Categories List with Long-press support */}
         <div className="sh-server-channels-content">
@@ -1608,7 +1667,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                 <span className="sh-context-sheet-title">{contextCategory.name}</span>
                 <button
                   type="button"
-                  className="sh-servers-icon-btn"
+                  className="sh-context-sheet-close-btn"
                   onClick={() => setContextCategory(null)}
                 >
                   <X size={18} />
@@ -1616,7 +1675,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
               </div>
               <button
                 type="button"
-                className="sh-context-item"
+                className="sh-context-sheet-item"
                 onClick={() => {
                   setTargetCategoryForNewChannel(contextCategory.id);
                   setContextCategory(null);
@@ -1633,7 +1692,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
               </button>
               <button
                 type="button"
-                className="sh-context-item"
+                className="sh-context-sheet-item"
                 onClick={() => {
                   const newName = prompt('Edit Category Name:', contextCategory.name);
                   if (newName && newName.trim() && activeServer) {
@@ -1653,7 +1712,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
               </button>
               <button
                 type="button"
-                className="sh-context-item"
+                className="sh-context-sheet-item"
                 onClick={() => {
                   alert('Drag and drop to reorder categories coming soon.');
                   setContextCategory(null);
@@ -1674,7 +1733,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                 <span className="sh-context-sheet-title">#{contextChannel.channel.name}</span>
                 <button
                   type="button"
-                  className="sh-servers-icon-btn"
+                  className="sh-context-sheet-close-btn"
                   onClick={() => setContextChannel(null)}
                 >
                   <X size={18} />
@@ -1682,7 +1741,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
               </div>
               <button
                 type="button"
-                className="sh-context-item"
+                className="sh-context-sheet-item"
                 onClick={() => {
                   const ch = contextChannel.channel;
                   setEditingChannel(contextChannel);
@@ -1698,7 +1757,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
               </button>
               <button
                 type="button"
-                className="sh-context-item"
+                className="sh-context-sheet-item"
                 onClick={() => {
                   alert('Drag and drop to reorder channels coming soon.');
                   setContextChannel(null);

@@ -935,13 +935,17 @@
 .sh-server-details-banner {
   position: relative;
   width: 100%;
-  height: 180px;
+  height: 240px;
+  flex-shrink: 0;
   background-size: cover;
   background-position: center;
   background-color: #1a1b20;
+  overflow: hidden;
 }
 
 .sh-server-details-body {
+  position: relative;
+  z-index: 10;
   flex: 1;
   padding: 0 16px 40px;
   max-width: 680px;
@@ -951,17 +955,37 @@
 }
 
 .sh-server-details-avatar-wrap {
-  margin-top: -36px;
-  margin-bottom: 12px;
+  position: relative;
+  z-index: 20;
+  margin-top: -42px;
+  margin-bottom: 14px;
+  display: inline-block;
 }
 
 .sh-server-details-avatar {
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
-  border: 3px solid #000000;
+  width: 80px;
+  height: 80px;
+  border-radius: 22px;
+  border: 4px solid #000000;
   object-fit: cover;
+  background: #1e1f22;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.7);
+  display: block;
+}
+
+.sh-server-details-avatar-placeholder {
+  width: 80px;
+  height: 80px;
+  border-radius: 22px;
+  border: 4px solid #000000;
   background: #2b2d31;
+  color: #ffffff;
+  font-size: 32px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.7);
 }
 
 .sh-server-details-title-row {
@@ -1281,12 +1305,34 @@
 .sh-channel-chat-header-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+}
+
+.sh-channel-chat-back-btn {
+  background: transparent;
+  border: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.12s ease;
+}
+
+.sh-channel-chat-back-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .sh-channel-chat-title-group {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
 }
 
 .sh-channel-chat-title {
@@ -1296,13 +1342,42 @@
   font-size: 16px;
   font-weight: 700;
   color: #ffffff;
+  margin: 0;
 }
 
-.sh-channel-chat-subtitle {
-  font-size: 11px;
-  color: #949ba4;
+.sh-channel-chat-header-actions {
   display: flex;
   align-items: center;
+  gap: 8px;
+}
+
+.sh-channel-chat-online-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #23a55a;
+  background: rgba(35, 165, 90, 0.12);
+  padding: 3px 8px;
+  border-radius: 12px;
+}
+
+.sh-channel-chat-header-actions .sh-servers-icon-btn {
+  background: transparent;
+  border: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: #dbdee1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.sh-channel-chat-header-actions .sh-servers-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .sh-channel-chat-messages {
@@ -1388,26 +1463,43 @@
   gap: 10px;
 }
 
-.sh-channel-input-wrap {
-  flex: 1;
+.sh-channel-input-attach-btn {
+  background: #2b2d31;
+  border: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: #dbdee1;
   display: flex;
   align-items: center;
-  background: #1e1f22;
-  border-radius: 20px;
-  padding: 0 14px;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  transition: background 0.12s ease;
+}
+
+.sh-channel-input-attach-btn:hover {
+  background: #35373c;
+  color: #ffffff;
 }
 
 .sh-channel-input-field {
   flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
+  background: #1e1f22;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 10px 16px;
   color: #ffffff;
-  padding: 10px 0;
   font-size: 14px;
+  outline: none;
 }
 
-.sh-channel-send-btn {
+.sh-channel-input-field:focus {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.sh-channel-input-send-btn {
   background: #5865F2;
   border: none;
   border-radius: 50%;
@@ -1419,6 +1511,14 @@
   color: #ffffff;
   cursor: pointer;
   flex-shrink: 0;
+  padding: 0;
+  transition: opacity 0.12s ease;
+}
+
+.sh-channel-input-send-btn:disabled {
+  background: #2b2d31;
+  color: #636b75;
+  cursor: default;
 }
 
 /* ==========================================================
@@ -1427,7 +1527,7 @@
 .sh-context-sheet-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.75);
   backdrop-filter: blur(4px);
   z-index: 1200;
   display: flex;
@@ -1437,28 +1537,45 @@
 
 .sh-context-sheet {
   width: 100%;
-  max-width: 520px;
+  max-width: 500px;
   background: #1e1f22;
   border-radius: 20px 20px 0 0;
-  padding: 12px 16px 28px;
+  padding: 14px 16px 28px;
   box-sizing: border-box;
   animation: shSheetSlideUp 0.18s ease-out;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.sh-context-sheet-handle {
-  width: 36px;
-  height: 4px;
-  background: #4e5058;
-  border-radius: 2px;
-  margin: 0 auto 12px;
+.sh-context-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 4px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 6px;
 }
 
 .sh-context-sheet-title {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   color: #ffffff;
-  margin: 0 0 12px;
-  padding: 0 4px;
+  margin: 0;
+}
+
+.sh-context-sheet-close-btn {
+  background: #2b2d31;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: #dbdee1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
 }
 
 .sh-context-sheet-item {
@@ -1466,20 +1583,28 @@
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 12px 14px;
+  padding: 13px 14px;
   border-radius: 10px;
   background: transparent;
   border: none;
-  color: #ffffff;
-  font-size: 14.5px;
+  color: #dbdee1;
+  font-size: 15px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.12s ease;
+  transition: background 0.12s ease, color 0.12s ease;
   text-align: left;
+  box-sizing: border-box;
 }
 
-.sh-context-sheet-item:hover {
-  background: rgba(255, 255, 255, 0.06);
+.sh-context-sheet-item:hover,
+.sh-context-sheet-item:active {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.sh-context-sheet-item svg {
+  color: #949ba4;
+  flex-shrink: 0;
 }
 
 .sh-context-sheet-item-danger {
