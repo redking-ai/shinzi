@@ -6,7 +6,6 @@ import {
   ArrowLeft,
   ChevronRight,
   ChevronDown,
-  Calendar,
   UserPlus,
   X,
   Copy,
@@ -24,6 +23,10 @@ import {
   Ban,
   Trash2,
   CheckCircle2,
+  Pencil,
+  ArrowUpDown,
+  Send,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { auth, db } from './firebaseConfig';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
@@ -35,18 +38,27 @@ import {
   deleteDoc,
   query,
   where,
+  addDoc,
+  onSnapshot,
+  serverTimestamp,
+  updateDoc,
+  orderBy,
 } from 'firebase/firestore';
 import { useDriveStore } from './driveStore';
+import { getUserEffectiveStatus } from './presenceService';
 
-interface ServerChannel {
+export interface ServerChannel {
   id: string;
   name: string;
-  type: 'text' | 'voice' | 'announcement';
+  type: 'text' | 'voice' | 'announcement' | 'forum';
+  description?: string;
+  iconUrl?: string;
   isPrivate?: boolean;
   listenerCount?: string;
+  allowedTags?: string[];
 }
 
-interface ServerCategory {
+export interface ServerCategory {
   id: string;
   name: string;
   channels: ServerChannel[];
@@ -70,6 +82,16 @@ export interface ServerData {
   onlineCount?: string;
   categories: ServerCategory[];
   createdAt?: number;
+}
+
+export interface ServerChannelMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderAvatar?: string;
+  text?: string;
+  imageUrl?: string;
+  createdAt?: any;
 }
 
 interface ServersProps {
@@ -101,11 +123,9 @@ const cleanSavedServers = (saved: string | null): ServerData[] => {
 
 /**
  * Resizes and compresses image files into lightweight web-ready base64 data URLs.
- * This guarantees the image stays well under Firestore's 1MB document limit,
- * prevents localStorage quota errors, and preserves animated GIFs.
+ * Preserves animated GIFs under 1.5MB.
  */
 async function processServerImage(file: File, isBanner: boolean): Promise<string> {
-  // If animated GIF under 1.5MB, preserve raw bytes for animated GIF playback
   if (file.type === 'image/gif' && file.size < 1500000) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -115,7 +135,6 @@ async function processServerImage(file: File, isBanner: boolean): Promise<string
     });
   }
 
-  // Compress other images (JPEG, PNG, WEBP, high-res phone camera shots)
   return new Promise((resolve) => {
     const maxWidth = isBanner ? 800 : 200;
     const maxHeight = isBanner ? 450 : 200;
@@ -159,6 +178,16 @@ async function processServerImage(file: File, isBanner: boolean): Promise<string
   });
 }
 
+function formatMessageTime(createdAt: any): string {
+  if (!createdAt) return '';
+  try {
+    const date = createdAt.toDate ? createdAt.toDate() : new Date(createdAt);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return '';
+  }
+}
+
 export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersProps) {
   const drive = useDriveStore();
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(() => auth.currentUser);
@@ -190,6 +219,9 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [showInviteSheet, setShowInviteSheet] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+
+  // Real Online Members Count for active server
+  const [onlineMembersCount, setOnlineMembersCount] = useState<number>(1);
 
   // Search Screen State
   const [searchQuery, setSearchQuery] = useState('');
@@ -227,11 +259,43 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
   // Collapsible categories
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
 
+  // Channel Chat States
+  const [channelMessages, setChannelMessages] = useState<ServerChannelMessage[]>([]);
+  const [channelInputText, setChannelInputText] = useState('');
+  const [channelSendBusy, setChannelSendBusy] = useState(false);
+  const channelFileInputRef = useRef<HTMLInputElement | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  // Long-press Context Sheet States
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [contextCategory, setContextCategory] = useState<ServerCategory | null>(null);
+  const [contextChannel, setContextChannel] = useState<{ catId: string; channel: ServerChannel } | null>(null);
+
+  // Create Channel Modal State (IMG-20261110-WA0017 & 20261110_184235)
+  const [showCreateChannelModal, setShowCreateChannelModal] = useState(false);
+  const [targetCategoryForNewChannel, setTargetCategoryForNewChannel] = useState<string | null>(null);
+  const [newChannelName, setNewChannelName] = useState('');
+  const [newChannelDesc, setNewChannelDesc] = useState('');
+  const [newChannelType, setNewChannelType] = useState<'text' | 'voice' | 'forum'>('text');
+  const [newChannelIsPrivate, setNewChannelIsPrivate] = useState(false);
+  const [newChannelIcon, setNewChannelIcon] = useState<string>('');
+  const newChannelIconInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Edit Channel Modal State (20261110_184443)
+  const [editingChannel, setEditingChannel] = useState<{ catId: string; channel: ServerChannel } | null>(null);
+  const [editChannelName, setEditChannelName] = useState('');
+  const [editChannelDesc, setEditChannelDesc] = useState('');
+  const [editChannelIsPrivate, setEditChannelIsPrivate] = useState(false);
+  const [editChannelIcon, setEditChannelIcon] = useState<string>('');
+  const editChannelIconInputRef = useRef<HTMLInputElement | null>(null);
+
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const bannerInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleBack = () => {
-    if (activeServer) {
+    if (selectedChannel) {
+      setSelectedChannel(null);
+    } else if (activeServer) {
       setActiveServer(null);
     } else if (onBack) {
       onBack();
@@ -266,12 +330,10 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     }
   }, []);
 
-  // Fetch when user state resolves
   useEffect(() => {
     void fetchPublicServers();
   }, [currentUser?.uid, fetchPublicServers]);
 
-  // Re-fetch whenever Search modal opens so newly created servers from other devices appear immediately
   useEffect(() => {
     if (showSearchModal) {
       void fetchPublicServers();
@@ -283,7 +345,6 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     if (!currentUser?.uid) return;
     const fetchUserServers = async () => {
       try {
-        // Created servers
         const qCreated = query(collection(db, 'servers'), where('ownerId', '==', currentUser.uid));
         const snapCreated = await getDocs(qCreated);
         if (!snapCreated.empty) {
@@ -296,7 +357,6 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
           localStorage.setItem('shinzi_created_servers', JSON.stringify(list));
         }
 
-        // Joined servers
         const qJoined = query(
           collection(db, 'servers'),
           where('memberIds', 'array-contains', currentUser.uid)
@@ -319,7 +379,212 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     void fetchUserServers();
   }, [currentUser?.uid]);
 
-  // Handle avatar upload (Supports image & animated GIF, compressed for web speed)
+  // Real-time calculation of online members for activeServer
+  useEffect(() => {
+    if (!activeServer || !activeServer.memberIds || activeServer.memberIds.length === 0) {
+      setOnlineMembersCount(1);
+      return;
+    }
+
+    const memberIds = activeServer.memberIds;
+    const unsubs: (() => void)[] = [];
+    const presenceMap: Record<string, any> = {};
+
+    memberIds.forEach((uid) => {
+      try {
+        const u = onSnapshot(doc(db, 'users', uid, 'friends', 'presence'), (snap) => {
+          if (snap.exists()) {
+            presenceMap[uid] = snap.data();
+          } else {
+            presenceMap[uid] = null;
+          }
+
+          let count = 0;
+          memberIds.forEach((mId) => {
+            const p = presenceMap[mId];
+            const status = getUserEffectiveStatus(p, p);
+            if (status === 'online') {
+              count++;
+            }
+          });
+
+          // Ensure current user is counted if online
+          if (currentUser?.uid && memberIds.includes(currentUser.uid) && count === 0) {
+            const userMode = localStorage.getItem('shinzi_status_mode');
+            if (userMode !== 'ghost') {
+              count = 1;
+            }
+          }
+          setOnlineMembersCount(Math.max(count, 1));
+        });
+        unsubs.push(u);
+      } catch {
+        // Fallback
+      }
+    });
+
+    return () => {
+      unsubs.forEach((fn) => fn());
+    };
+  }, [activeServer?.id, activeServer?.memberIds, currentUser?.uid]);
+
+  // Real-time channel messages listener
+  useEffect(() => {
+    if (!activeServer?.id || !selectedChannel?.id || selectedChannel.type !== 'text') {
+      setChannelMessages([]);
+      return;
+    }
+
+    try {
+      const messagesRef = collection(
+        db,
+        'servers',
+        activeServer.id,
+        'channels',
+        selectedChannel.id,
+        'messages'
+      );
+      const q = query(messagesRef, orderBy('createdAt', 'asc'));
+      const unsub = onSnapshot(
+        q,
+        (snap) => {
+          const msgs: ServerChannelMessage[] = snap.docs.map((docSnap) => ({
+            id: docSnap.id,
+            ...(docSnap.data() as any),
+          }));
+          setChannelMessages(msgs);
+        },
+        (err) => {
+          console.warn('Channel messages listener fallback:', err);
+        }
+      );
+      return unsub;
+    } catch (err) {
+      console.warn('Could not subscribe to channel messages:', err);
+    }
+  }, [activeServer?.id, selectedChannel?.id, selectedChannel?.type]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [channelMessages]);
+
+  // Send channel message
+  const handleSendChannelMessage = async (imageUrl?: string) => {
+    if (!activeServer || !selectedChannel) return;
+    const textToSend = channelInputText.trim();
+    if (!textToSend && !imageUrl) return;
+
+    setChannelSendBusy(true);
+    const userUid = currentUser?.uid || auth.currentUser?.uid || 'anon';
+    const userName = currentUser?.displayName || 'User';
+    const userAvatar = currentUser?.photoURL || '';
+
+    const newMsg: Partial<ServerChannelMessage> = {
+      senderId: userUid,
+      senderName: userName,
+      senderAvatar: userAvatar,
+      text: textToSend,
+      ...(imageUrl ? { imageUrl } : {}),
+      createdAt: serverTimestamp(),
+    };
+
+    try {
+      await addDoc(
+        collection(db, 'servers', activeServer.id, 'channels', selectedChannel.id, 'messages'),
+        newMsg
+      );
+      setChannelInputText('');
+    } catch (err) {
+      console.warn('Send channel message failed, fallback local:', err);
+      setChannelMessages((prev) => [
+        ...prev,
+        {
+          id: `local-${Date.now()}`,
+          senderId: userUid,
+          senderName: userName,
+          senderAvatar: userAvatar,
+          text: textToSend,
+          imageUrl,
+          createdAt: { toDate: () => new Date() },
+        },
+      ]);
+      setChannelInputText('');
+    } finally {
+      setChannelSendBusy(false);
+    }
+  };
+
+  const handleChannelImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const dataUrl = await processServerImage(file, false);
+      await handleSendChannelMessage(dataUrl);
+    } catch (err) {
+      console.warn('Channel image upload failed:', err);
+    } finally {
+      if (channelFileInputRef.current) channelFileInputRef.current.value = '';
+    }
+  };
+
+  // Helper to persist server changes to local state & Firestore
+  const updateServerInStateAndStorage = async (updatedServer: ServerData) => {
+    setActiveServer(updatedServer);
+
+    setCreatedServers((prev) => {
+      const exists = prev.some((s) => s.id === updatedServer.id);
+      const next = exists ? prev.map((s) => (s.id === updatedServer.id ? updatedServer : s)) : prev;
+      try {
+        localStorage.setItem('shinzi_created_servers', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    setJoinedServers((prev) => {
+      const exists = prev.some((s) => s.id === updatedServer.id);
+      const next = exists ? prev.map((s) => (s.id === updatedServer.id ? updatedServer : s)) : prev;
+      try {
+        localStorage.setItem('shinzi_joined_servers', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    setDiscoverableServers((prev) =>
+      prev.map((s) => (s.id === updatedServer.id ? updatedServer : s))
+    );
+
+    try {
+      await updateDoc(doc(db, 'servers', updatedServer.id), {
+        categories: updatedServer.categories,
+      });
+    } catch (err) {
+      console.warn('Could not update server in Firestore:', err);
+    }
+  };
+
+  // Long press timer helpers
+  const clearLongPress = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const startCategoryLongPress = (cat: ServerCategory) => {
+    clearLongPress();
+    longPressTimerRef.current = setTimeout(() => {
+      setContextCategory(cat);
+    }, 450);
+  };
+
+  const startChannelLongPress = (catId: string, channel: ServerChannel) => {
+    clearLongPress();
+    longPressTimerRef.current = setTimeout(() => {
+      setContextChannel({ catId, channel });
+    }, 450);
+  };
+
+  // Handle avatar upload
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -328,7 +593,6 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
       const dataUrl = await processServerImage(file, false);
       setFormAvatarPreview(dataUrl);
 
-      // Upload to Drive folder 'server' if configured
       if (drive.hasActiveSession && drive.uploadFile) {
         const res = await drive.uploadFile({
           file,
@@ -346,7 +610,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     }
   };
 
-  // Handle banner upload (Supports image & animated GIF, compressed for web speed)
+  // Handle banner upload
   const handleBannerChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -439,7 +703,6 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
       ],
     };
 
-    // Save to Firestore with valid memberIds and visibility adhering to firestore.rules
     try {
       await setDoc(doc(db, 'servers', newServerId), newServer);
       console.log('Server successfully created in Firestore:', newServerId);
@@ -447,7 +710,6 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
       console.warn('Firestore server write fallback:', err);
     }
 
-    // Update local state and localStorage
     const updated = [newServer, ...createdServers];
     setCreatedServers(updated);
     setDiscoverableServers((prev) => [newServer, ...prev.filter((s) => s.id !== newServer.id)]);
@@ -455,7 +717,6 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
       localStorage.setItem('shinzi_created_servers', JSON.stringify(updated));
     } catch {}
 
-    // Reset form
     setFormName('');
     setFormDesc('');
     setFormIsPrivate(false);
@@ -464,9 +725,75 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     setCreateBusy(false);
     setShowCreateModal(false);
 
-    // Open the new server immediately
     setActiveServer(newServer);
-    setSelectedChannel(newServer.categories[1]?.channels[0] || newServer.categories[0]?.channels[0]);
+    setSelectedChannel(null);
+  };
+
+  // Create Channel Action
+  const handleCreateChannel = async () => {
+    if (!activeServer || !targetCategoryForNewChannel || !newChannelName.trim()) return;
+
+    const newChan: ServerChannel = {
+      id: `ch-${Date.now()}`,
+      name: newChannelName.trim().toLowerCase().replace(/\s+/g, '-'),
+      type: newChannelType,
+      description: newChannelDesc.trim(),
+      isPrivate: newChannelIsPrivate,
+      ...(newChannelIcon ? { iconUrl: newChannelIcon } : {}),
+      ...(newChannelType === 'voice' ? { listenerCount: '0 People in' } : {}),
+    };
+
+    const updatedCategories = activeServer.categories.map((cat) => {
+      if (cat.id === targetCategoryForNewChannel) {
+        return {
+          ...cat,
+          channels: [...cat.channels, newChan],
+        };
+      }
+      return cat;
+    });
+
+    const updatedServer: ServerData = {
+      ...activeServer,
+      categories: updatedCategories,
+    };
+
+    await updateServerInStateAndStorage(updatedServer);
+    setShowCreateChannelModal(false);
+  };
+
+  // Save Edited Channel Action
+  const handleSaveEditedChannel = async () => {
+    if (!activeServer || !editingChannel || !editChannelName.trim()) return;
+
+    const updatedCategories = activeServer.categories.map((cat) => {
+      if (cat.id === editingChannel.catId) {
+        return {
+          ...cat,
+          channels: cat.channels.map((ch) => {
+            if (ch.id === editingChannel.channel.id) {
+              return {
+                ...ch,
+                name: editChannelName.trim().toLowerCase().replace(/\s+/g, '-'),
+                description: editChannelDesc.trim(),
+                isPrivate: editChannelIsPrivate,
+                iconUrl: editChannelIcon || undefined,
+              };
+            }
+            return ch;
+          }),
+        };
+      }
+      return cat;
+    });
+
+    const updatedServer: ServerData = {
+      ...activeServer,
+      categories: updatedCategories,
+    };
+
+    await updateServerInStateAndStorage(updatedServer);
+    setEditingChannel(null);
   };
 
   // Delete Server Action (Owner only)
@@ -492,7 +819,6 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     setActiveServer(null);
   };
 
-  // Toggle Category Collapse
   const toggleCategory = (catId: string) => {
     setCollapsedCategories((prev) => ({
       ...prev,
@@ -517,7 +843,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     : [];
 
   // ==========================================================
-  // RENDER: SEARCH SERVERS MODAL (20261109_222742 & 222850)
+  // RENDER: SEARCH SERVERS MODAL
   // ==========================================================
   if (showSearchModal) {
     return (
@@ -596,9 +922,6 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                         )}
                         <div className="sh-search-result-info">
                           <span className="sh-search-result-name">{match?.name || rec}</span>
-                          <span className="sh-search-result-creator">
-                            by {match?.creatorName || 'Community'}
-                          </span>
                         </div>
                       </div>
                     </div>
@@ -621,7 +944,6 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                   key={srv.id}
                   className="sh-search-result-card"
                   onClick={() => {
-                    // Record in recent searches without auto-joining (per user requirement)
                     addRecentSearch(srv.name);
                   }}
                 >
@@ -652,9 +974,6 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                     )}
                     <div className="sh-search-result-info">
                       <span className="sh-search-result-name">{srv.name}</span>
-                      <span className="sh-search-result-creator">
-                        by {srv.creatorName || 'Community'}
-                      </span>
                     </div>
                   </div>
                 </div>
@@ -675,7 +994,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
   }
 
   // ==========================================================
-  // RENDER: FULL SERVER DETAILS (20261109_223029)
+  // RENDER: FULL SERVER DETAILS (IMG-20261110-WA0018)
   // ==========================================================
   if (showDetailsModal && activeServer) {
     const isOwner =
@@ -731,14 +1050,16 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
             {activeServer.description || 'Welcome to our community server.'}
           </p>
 
-          <div className="sh-server-details-stats">
-            {activeServer.memberCount} • {activeServer.isOfficial ? 'official • ' : ''}
-            {activeServer.onlineCount || '1 online'}
-          </div>
-
-          <div className="sh-server-details-mutual">
-            <User size={16} />
-            <span>by {activeServer.creatorName || 'Community'}</span>
+          {/* Real Online & Member counts matching IMG-20261110-WA0018 */}
+          <div className="sh-server-details-status-row">
+            <div className="sh-server-status-pill">
+              <span className="sh-status-dot-green"></span>
+              <span>{onlineMembersCount} Online</span>
+            </div>
+            <div className="sh-server-status-pill">
+              <span className="sh-status-dot-gray"></span>
+              <span>{activeServer.memberIds?.length || 1} Members</span>
+            </div>
           </div>
 
           {/* 3 Quick Action Cards */}
@@ -846,26 +1167,153 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
   }
 
   // ==========================================================
-  // RENDER: SERVER CHANNEL VIEW (20261109_222903 & 222918)
+  // RENDER: CHANNEL CHAT VIEW (IMG-20261110-WA0014)
+  // ==========================================================
+  if (activeServer && selectedChannel && selectedChannel.type === 'text') {
+    return (
+      <div className="sh-channel-chat-page">
+        {/* Header matching IMG-20261110-WA0014 */}
+        <div className="sh-channel-chat-header">
+          <button
+            type="button"
+            className="sh-channel-chat-back-btn"
+            onClick={() => setSelectedChannel(null)}
+            aria-label="Back"
+          >
+            <ArrowLeft size={20} />
+          </button>
+
+          <div
+            className="sh-channel-chat-title-group"
+            onClick={() => {
+              setEditingChannel({ catId: activeServer.categories[0]?.id || '', channel: selectedChannel });
+            }}
+          >
+            <span className="sh-channel-chat-title">#{selectedChannel.name}</span>
+            <ChevronRight size={18} color="#949ba4" />
+          </div>
+
+          <div className="sh-channel-chat-header-actions">
+            <div className="sh-channel-chat-online-badge">
+              <span className="sh-status-dot-green"></span>
+              <span>{onlineMembersCount}</span>
+            </div>
+            <button
+              type="button"
+              className="sh-servers-icon-btn"
+              onClick={() => setShowSearchModal(true)}
+              aria-label="Search"
+            >
+              <Search size={18} />
+            </button>
+          </div>
+        </div>
+
+        {/* Messages List */}
+        <div className="sh-channel-chat-messages">
+          {channelMessages.length === 0 ? (
+            <div className="sh-channel-chat-welcome">
+              <div className="sh-channel-chat-welcome-hash">#</div>
+              <h3>Welcome to #{selectedChannel.name}!</h3>
+              <p>{selectedChannel.description || `This is the start of the #${selectedChannel.name} channel.`}</p>
+            </div>
+          ) : (
+            channelMessages.map((msg) => (
+              <div key={msg.id} className="sh-channel-msg-row">
+                <div className="sh-channel-msg-avatar">
+                  {msg.senderAvatar ? (
+                    <img src={msg.senderAvatar} alt={msg.senderName} />
+                  ) : (
+                    msg.senderName.charAt(0).toUpperCase()
+                  )}
+                </div>
+                <div className="sh-channel-msg-content">
+                  <div className="sh-channel-msg-header">
+                    <span className="sh-channel-msg-author">{msg.senderName}</span>
+                    <span className="sh-channel-msg-time">{formatMessageTime(msg.createdAt)}</span>
+                  </div>
+                  {msg.text && <div className="sh-channel-msg-text">{msg.text}</div>}
+                  {msg.imageUrl && (
+                    <img src={msg.imageUrl} alt="attachment" className="sh-channel-msg-img" />
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Chat Input Bar */}
+        <div className="sh-channel-chat-input-bar">
+          <input
+            type="file"
+            ref={channelFileInputRef}
+            accept="image/*,.gif"
+            style={{ display: 'none' }}
+            onChange={handleChannelImageSelect}
+          />
+          <button
+            type="button"
+            className="sh-channel-input-attach-btn"
+            onClick={() => channelFileInputRef.current?.click()}
+            title="Attach image or GIF"
+          >
+            <Plus size={20} />
+          </button>
+
+          <input
+            type="text"
+            className="sh-channel-input-field"
+            placeholder={`Message #${selectedChannel.name}`}
+            value={channelInputText}
+            onChange={(e) => setChannelInputText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                void handleSendChannelMessage();
+              }
+            }}
+          />
+
+          <button
+            type="button"
+            className="sh-channel-input-send-btn"
+            disabled={!channelInputText.trim() && !channelSendBusy}
+            onClick={() => void handleSendChannelMessage()}
+          >
+            <Send size={18} />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ==========================================================
+  // RENDER: SERVER VIEW (IMG-20261109-WA0007, IMG-20261110-WA0022, VID-20261110-WA0023)
   // ==========================================================
   if (activeServer) {
     return (
       <div className="sh-server-view-page">
-        {/* Banner Header with Expandable Thumbnail */}
-        <div className="sh-server-banner-header">
-          {activeServer.bannerUrl ? (
+        {/* Banner at top if server has a banner; cleanly omitted if no banner */}
+        {activeServer.bannerUrl ? (
+          <div className="sh-server-banner-header">
             <img
               src={activeServer.bannerUrl}
               alt={activeServer.name}
               className="sh-server-banner-bg-img"
             />
-          ) : (
-            <div className="sh-server-card-bg-gradient" />
-          )}
-          <div className="sh-server-banner-overlay" />
-
-          {/* Top Bar inside Server View */}
-          <div className="sh-server-banner-top">
+            <div className="sh-server-banner-overlay" />
+            <button
+              type="button"
+              className="sh-servers-icon-btn"
+              style={{ position: 'absolute', top: 12, left: 12, zIndex: 10 }}
+              onClick={handleBack}
+              aria-label="Back to Servers"
+            >
+              <ArrowLeft size={20} />
+            </button>
+          </div>
+        ) : (
+          <div className="sh-server-banner-header-nobanner">
             <button
               type="button"
               className="sh-servers-icon-btn"
@@ -875,77 +1323,73 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
               <ArrowLeft size={20} />
             </button>
           </div>
+        )}
 
-          {/* Server Info Row & 4 Side Actions (Event, Invite, Search, >) */}
-          <div className="sh-server-header-info">
-            <div className="sh-server-header-left">
-              {activeServer.iconUrl ? (
-                <img
-                  src={activeServer.iconUrl}
-                  alt={activeServer.name}
-                  className="sh-server-header-avatar"
-                />
-              ) : (
-                <div
-                  className="sh-server-card-avatar-placeholder"
-                  style={{ width: 44, height: 44, fontSize: 18, margin: 0 }}
-                >
-                  {activeServer.name.charAt(0).toUpperCase()}
+        {/* Server Header Container: identity row, stats pills, and Action Bar below banner */}
+        <div className="sh-server-header-container">
+          {/* Identity Row - tapping anywhere opens details sheet */}
+          <div
+            className="sh-server-identity-trigger"
+            onClick={() => setShowDetailsModal(true)}
+          >
+            {activeServer.iconUrl ? (
+              <img
+                src={activeServer.iconUrl}
+                alt={activeServer.name}
+                className="sh-server-header-avatar"
+              />
+            ) : (
+              <div
+                className="sh-server-card-avatar-placeholder"
+                style={{ width: 44, height: 44, fontSize: 18, margin: 0 }}
+              >
+                {activeServer.name.charAt(0).toUpperCase()}
+              </div>
+            )}
+
+            <div className="sh-server-identity-details">
+              <h1 className="sh-server-header-name">
+                {activeServer.name}
+                {activeServer.isOfficial && <CheckCircle2 size={16} color="#5865F2" fill="#5865F2" />}
+              </h1>
+              {/* Online & Member pills */}
+              <div className="sh-server-details-status-row" style={{ marginTop: 4 }}>
+                <div className="sh-server-status-pill">
+                  <span className="sh-status-dot-green"></span>
+                  <span>{onlineMembersCount} Online</span>
                 </div>
-              )}
-              <div className="sh-server-header-details">
-                <h1 className="sh-server-header-name">
-                  {activeServer.name}
-                  {activeServer.isOfficial && <CheckCircle2 size={16} color="#5865F2" fill="#5865F2" />}
-                </h1>
-                <span className="sh-server-header-sub">
-                  {activeServer.memberCount} {activeServer.isOfficial ? '• official' : ''}
-                </span>
+                <div className="sh-server-status-pill">
+                  <span className="sh-status-dot-gray"></span>
+                  <span>{activeServer.memberIds?.length || 1} Members</span>
+                </div>
               </div>
             </div>
 
-            {/* 4 Header Actions: Event, Invite, Search, > */}
-            <div className="sh-server-header-actions">
-              <button
-                type="button"
-                className="sh-servers-icon-btn"
-                title="Events"
-                onClick={() => alert('No active server events currently.')}
-              >
-                <Calendar size={18} />
-              </button>
+            <ChevronRight size={22} className="sh-server-chevron-btn" />
+          </div>
 
-              <button
-                type="button"
-                className="sh-servers-icon-btn"
-                title="Invite to Server"
-                onClick={() => setShowInviteSheet(true)}
-              >
-                <UserPlus size={18} />
-              </button>
-
-              <button
-                type="button"
-                className="sh-servers-icon-btn"
-                title="Search Server"
-                onClick={() => setShowSearchModal(true)}
-              >
-                <Search size={18} />
-              </button>
-
-              <button
-                type="button"
-                className="sh-servers-icon-btn"
-                title="Server Details"
-                onClick={() => setShowDetailsModal(true)}
-              >
-                <ChevronRight size={20} />
-              </button>
-            </div>
+          {/* Action Bar Row matching IMG-20261109-WA0007 */}
+          <div className="sh-server-action-bar-row">
+            <button
+              type="button"
+              className="sh-server-search-btn-pill"
+              onClick={() => setShowSearchModal(true)}
+            >
+              <Search size={16} />
+              <span>Search</span>
+            </button>
+            <button
+              type="button"
+              className="sh-server-invite-btn-pill"
+              onClick={() => setShowInviteSheet(true)}
+            >
+              <UserPlus size={16} />
+              <span>Invite</span>
+            </button>
           </div>
         </div>
 
-        {/* Server Channels & Categories List */}
+        {/* Channels & Categories List with Long-press support */}
         <div className="sh-server-channels-content">
           {activeServer.categories.map((cat) => {
             const isCollapsed = collapsedCategories[cat.id];
@@ -954,6 +1398,12 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                 <div
                   className="sh-category-header"
                   onClick={() => toggleCategory(cat.id)}
+                  onTouchStart={() => startCategoryLongPress(cat)}
+                  onTouchEnd={clearLongPress}
+                  onTouchMove={clearLongPress}
+                  onMouseDown={() => startCategoryLongPress(cat)}
+                  onMouseUp={clearLongPress}
+                  onMouseLeave={clearLongPress}
                 >
                   <span className="sh-category-name">{cat.name}</span>
                   <ChevronDown
@@ -969,16 +1419,29 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                       <div
                         key={ch.id}
                         className={`sh-channel-item ${isActive ? 'sh-channel-item-active' : ''}`}
-                        onClick={() => setSelectedChannel(ch)}
+                        onClick={() => {
+                          if (ch.type === 'text') {
+                            setSelectedChannel(ch);
+                          } else if (ch.type === 'voice') {
+                            alert(`Voice Room: ${ch.name} (${ch.listenerCount || '0 People in'})`);
+                          } else {
+                            setSelectedChannel(ch);
+                          }
+                        }}
+                        onTouchStart={() => startChannelLongPress(cat.id, ch)}
+                        onTouchEnd={clearLongPress}
+                        onTouchMove={clearLongPress}
+                        onMouseDown={() => startChannelLongPress(cat.id, ch)}
+                        onMouseUp={clearLongPress}
+                        onMouseLeave={clearLongPress}
                       >
                         <div className="sh-channel-left">
-                          {ch.type === 'voice' ? (
-                            <span
-                              className="material-symbols-outlined"
-                              style={{ fontSize: 18, color: '#949ba4' }}
-                            >
-                              mic
-                            </span>
+                          {ch.iconUrl ? (
+                            <img src={ch.iconUrl} alt="" className="sh-channel-icon-mini-thumb" />
+                          ) : ch.type === 'voice' ? (
+                            <Volume2 size={16} color="#949ba4" />
+                          ) : ch.type === 'forum' ? (
+                            <MessageCircle size={16} color="#949ba4" />
                           ) : ch.isPrivate ? (
                             <Lock size={16} color="#636b75" />
                           ) : (
@@ -1001,7 +1464,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
           })}
         </div>
 
-        {/* Invite Bottom Sheet (20261109_222945) */}
+        {/* Invite Bottom Sheet */}
         {showInviteSheet && (
           <div
             className="sh-invite-sheet-overlay"
@@ -1013,13 +1476,12 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
             >
               <h3 className="sh-invite-sheet-title">Invite to {activeServer.name}</h3>
 
-              {/* Share Options Row */}
               <div className="sh-invite-share-row">
                 <button
                   type="button"
                   className="sh-invite-share-item"
                   onClick={() => {
-                    navigator.clipboard?.writeText(
+                    void navigator.clipboard?.writeText(
                       window.location.origin + `/servers?invite=${activeServer.id}`
                     );
                     setInviteCopied(true);
@@ -1081,7 +1543,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                   className="sh-invite-share-item"
                   onClick={() => {
                     if (navigator.share) {
-                      navigator.share({
+                      void navigator.share({
                         title: `Join ${activeServer.name}`,
                         url: `${window.location.origin}/servers?invite=${activeServer.id}`,
                       });
@@ -1095,7 +1557,6 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                 </button>
               </div>
 
-              {/* Enter / Choose Channel */}
               <div className="sh-invite-field">
                 <label>Enter Channel</label>
                 <select
@@ -1114,7 +1575,6 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                 </select>
               </div>
 
-              {/* Invite Expiry */}
               <div className="sh-invite-field">
                 <label>Invite Link Expires In</label>
                 <select
@@ -1139,6 +1599,408 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
             </div>
           </div>
         )}
+
+        {/* Category Context Sheet */}
+        {contextCategory && (
+          <div className="sh-context-sheet-overlay" onClick={() => setContextCategory(null)}>
+            <div className="sh-context-sheet" onClick={(e) => e.stopPropagation()}>
+              <div className="sh-context-sheet-header">
+                <span className="sh-context-sheet-title">{contextCategory.name}</span>
+                <button
+                  type="button"
+                  className="sh-servers-icon-btn"
+                  onClick={() => setContextCategory(null)}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <button
+                type="button"
+                className="sh-context-item"
+                onClick={() => {
+                  setTargetCategoryForNewChannel(contextCategory.id);
+                  setContextCategory(null);
+                  setNewChannelName('');
+                  setNewChannelDesc('');
+                  setNewChannelType('text');
+                  setNewChannelIsPrivate(false);
+                  setNewChannelIcon('');
+                  setShowCreateChannelModal(true);
+                }}
+              >
+                <Plus size={18} />
+                <span>Create Channel</span>
+              </button>
+              <button
+                type="button"
+                className="sh-context-item"
+                onClick={() => {
+                  const newName = prompt('Edit Category Name:', contextCategory.name);
+                  if (newName && newName.trim() && activeServer) {
+                    const updatedCategories = activeServer.categories.map((c) =>
+                      c.id === contextCategory.id ? { ...c, name: newName.trim() } : c
+                    );
+                    void updateServerInStateAndStorage({
+                      ...activeServer,
+                      categories: updatedCategories,
+                    });
+                  }
+                  setContextCategory(null);
+                }}
+              >
+                <Pencil size={18} />
+                <span>Edit Category</span>
+              </button>
+              <button
+                type="button"
+                className="sh-context-item"
+                onClick={() => {
+                  alert('Drag and drop to reorder categories coming soon.');
+                  setContextCategory(null);
+                }}
+              >
+                <ArrowUpDown size={18} />
+                <span>Move Category</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Channel Context Sheet */}
+        {contextChannel && (
+          <div className="sh-context-sheet-overlay" onClick={() => setContextChannel(null)}>
+            <div className="sh-context-sheet" onClick={(e) => e.stopPropagation()}>
+              <div className="sh-context-sheet-header">
+                <span className="sh-context-sheet-title">#{contextChannel.channel.name}</span>
+                <button
+                  type="button"
+                  className="sh-servers-icon-btn"
+                  onClick={() => setContextChannel(null)}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <button
+                type="button"
+                className="sh-context-item"
+                onClick={() => {
+                  const ch = contextChannel.channel;
+                  setEditingChannel(contextChannel);
+                  setContextChannel(null);
+                  setEditChannelName(ch.name);
+                  setEditChannelDesc(ch.description || '');
+                  setEditChannelIsPrivate(!!ch.isPrivate);
+                  setEditChannelIcon(ch.iconUrl || '');
+                }}
+              >
+                <Pencil size={18} />
+                <span>Edit Channel</span>
+              </button>
+              <button
+                type="button"
+                className="sh-context-item"
+                onClick={() => {
+                  alert('Drag and drop to reorder channels coming soon.');
+                  setContextChannel(null);
+                }}
+              >
+                <ArrowUpDown size={18} />
+                <span>Move Channel</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Create Channel Modal (IMG-20261110-WA0017 & 20261110_184235) */}
+        {showCreateChannelModal && (
+          <div className="sh-fullscreen-modal">
+            <div className="sh-fullscreen-modal-header">
+              <button
+                type="button"
+                className="sh-servers-icon-btn"
+                onClick={() => setShowCreateChannelModal(false)}
+              >
+                <X size={20} />
+              </button>
+              <h2>Create Channel</h2>
+              <button
+                type="button"
+                className="sh-fullscreen-modal-save-btn"
+                disabled={!newChannelName.trim()}
+                onClick={handleCreateChannel}
+              >
+                Create
+              </button>
+            </div>
+
+            <div className="sh-fullscreen-modal-body">
+              {/* Channel Name with side Image Icon Button (20261110_184235) */}
+              <div className="sh-create-input-group">
+                <label className="sh-create-label">Channel Name</label>
+                <div className="sh-channel-name-input-row">
+                  <input
+                    type="file"
+                    ref={newChannelIconInputRef}
+                    accept="image/*,.gif"
+                    style={{ display: 'none' }}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const dataUrl = await processServerImage(file, false);
+                      setNewChannelIcon(dataUrl);
+                    }}
+                  />
+                  <input
+                    type="text"
+                    className="sh-create-input"
+                    placeholder="new-channel"
+                    value={newChannelName}
+                    onChange={(e) => setNewChannelName(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="sh-channel-icon-pick-btn"
+                    title="Channel Icon / GIF"
+                    onClick={() => newChannelIconInputRef.current?.click()}
+                  >
+                    {newChannelIcon ? (
+                      <img src={newChannelIcon} alt="Icon" className="sh-channel-icon-mini-thumb" />
+                    ) : (
+                      <ImageIcon size={20} />
+                    )}
+                  </button>
+                  {newChannelIcon && (
+                    <button
+                      type="button"
+                      className="sh-channel-icon-clear-btn"
+                      onClick={() => setNewChannelIcon('')}
+                      title="Remove Icon"
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Channel Description */}
+              <div className="sh-create-input-group">
+                <label className="sh-create-label">Channel Topic / Description</label>
+                <textarea
+                  className="sh-create-textarea"
+                  placeholder="What is this channel about?"
+                  rows={2}
+                  value={newChannelDesc}
+                  onChange={(e) => setNewChannelDesc(e.target.value)}
+                />
+              </div>
+
+              {/* Channel Type Selector (IMG-20261110-WA0017) */}
+              <div className="sh-create-input-group">
+                <label className="sh-create-label">Channel Type</label>
+
+                {/* Option 1: Text */}
+                <div
+                  className={`sh-channel-type-card ${newChannelType === 'text' ? 'sh-channel-type-card-active' : ''}`}
+                  onClick={() => setNewChannelType('text')}
+                >
+                  <div className="sh-channel-type-radio">
+                    {newChannelType === 'text' && <div className="sh-channel-type-radio-dot" />}
+                  </div>
+                  <div className="sh-channel-type-card-body">
+                    <div className="sh-channel-type-card-title">
+                      <span className="sh-channel-icon-hash">#</span> Text
+                    </div>
+                    <div className="sh-channel-type-card-desc">
+                      Post images, stickers, opinions, and puns
+                    </div>
+                  </div>
+                </div>
+
+                {/* Option 2: Voice */}
+                <div
+                  className={`sh-channel-type-card ${newChannelType === 'voice' ? 'sh-channel-type-card-active' : ''}`}
+                  onClick={() => setNewChannelType('voice')}
+                >
+                  <div className="sh-channel-type-radio">
+                    {newChannelType === 'voice' && <div className="sh-channel-type-radio-dot" />}
+                  </div>
+                  <div className="sh-channel-type-card-body">
+                    <div className="sh-channel-type-card-title">
+                      <Volume2 size={18} /> Voice
+                    </div>
+                    <div className="sh-channel-type-card-desc">
+                      Talk with users or stream there
+                    </div>
+                  </div>
+                </div>
+
+                {/* Option 3: Forum */}
+                <div
+                  className={`sh-channel-type-card ${newChannelType === 'forum' ? 'sh-channel-type-card-active' : ''}`}
+                  onClick={() => setNewChannelType('forum')}
+                >
+                  <div className="sh-channel-type-radio">
+                    {newChannelType === 'forum' && <div className="sh-channel-type-radio-dot" />}
+                  </div>
+                  <div className="sh-channel-type-card-body">
+                    <div className="sh-channel-type-card-title">
+                      <MessageCircle size={18} /> Forum
+                    </div>
+                    <div className="sh-channel-type-card-desc">
+                      Take suggestions and post suggestions or more
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Private Channel Toggle */}
+              <div
+                className="sh-create-toggle-row"
+                style={{ marginTop: 14 }}
+                onClick={() => setNewChannelIsPrivate(!newChannelIsPrivate)}
+              >
+                <div>
+                  <div className="sh-create-toggle-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Lock size={16} /> Private Channel
+                  </div>
+                  <div style={{ fontSize: 12, color: '#949ba4', marginTop: 2 }}>
+                    Only selected members and roles will be able to view this channel.
+                  </div>
+                </div>
+                <div className={`sh-create-checkbox ${newChannelIsPrivate ? 'sh-create-checkbox-checked' : ''}`}>
+                  {newChannelIsPrivate && <Check size={16} color="#ffffff" strokeWidth={3} />}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Channel Modal (20261110_184443) */}
+        {editingChannel && (
+          <div className="sh-fullscreen-modal">
+            <div className="sh-fullscreen-modal-header">
+              <button
+                type="button"
+                className="sh-servers-icon-btn"
+                onClick={() => setEditingChannel(null)}
+              >
+                <ArrowLeft size={20} />
+              </button>
+              <h2>Edit Channel</h2>
+              <button
+                type="button"
+                className="sh-fullscreen-modal-save-btn"
+                disabled={!editChannelName.trim()}
+                onClick={handleSaveEditedChannel}
+              >
+                Done
+              </button>
+            </div>
+
+            <div className="sh-fullscreen-modal-body">
+              {/* Channel Name with image icon & cross X icon (20261110_184443) */}
+              <div className="sh-create-input-group">
+                <label className="sh-create-label">Channel Name</label>
+                <div className="sh-channel-name-input-row">
+                  <input
+                    type="file"
+                    ref={editChannelIconInputRef}
+                    accept="image/*,.gif"
+                    style={{ display: 'none' }}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const dataUrl = await processServerImage(file, false);
+                      setEditChannelIcon(dataUrl);
+                    }}
+                  />
+                  <input
+                    type="text"
+                    className="sh-create-input"
+                    value={editChannelName}
+                    onChange={(e) => setEditChannelName(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="sh-channel-icon-pick-btn"
+                    title="Channel Icon / GIF"
+                    onClick={() => editChannelIconInputRef.current?.click()}
+                  >
+                    {editChannelIcon ? (
+                      <img src={editChannelIcon} alt="Icon" className="sh-channel-icon-mini-thumb" />
+                    ) : (
+                      <ImageIcon size={20} />
+                    )}
+                  </button>
+                  {editChannelIcon && (
+                    <button
+                      type="button"
+                      className="sh-channel-icon-clear-btn"
+                      onClick={() => setEditChannelIcon('')}
+                      title="Remove Icon"
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Channel Description */}
+              <div className="sh-create-input-group">
+                <label className="sh-create-label">Channel Topic / Description</label>
+                <textarea
+                  className="sh-create-textarea"
+                  placeholder="Channel topic or description"
+                  rows={3}
+                  value={editChannelDesc}
+                  onChange={(e) => setEditChannelDesc(e.target.value)}
+                />
+              </div>
+
+              {/* Channel Type Segmented Toggle: [ Public | Private ] */}
+              <div className="sh-create-input-group">
+                <label className="sh-create-label">Channel Type</label>
+                <div className="sh-segmented-toggle">
+                  <button
+                    type="button"
+                    className={`sh-segmented-btn ${!editChannelIsPrivate ? 'sh-segmented-btn-active' : ''}`}
+                    onClick={() => setEditChannelIsPrivate(false)}
+                  >
+                    Public
+                  </button>
+                  <button
+                    type="button"
+                    className={`sh-segmented-btn ${editChannelIsPrivate ? 'sh-segmented-btn-active' : ''}`}
+                    onClick={() => setEditChannelIsPrivate(true)}
+                  >
+                    Private
+                  </button>
+                </div>
+              </div>
+
+              {/* Allowed Tags Section: ONLY shown when Private is active! */}
+              {editChannelIsPrivate && (
+                <div className="sh-create-input-group">
+                  <label className="sh-create-label">Allowed Tags</label>
+                  <div className="sh-allowed-tags-box">
+                    <span>No tags available for now</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Done Button at bottom */}
+              <button
+                type="button"
+                className="sh-create-submit-btn"
+                style={{ marginTop: 24 }}
+                disabled={!editChannelName.trim()}
+                onClick={handleSaveEditedChannel}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -1148,7 +2010,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
   // ==========================================================
   return (
     <div className="sh-servers-page">
-      {/* Top Bar with Title Servers, + and Search (NO 3-dot menu) */}
+      {/* Top Bar with Title Servers, + and Search */}
       <header className="sh-servers-topbar">
         <h1 className="sh-servers-topbar-title">Servers</h1>
         <div className="sh-servers-topbar-actions">
@@ -1187,7 +2049,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                   className="sh-server-card"
                   onClick={() => {
                     setActiveServer(srv);
-                    setSelectedChannel(srv.categories[0]?.channels[0]);
+                    setSelectedChannel(null);
                   }}
                 >
                   {srv.bannerUrl ? (
@@ -1228,7 +2090,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
           )}
         </section>
 
-        {/* SECTION 2: Joined Servers (down) */}
+        {/* SECTION 2: Joined Servers - clean unboxed empty state */}
         <section>
           <div className="sh-servers-section-title">Joined Servers</div>
           {joinedServers.length > 0 ? (
@@ -1239,7 +2101,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                   className="sh-server-card"
                   onClick={() => {
                     setActiveServer(srv);
-                    setSelectedChannel(srv.categories[0]?.channels[0]);
+                    setSelectedChannel(null);
                   }}
                 >
                   {srv.bannerUrl ? (
@@ -1281,7 +2143,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
         </section>
       </main>
 
-      {/* CREATE SERVER MODAL (20261109_222718) */}
+      {/* CREATE SERVER MODAL (IMG-20261110-WA0010) */}
       {showCreateModal && (
         <div
           className="sh-create-server-overlay"
@@ -1418,7 +2280,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                 />
               </div>
 
-              {/* Private Server Checkbox */}
+              {/* Private Server Checkbox: Clean label "Private Server" & white tick */}
               <div
                 className="sh-create-toggle-row"
                 onClick={() => setFormIsPrivate(!formIsPrivate)}
@@ -1448,7 +2310,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
       )}
 
       {/* Bottom Navigation Bar */}
-      <nav className="sh-servers-bottom-nav">
+      <nav className="shc-bottom">
         <button
           type="button"
           onClick={() => {
