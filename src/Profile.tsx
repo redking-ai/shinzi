@@ -27,6 +27,7 @@ import {
   setCachedAssetMeta,
   navigateTo,
 } from './profileCache';
+import { updateUserPresence, type OnlineStatusMode } from './presenceService';
 import './Profile.css';
 
 type AnyRecord = Record<string, any>;
@@ -156,7 +157,6 @@ useEffect(() => {
   const [error, setError] = useState('');
 
   // Online / DND / Ghost Status System (Discord style)
-  type OnlineStatusMode = 'online' | 'dnd' | 'ghost';
 
   const [statusMode, setStatusMode] = useState<OnlineStatusMode>(() => {
     if (typeof window !== 'undefined') {
@@ -210,9 +210,7 @@ useEffect(() => {
 
     if (currentUser?.uid) {
       try {
-        await updateDoc(doc(db, 'users', currentUser.uid), {
-          onlineStatusMode: newMode,
-        });
+        await updateUserPresence(currentUser.uid, isBrowserOnline, newMode);
         const cached = getCachedProfile(currentUser.uid) || {};
         setCachedProfile(currentUser.uid, {
           ...cached,

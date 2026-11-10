@@ -96,6 +96,7 @@ import { compressImageToWebP } from './imageCompressor';
 import { DateTimePickerModal } from './DateTimePickerModal';
 import { searchKlipy, getCachedKlipy, type KlipyItem } from './klipyService';
 import { cacheAudioBlob } from './voiceCache';
+import { getUserEffectiveStatus, type EffectiveStatus } from './presenceService';
 import MuiAvatar from '@mui/material/Avatar';
 import './Chat.css';
 
@@ -896,6 +897,7 @@ function UserAvatar({
   group = false,
   small = false,
   className = '',
+  status,
 }: {
   uid?: string | null;
   name?: string;
@@ -905,6 +907,7 @@ function UserAvatar({
   group?: boolean;
   small?: boolean;
   className?: string;
+  status?: EffectiveStatus;
 }) {
   const effectiveSize = small ? 'sm' : size;
   const { imageUri, loading, setImageUri } = useResolvedAvatarUri(
@@ -923,7 +926,7 @@ function UserAvatar({
           ? 'shc-avatar-nav'
           : 'shc-avatar-md';
 
-  return (
+  const avatarNode = (
     <div className={`shc-avatar ${sizeClass} ${className}`} aria-hidden="true">
       {loading ? (
         <div className="shc-avatar-skeleton" />
@@ -941,6 +944,19 @@ function UserAvatar({
       )}
     </div>
   );
+
+  if (status && !group) {
+    return (
+      <div className={`shc-avatar-wrapper shc-avatar-wrapper-${effectiveSize}`}>
+        {avatarNode}
+        <div className={`shc-status-badge shc-status-${effectiveSize} sh-status-${status}`}>
+          {status === 'dnd' && <div className="shc-status-dnd-bar" />}
+        </div>
+      </div>
+    );
+  }
+
+  return avatarNode;
 }
 
 // FIX 3: MUI Avatar strictly for chat messages
@@ -1797,7 +1813,23 @@ export default function Chat({ onNavigate }: ChatProps) {
     } catch {}
     return initial;
   });
-  const checkedProfilesRef = useRef<Set<string>>(new Set());
+  const presenceUnsubsRef = useRef<Map<string, () => void>>(new Map());
+
+  // Presence ticker to refresh status badges when lastSeen expires (> 60s)
+  const [, setPresenceTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => {
+      setPresenceTick((t) => t + 1);
+    }, 15000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      presenceUnsubsRef.current.forEach((unsub) => unsub());
+      presenceUnsubsRef.current.clear();
+    };
+  }, []);
 
   useEffect(() => {
     setToast(null);
@@ -1840,51 +1872,55 @@ export default function Chat({ onNavigate }: ChatProps) {
     const directOtherUids = conversations
       .filter((c) => c.type !== 'group')
       .map((c) => otherMemberId(c))
-      .filter((id) => Boolean(id) && !checkedProfilesRef.current.has(id));
+      .filter((id) => Boolean(id) && !presenceUnsubsRef.current.has(id));
 
     if (directOtherUids.length === 0) return;
 
-    let cancelled = false;
-    directOtherUids.forEach(async (targetId) => {
-      checkedProfilesRef.current.add(targetId);
+    directOtherUids.forEach((targetId) => {
       try {
-        const snap = await getDoc(doc(db, 'users', targetId));
-        if (snap.exists() && !cancelled) {
-          const udata = snap.data() as Rec;
-          setUserLiveProfiles((prev) => ({ ...prev, [targetId]: udata }));
-          try {
-            localStorage.setItem(`shinzi_profile_${targetId}`, JSON.stringify(udata));
-          } catch {}
-          if (udata?.photoURL) {
-            setUserLiveAvatars((prev) => ({
-              ...prev,
-              [targetId]: udata.photoURL,
-            }));
-            avatarMemoryCache.set(targetId, udata.photoURL);
-            try {
-              localStorage.setItem(`shinzi_avatar_${targetId}`, udata.photoURL);
-            } catch {}
-          }
-          const liveName = udata.displayName || udata.username;
-          if (liveName) {
-            conversations.forEach((conv) => {
-              if (
-                conv.memberProfiles?.[targetId]?.displayName &&
-                conv.memberProfiles[targetId].displayName !== liveName
-              ) {
-                updateDoc(doc(db, 'conversations', conv.id), {
-                  [`memberProfiles.${targetId}.displayName`]: liveName,
-                }).catch(() => {});
+        const unsub = onSnapshot(
+          doc(db, 'users', targetId),
+          (snap) => {
+            if (snap.exists()) {
+              const udata = snap.data() as Rec;
+              setUserLiveProfiles((prev) => ({ ...prev, [targetId]: udata }));
+              try {
+                localStorage.setItem(`shinzi_profile_${targetId}`, JSON.stringify(udata));
+              } catch {}
+              if (udata?.photoURL) {
+                setUserLiveAvatars((prev) => ({
+                  ...prev,
+                  [targetId]: udata.photoURL,
+                }));
+                avatarMemoryCache.set(targetId, udata.photoURL);
+                try {
+                  localStorage.setItem(`shinzi_avatar_${targetId}`, udata.photoURL);
+                } catch {}
               }
-            });
+              const liveName = udata.displayName || udata.username;
+              if (liveName) {
+                conversations.forEach((conv) => {
+                  if (
+                    conv.memberProfiles?.[targetId]?.displayName &&
+                    conv.memberProfiles[targetId].displayName !== liveName
+                  ) {
+                    updateDoc(doc(db, 'conversations', conv.id), {
+                      [`memberProfiles.${targetId}.displayName`]: liveName,
+                    }).catch(() => {});
+                  }
+                });
+              }
+            }
+          },
+          (err) => {
+            console.warn('Presence sub error for', targetId, err);
           }
-        }
-      } catch {}
+        );
+        presenceUnsubsRef.current.set(targetId, unsub);
+      } catch (err) {
+        console.warn('Error setting onSnapshot for user:', err);
+      }
     });
-
-    return () => {
-      cancelled = true;
-    };
   }, [conversations, uid, otherMemberId]);
 
   useEffect(() => {
@@ -5054,6 +5090,7 @@ const handleSearchMessage = async (target: Rec) => {
           photoURL={profile?.photoURL}
           profileAssetId={profile?.profileAssetId}
           size="nav"
+          status={getUserEffectiveStatus(profile)}
         />
       </button>
     </nav>
@@ -5147,6 +5184,7 @@ const handleSearchMessage = async (target: Rec) => {
 
             const otherId = otherMemberId(item);
             const otherProfile = userLiveProfiles[otherId] || (item.memberProfiles?.[otherId]);
+            const otherStatus = item.type === 'group' ? undefined : getUserEffectiveStatus(otherProfile);
 
             return (
               <button
@@ -5170,6 +5208,7 @@ const handleSearchMessage = async (target: Rec) => {
                   }
                   group={item.type === 'group'}
                   size="md"
+                  status={otherStatus}
                 />
 
                 <span className="shc-conv-body">
@@ -5537,6 +5576,7 @@ const handleSearchMessage = async (target: Rec) => {
                 photoURL={targetProfile?.photoURL}
                 profileAssetId={targetProfile?.profileAssetId}
                 size="sm"
+                status={isGroup ? undefined : getUserEffectiveStatus(liveTargetProfile || targetProfile || userLiveProfiles[targetUid])}
               />
             </button>
           ) : (

@@ -20,6 +20,7 @@ import {
   setCachedAssetMeta,
   navigateTo,
 } from './profileCache';
+import { getUserEffectiveStatus } from './presenceService';
 import './Profile.css';
 
 type AnyRecord = Record<string, any>;
@@ -231,6 +232,36 @@ export default function OtherProfile({
   useEffect(() => {
     void loadProfile();
   }, [loadProfile]);
+
+  // Real-time snapshot listener for target user presence & profile changes
+  useEffect(() => {
+    if (!targetUid) return;
+
+    const unsub = onSnapshot(
+      doc(db, 'users', targetUid),
+      (snap) => {
+        if (snap.exists()) {
+          const fresh = snap.data() as AnyRecord;
+          setUserData((prev) => ({ ...prev, ...fresh }));
+          setCachedProfile(targetUid, fresh);
+        }
+      },
+      (err) => {
+        console.warn('Realtime profile listener error:', err);
+      }
+    );
+
+    return () => unsub();
+  }, [targetUid]);
+
+  // Periodic presence tick to re-evaluate lastSeen (< 60s)
+  const [, setPresenceTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => {
+      setPresenceTick((t) => t + 1);
+    }, 15000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -589,8 +620,7 @@ export default function OtherProfile({
 
               {/* Status Badge */}
               {(() => {
-                const mode = (userData as any)?.onlineStatusMode || 'online';
-                const effective = mode === 'dnd' ? 'dnd' : mode === 'ghost' ? 'ghost' : 'online';
+                const effective = getUserEffectiveStatus(userData);
                 return (
                   <div className={`sh-status-badge sh-status-${effective}`}>
                     {effective === 'dnd' && <div className="sh-status-dnd-bar" />}

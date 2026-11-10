@@ -25,6 +25,7 @@ import Login from './Login';
 import Chat from './Chat';
 import Servers from './Servers';
 import { getCachedProfile, setCachedProfile, navigateTo } from './profileCache';
+import { updateUserPresence } from './presenceService';
 
 import logo from './assets/logo.png';
 
@@ -137,6 +138,59 @@ useEffect(() => {
     cancelled = true;
   };
 }, [user, signupBusy]);
+
+  // Presence heartbeat & online/offline tracker
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const uid = user.uid;
+
+    // Immediately mark active
+    void updateUserPresence(uid, true);
+
+    // Heartbeat every 25 seconds to keep lastSeen fresh
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible' && navigator.onLine) {
+        void updateUserPresence(uid, true);
+      }
+    }, 25000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void updateUserPresence(uid, true);
+      } else {
+        void updateUserPresence(uid, false);
+      }
+    };
+
+    const handlePageHide = () => {
+      void updateUserPresence(uid, false);
+    };
+
+    const handleOnline = () => {
+      void updateUserPresence(uid, true);
+    };
+
+    const handleOffline = () => {
+      void updateUserPresence(uid, false);
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('pagehide', handlePageHide);
+    window.addEventListener('beforeunload', handlePageHide);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('pagehide', handlePageHide);
+      window.removeEventListener('beforeunload', handlePageHide);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      void updateUserPresence(uid, false);
+    };
+  }, [user?.uid]);
 
   // ==========================================================
   // RESPONSIVE CHECK
