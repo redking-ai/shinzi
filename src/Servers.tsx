@@ -50,7 +50,6 @@ import {
   onSnapshot,
   serverTimestamp,
   updateDoc,
-  orderBy,
 } from 'firebase/firestore';
 import { useDriveStore } from './driveStore';
 import { getUserEffectiveStatus } from './presenceService';
@@ -486,13 +485,27 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     };
   }, [activeServer?.id, activeServer?.memberIds, currentUser?.uid]);
 
-  // Real-time channel messages listener
+  // Real-time channel messages listener with persistent localStorage cache
   useEffect(() => {
     if (!activeServer?.id || !selectedChannel?.id || selectedChannel.type !== 'text') {
       setChannelMessages([]);
       return;
     }
 
+    const storageKey = `shinzi_channel_msgs_${activeServer.id}_${selectedChannel.id}`;
+
+    // 1. Immediately load cached messages from localStorage
+    try {
+      const cached = localStorage.getItem(storageKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setChannelMessages(parsed);
+        }
+      }
+    } catch {}
+
+    // 2. Real-time Firestore sync
     try {
       const messagesRef = collection(
         db,
@@ -502,15 +515,29 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
         selectedChannel.id,
         'messages'
       );
-      const q = query(messagesRef, orderBy('createdAt', 'asc'));
+      // Query collection and sort in memory to prevent missing index errors and dropped pending writes
+      const q = query(messagesRef);
       const unsub = onSnapshot(
         q,
         (snap) => {
-          const msgs: ServerChannelMessage[] = snap.docs.map((docSnap) => ({
-            id: docSnap.id,
-            ...(docSnap.data() as any),
-          }));
-          setChannelMessages(msgs);
+          if (!snap.empty) {
+            const msgs: ServerChannelMessage[] = snap.docs.map((docSnap) => ({
+              id: docSnap.id,
+              ...(docSnap.data() as any),
+            }));
+
+            // Sort ascending by creation time
+            msgs.sort((a, b) => {
+              const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt || 0);
+              const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt || 0);
+              return timeA - timeB;
+            });
+
+            setChannelMessages(msgs);
+            try {
+              localStorage.setItem(storageKey, JSON.stringify(msgs));
+            } catch {}
+          }
         },
         (err) => {
           console.warn('Channel messages listener fallback:', err);
@@ -520,7 +547,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     } catch (err) {
       console.warn('Could not subscribe to channel messages:', err);
     }
-  }, [activeServer?.id, selectedChannel?.id, selectedChannel?.type]);
+  }, [activeServer?.id, selectedChannel?.id, selectedChannel?.type, currentUser?.uid]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -654,7 +681,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     };
   }, [showChannelGifSheet, channelGifMode, channelGifSearch]);
 
-  // Send channel message
+  // Send channel message with instant optimistic save & Firestore persistence
   const handleSendChannelMessage = async (
     imageUrl?: string,
     extra?: Record<string, any>
@@ -679,28 +706,42 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
       createdAt: serverTimestamp(),
     };
 
+    // Sanitize undefined fields so Firestore never rejects
+    const cleanMsg: Record<string, any> = {};
+    Object.entries(newMsg).forEach(([k, v]) => {
+      if (v !== undefined) cleanMsg[k] = v;
+    });
+
+    // 1. Optimistic message with local timestamp for instant display and localStorage saving
+    const storageKey = `shinzi_channel_msgs_${activeServer.id}_${selectedChannel.id}`;
+    const optimisticMsg: ServerChannelMessage = {
+      id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      senderId: userUid,
+      senderName: userName,
+      senderAvatar: userAvatar,
+      text: extra?.text !== undefined ? extra.text : textToSend,
+      imageUrl,
+      ...(extra || {}),
+      createdAt: Date.now(),
+    };
+
+    setChannelMessages((prev) => {
+      const updated = [...prev, optimisticMsg];
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    setChannelInputText('');
+
+    // 2. Persist to Firestore subcollection
     try {
       await addDoc(
         collection(db, 'servers', activeServer.id, 'channels', selectedChannel.id, 'messages'),
-        newMsg
+        cleanMsg
       );
-      setChannelInputText('');
     } catch (err) {
-      console.warn('Send channel message failed, fallback local:', err);
-      setChannelMessages((prev) => [
-        ...prev,
-        {
-          id: `local-${Date.now()}`,
-          senderId: userUid,
-          senderName: userName,
-          senderAvatar: userAvatar,
-          text: extra?.text !== undefined ? extra.text : textToSend,
-          imageUrl,
-          ...(extra || {}),
-          createdAt: { toDate: () => new Date() },
-        } as any,
-      ]);
-      setChannelInputText('');
+      console.warn('Send channel message to Firestore failed, preserved in local storage:', err);
     } finally {
       setChannelSendBusy(false);
     }
