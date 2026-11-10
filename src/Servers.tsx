@@ -33,6 +33,7 @@ import {
   Mic,
   FileText,
   Smile,
+  Square,
 } from 'lucide-react';
 import { auth, db } from './firebaseConfig';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
@@ -316,6 +317,11 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
   const [channelKlipyLoading, setChannelKlipyLoading] = useState(false);
   const channelFileInputRef = useRef<HTMLInputElement | null>(null);
   const channelDocInputRef = useRef<HTMLInputElement | null>(null);
+  const [channelRecording, setChannelRecording] = useState(false);
+  const [channelRecordSeconds, setChannelRecordSeconds] = useState(0);
+  const channelMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const channelAudioChunksRef = useRef<Blob[]>([]);
+  const channelRecordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   // Long-press Context Sheet States
@@ -649,10 +655,13 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
   }, [showChannelGifSheet, channelGifMode, channelGifSearch]);
 
   // Send channel message
-  const handleSendChannelMessage = async (imageUrl?: string) => {
+  const handleSendChannelMessage = async (
+    imageUrl?: string,
+    extra?: Record<string, any>
+  ) => {
     if (!activeServer || !selectedChannel) return;
     const textToSend = channelInputText.trim();
-    if (!textToSend && !imageUrl) return;
+    if (!textToSend && !imageUrl && !extra?.audioUrl && !extra?.text && !extra?.fileName) return;
 
     setChannelSendBusy(true);
     const userUid = currentUser?.uid || auth.currentUser?.uid || 'anon';
@@ -660,12 +669,13 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     const userName = profile?.displayName || currentUser?.displayName || 'User';
     const userAvatar = profile?.avatarUrl || currentUser?.photoURL || '';
 
-    const newMsg: Partial<ServerChannelMessage> = {
+    const newMsg: Record<string, any> = {
       senderId: userUid,
       senderName: userName,
       senderAvatar: userAvatar,
-      text: textToSend,
+      text: extra?.text !== undefined ? extra.text : textToSend,
       ...(imageUrl ? { imageUrl } : {}),
+      ...(extra || {}),
       createdAt: serverTimestamp(),
     };
 
@@ -684,14 +694,71 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
           senderId: userUid,
           senderName: userName,
           senderAvatar: userAvatar,
-          text: textToSend,
+          text: extra?.text !== undefined ? extra.text : textToSend,
           imageUrl,
+          ...(extra || {}),
           createdAt: { toDate: () => new Date() },
-        },
+        } as any,
       ]);
       setChannelInputText('');
     } finally {
       setChannelSendBusy(false);
+    }
+  };
+
+  // Real voice recording for server channel (matches Chat.tsx)
+  const startChannelVoiceRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      channelMediaRecorderRef.current = mr;
+      channelAudioChunksRef.current = [];
+      setChannelRecordSeconds(0);
+      setChannelRecording(true);
+
+      mr.ondataavailable = (e) => {
+        if (e.data.size > 0) channelAudioChunksRef.current.push(e.data);
+      };
+
+      mr.start(100);
+      channelRecordTimerRef.current = setInterval(() => {
+        setChannelRecordSeconds((s) => s + 1);
+      }, 1000);
+    } catch (err) {
+      console.warn('Microphone permission or recording error:', err);
+      alert('Could not access microphone.');
+    }
+  };
+
+  const stopAndSendChannelVoice = async () => {
+    if (channelRecordTimerRef.current) clearInterval(channelRecordTimerRef.current);
+    const mr = channelMediaRecorderRef.current;
+    if (!mr) return;
+
+    mr.onstop = async () => {
+      const audioBlob = new Blob(channelAudioChunksRef.current, { type: 'audio/webm' });
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const dataUri = reader.result as string;
+        await handleSendChannelMessage(undefined, {
+          audioUrl: dataUri,
+          type: 'voice',
+          duration: channelRecordSeconds,
+        });
+      };
+      reader.readAsDataURL(audioBlob);
+      setChannelRecording(false);
+      setChannelRecordSeconds(0);
+      mr.stream.getTracks().forEach((t) => t.stop());
+    };
+    mr.stop();
+  };
+
+  const toggleChannelRecording = () => {
+    if (channelRecording) {
+      void stopAndSendChannelVoice();
+    } else {
+      void startChannelVoiceRecording();
     }
   };
 
@@ -1370,20 +1437,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
             <ChevronRight size={18} color="#949ba4" />
           </div>
 
-          <div className="sh-channel-chat-header-actions">
-            <div className="sh-channel-chat-online-badge">
-              <span className="sh-status-dot-green"></span>
-              <span>{onlineMembersCount}</span>
-            </div>
-            <button
-              type="button"
-              className="sh-servers-icon-btn"
-              onClick={() => setShowSearchModal(true)}
-              aria-label="Search"
-            >
-              <Search size={18} />
-            </button>
-          </div>
+          <div style={{ width: 40 }} />
         </div>
 
         {/* Messages List */}
@@ -1424,22 +1478,42 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                         onClick={() => window.open(resolvedImgUrl, '_blank')}
                       />
                     )}
-                    {msg.type === 'file' && (
+                    {msg.type === 'voice' && msg.audioUrl && (
                       <div
-                        className="shc-file-msg"
                         style={{
+                          marginTop: 6,
                           display: 'flex',
                           alignItems: 'center',
                           gap: 8,
-                          padding: '8px 12px',
                           background: '#1e1f22',
-                          borderRadius: 8,
-                          marginTop: 4,
+                          padding: '8px 12px',
+                          borderRadius: 12,
+                          maxWidth: 320,
                         }}
                       >
-                        <FileText size={20} color="#b5bac1" />
-                        <span style={{ fontSize: 13, color: '#00a8fc' }}>{msg.fileName || 'Attachment'}</span>
+                        <audio controls src={msg.audioUrl} style={{ height: 32, maxWidth: 260 }} />
                       </div>
+                    )}
+                    {msg.type === 'file' && (
+                      <a
+                        href={msg.fileUrl || '#'}
+                        download={msg.fileName || 'file'}
+                        className="shc-file-msg"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          padding: '8px 14px',
+                          background: '#1e1f22',
+                          borderRadius: 10,
+                          marginTop: 6,
+                          textDecoration: 'none',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                        }}
+                      >
+                        <FileText size={20} color="#5865F2" />
+                        <span style={{ fontSize: 13, color: '#00a8fc', fontWeight: 600 }}>{msg.fileName || 'Attachment'}</span>
+                      </a>
                     )}
                   </div>
                 </div>
@@ -1464,8 +1538,17 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
           onChange={async (e) => {
             const file = e.target.files?.[0];
             if (!file) return;
-            const textNotice = `[Shared file: ${file.name}]`;
-            setChannelInputText(textNotice);
+            const reader = new FileReader();
+            reader.onload = async () => {
+              const dataUri = reader.result as string;
+              await handleSendChannelMessage(undefined, {
+                type: 'file',
+                fileName: file.name,
+                fileSize: file.size,
+                fileUrl: dataUri,
+              });
+            };
+            reader.readAsDataURL(file);
             if (channelDocInputRef.current) channelDocInputRef.current.value = '';
           }}
         />
@@ -1485,19 +1568,26 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
               </button>
 
               <div className="shc-composer-text-wrap">
-                <textarea
-                  className="shc-composer-textarea"
-                  placeholder={`Message #${selectedChannel.name}`}
-                  value={channelInputText}
-                  onChange={(e) => setChannelInputText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      void handleSendChannelMessage();
-                    }
-                  }}
-                  rows={1}
-                />
+                {channelRecording ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', color: '#f23f43', fontWeight: 700, fontSize: 13 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#f23f43' }} />
+                    Recording voice message... {channelRecordSeconds}s
+                  </div>
+                ) : (
+                  <textarea
+                    className="shc-composer-textarea"
+                    placeholder={`Message #${selectedChannel.name}`}
+                    value={channelInputText}
+                    onChange={(e) => setChannelInputText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        void handleSendChannelMessage();
+                      }
+                    }}
+                    rows={1}
+                  />
+                )}
               </div>
 
               <button
@@ -1515,21 +1605,25 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
               {!channelInputText.trim() && (
                 <button
                   type="button"
-                  className="shc-composer-icon-btn shc-composer-voice-btn"
-                  onClick={() => {
-                    alert('Hold to record voice message in this channel.');
-                  }}
-                  aria-label="Record voice message"
+                  className={`shc-composer-icon-btn shc-composer-voice-btn ${channelRecording ? 'shc-rec-on' : ''}`}
+                  onClick={toggleChannelRecording}
+                  aria-label={channelRecording ? 'Stop recording' : 'Record voice message'}
                 >
-                  <Mic size={21} />
+                  {channelRecording ? <Square size={20} color="#f23f43" /> : <Mic size={21} />}
                 </button>
               )}
 
               <button
                 type="button"
-                className={`shc-composer-icon-btn shc-composer-send-btn ${channelInputText.trim() ? 'shc-send-active' : ''}`}
-                disabled={!channelInputText.trim() && !channelSendBusy}
-                onClick={() => void handleSendChannelMessage()}
+                className={`shc-composer-icon-btn shc-composer-send-btn ${(channelInputText.trim() || channelRecording) ? 'shc-send-active' : ''}`}
+                disabled={!channelInputText.trim() && !channelRecording && !channelSendBusy}
+                onClick={() => {
+                  if (channelRecording) {
+                    void stopAndSendChannelVoice();
+                  } else {
+                    void handleSendChannelMessage();
+                  }
+                }}
                 aria-label="Send message"
               >
                 <Send size={18} />
@@ -1594,7 +1688,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                     type="button"
                     onClick={() => {
                       setShowChannelAttachMenu(false);
-                      alert('Voice note recording started (tap to finish).');
+                      toggleChannelRecording();
                     }}
                   >
                     <Mic size={28} />
