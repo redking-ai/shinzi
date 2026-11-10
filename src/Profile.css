@@ -1371,3 +1371,255 @@ body {
   font-size: 13px;
   font-weight: 600;
 }
+
+/* ============================================================
+   ONLINE / OFFLINE / DND / GHOST STATUS SYSTEM
+   ============================================================ */
+
+/* Status Badge on Profile Avatar */
+.sh-status-badge {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 3.5px solid #101018;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+@media (max-width: 480px) {
+  .sh-status-badge {
+    width: 20px;
+    height: 20px;
+    bottom: 1px;
+    right: 1px;
+    border-width: 3px;
+  }
+}
+
+/* Status Badge on Bottom Navigation Avatar */
+.sh-status-badge-nav {
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid #000000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  box-sizing: border-box;
+}
+
+/* Green: Online */
+.sh-status-online {
+  background-color: #23a55a;
+}
+
+/* Red: Do Not Disturb */
+.sh-status-dnd {
+  background-color: #f23f43;
+}
+
+.sh-status-dnd-bar {
+  width: 10px;
+  height: 3px;
+  background-color: #ffffff;
+  border-radius: 2px;
+}
+
+@media (max-width: 480px) {
+  .sh-status-dnd-bar {
+    width: 8px;
+    height: 2.2px;
+  }
+}
+
+/* Gray: Ghost / Offline */
+.sh-status-ghost,
+.sh-status-offline {
+  background-color: #101018;
+  border-color: #80848e !important;
+  border-width: 4px !important;
+}
+
+@media (max-width: 480px) {
+  .sh-status-ghost,
+  .sh-status-offline {
+    border-width: 3px !important;
+  }
+}
+
+/* Bottom Sheet Overlay */
+.sh-status-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  z-index: 9999;
+  backdrop-filter: blur(4px);
+  animation: shSheetFade 0.18s ease-out;
+}
+
+/* Bottom Sheet Modal */
+.sh-status-sheet {
+  background: #1e1f22;
+  border-radius: 20px 20px 0 0;
+  padding: 12px 18px 34px;
+  width: 100%;
+  max-width: 540px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.6);
+  animation: shSheetSlide 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes shSheetFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes shSheetSlide {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.sh-status-sheet-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: #4e5058;
+  margin: 0 auto 14px;
+}
+
+.sh-status-sheet-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #ffffff;
+  text-align: center;
+  margin: 0 0 16px;
+}
+
+.sh-status-sheet-section {
+  font-size: 12px;
+  font-weight: 700;
+  color: #949ba4;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-bottom: 8px;
+  padding-left: 4px;
+}
+
+/* Card of status options */
+.sh-status-options-card {
+  background: #111215;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sh-status-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sh-status-option:not(:last-child) {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.sh-status-option:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.sh-status-option:active {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.sh-status-option-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.sh-status-option-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+/* Dot icons inside menu options */
+.sh-status-dot-green {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: #23a55a;
+  flex-shrink: 0;
+}
+
+.sh-status-dot-dnd {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: #f23f43;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sh-status-dot-dnd-bar {
+  width: 8px;
+  height: 2.5px;
+  background-color: #ffffff;
+  border-radius: 1px;
+}
+
+.sh-status-dot-ghost {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: transparent;
+  border: 3px solid #80848e;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+/* Radio button on right */
+.sh-status-radio {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.sh-status-option-selected .sh-status-radio {
+  border-color: #5865F2;
+}
+
+.sh-status-radio-inner {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: #5865F2;
+}

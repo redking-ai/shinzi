@@ -155,6 +155,75 @@ useEffect(() => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  // Online / DND / Ghost Status System (Discord style)
+  type OnlineStatusMode = 'online' | 'dnd' | 'ghost';
+
+  const [statusMode, setStatusMode] = useState<OnlineStatusMode>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('shinzi_status_mode') as OnlineStatusMode;
+      if (saved === 'online' || saved === 'dnd' || saved === 'ghost') return saved;
+    }
+    const user = auth.currentUser;
+    const cached = user ? getCachedProfile(user.uid) : null;
+    if (cached?.onlineStatusMode) return cached.onlineStatusMode as OnlineStatusMode;
+    return 'online';
+  });
+
+  const [showStatusSheet, setShowStatusSheet] = useState(false);
+
+  const [isBrowserOnline, setIsBrowserOnline] = useState<boolean>(() => {
+    return typeof navigator !== 'undefined' ? navigator.onLine : true;
+  });
+
+  useEffect(() => {
+    const handleOnline = () => setIsBrowserOnline(true);
+    const handleOffline = () => setIsBrowserOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Compute effective visual status:
+  // If user explicitly chose 'dnd' -> always red Do Not Disturb block
+  // If user explicitly chose 'ghost' -> always gray Ghost icon
+  // If user chose 'online' -> green when online, gray when browser goes offline
+  const effectiveStatus: 'online' | 'offline' | 'dnd' | 'ghost' =
+    statusMode === 'dnd'
+      ? 'dnd'
+      : statusMode === 'ghost'
+      ? 'ghost'
+      : isBrowserOnline
+      ? 'online'
+      : 'offline';
+
+  const handleSelectStatus = async (newMode: OnlineStatusMode) => {
+    setStatusMode(newMode);
+    try {
+      localStorage.setItem('shinzi_status_mode', newMode);
+    } catch {}
+    setShowStatusSheet(false);
+
+    if (currentUser?.uid) {
+      try {
+        await updateDoc(doc(db, 'users', currentUser.uid), {
+          onlineStatusMode: newMode,
+        });
+        const cached = getCachedProfile(currentUser.uid) || {};
+        setCachedProfile(currentUser.uid, {
+          ...cached,
+          onlineStatusMode: newMode,
+        });
+      } catch (err) {
+        console.warn('Could not update status mode in Firestore:', err);
+      }
+    }
+  };
+
   // Media cropping & upload state
   const [mediaUploadLoading, setMediaUploadLoading] = useState(false);
   const [mediaUploadStatus, setMediaUploadStatus] = useState('');
@@ -903,7 +972,16 @@ useEffect(() => {
 
         <div className="sh-profile-identity">
           <div className="sh-avatar-thought-row">
-            <div className="sh-avatar-wrap">
+            <div
+              className="sh-avatar-wrap"
+              onClick={() => {
+                if (!isEditing) {
+                  setShowStatusSheet(true);
+                }
+              }}
+              style={{ cursor: isEditing ? 'default' : 'pointer' }}
+              title={isEditing ? 'Edit Profile' : 'Change Online Status'}
+            >
               {assetLoading && !profileImageUri ? (
                 <div className="sh-avatar sh-avatar-skeleton" />
               ) : profileImageUri && !isMediaVideo(profileImageUri) ? (
@@ -928,12 +1006,23 @@ useEffect(() => {
                 </div>
               )}
 
+              {/* Status Badge (Online green, DND red block, Ghost gray) */}
+              <div
+                className={`sh-status-badge sh-status-${effectiveStatus}`}
+                title={`Status: ${effectiveStatus === 'dnd' ? 'Do Not Disturb' : effectiveStatus === 'ghost' ? 'Ghost' : effectiveStatus}`}
+              >
+                {effectiveStatus === 'dnd' && <div className="sh-status-dnd-bar" />}
+              </div>
+
               {/* Root-style Avatar Pencil Edit Button (Only visible in editing mode, placed cleanly on the avatar) */}
               {isEditing && (
                 <button
                   type="button"
                   className="sh-avatar-edit-overlay"
-                  onClick={() => avatarInputRef.current?.click()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    avatarInputRef.current?.click();
+                  }}
                   title="Change avatar"
                   aria-label="Change avatar"
                 >
@@ -1170,23 +1259,30 @@ useEffect(() => {
           className="sh-bottom-active shc-bottom-profile-btn"
           aria-label="Profile"
         >
-          {assetLoading && !profileImageUri ? (
-            <div className="shc-avatar shc-avatar-nav shc-avatar-skeleton" />
-          ) : profileImageUri && !isMediaVideo(profileImageUri) ? (
-            <img
-              src={profileImageUri}
-              alt="Profile"
-              className="shc-avatar-nav"
-            />
-          ) : (
-            <div className="shc-avatar shc-avatar-nav">
-              <span>
-                {String(userData?.displayName ?? '?')
-                  .slice(0, 1)
-                  .toUpperCase()}
-              </span>
+          <div style={{ position: 'relative', display: 'inline-block' }}>
+            {assetLoading && !profileImageUri ? (
+              <div className="shc-avatar shc-avatar-nav shc-avatar-skeleton" />
+            ) : profileImageUri && !isMediaVideo(profileImageUri) ? (
+              <img
+                src={profileImageUri}
+                alt="Profile"
+                className="shc-avatar-nav"
+              />
+            ) : (
+              <div className="shc-avatar shc-avatar-nav">
+                <span>
+                  {String(userData?.displayName ?? '?')
+                    .slice(0, 1)
+                    .toUpperCase()}
+                </span>
+              </div>
+            )}
+            <div className={`sh-status-badge-nav sh-status-${effectiveStatus}`}>
+              {effectiveStatus === 'dnd' && (
+                <div style={{ width: 4, height: 1, backgroundColor: '#fff', borderRadius: 1 }} />
+              )}
             </div>
-          )}
+          </div>
         </button>
       </nav>
 
@@ -1230,6 +1326,70 @@ useEffect(() => {
 
       {showSettings && (
         <Settings onBack={() => setShowSettings(false)} />
+      )}
+
+      {/* Change Online Status Bottom Sheet (IMG-20261110-WA0003.jpg) */}
+      {showStatusSheet && (
+        <div
+          className="sh-status-sheet-overlay"
+          onClick={() => setShowStatusSheet(false)}
+        >
+          <div
+            className="sh-status-sheet"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sh-status-sheet-handle" />
+            <h3 className="sh-status-sheet-title">Change Online Status</h3>
+
+            <div className="sh-status-sheet-section">Online Status</div>
+
+            <div className="sh-status-options-card">
+              {/* Online Mode */}
+              <div
+                className={`sh-status-option ${statusMode === 'online' ? 'sh-status-option-selected' : ''}`}
+                onClick={() => handleSelectStatus('online')}
+              >
+                <div className="sh-status-option-left">
+                  <span className="sh-status-dot-green" />
+                  <span className="sh-status-option-name">Online</span>
+                </div>
+                <div className="sh-status-radio">
+                  {statusMode === 'online' && <div className="sh-status-radio-inner" />}
+                </div>
+              </div>
+
+              {/* Do Not Disturb Mode */}
+              <div
+                className={`sh-status-option ${statusMode === 'dnd' ? 'sh-status-option-selected' : ''}`}
+                onClick={() => handleSelectStatus('dnd')}
+              >
+                <div className="sh-status-option-left">
+                  <div className="sh-status-dot-dnd">
+                    <span className="sh-status-dot-dnd-bar" />
+                  </div>
+                  <span className="sh-status-option-name">Do Not Disturb</span>
+                </div>
+                <div className="sh-status-radio">
+                  {statusMode === 'dnd' && <div className="sh-status-radio-inner" />}
+                </div>
+              </div>
+
+              {/* Ghost Mode (Invisible) */}
+              <div
+                className={`sh-status-option ${statusMode === 'ghost' ? 'sh-status-option-selected' : ''}`}
+                onClick={() => handleSelectStatus('ghost')}
+              >
+                <div className="sh-status-option-left">
+                  <span className="sh-status-dot-ghost" />
+                  <span className="sh-status-option-name">Ghost</span>
+                </div>
+                <div className="sh-status-radio">
+                  {statusMode === 'ghost' && <div className="sh-status-radio-inner" />}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   );

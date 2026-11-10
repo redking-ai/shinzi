@@ -586,6 +586,17 @@ export default function OtherProfile({
                     .toUpperCase()}
                 </div>
               )}
+
+              {/* Status Badge */}
+              {(() => {
+                const mode = (userData as any)?.onlineStatusMode || 'online';
+                const effective = mode === 'dnd' ? 'dnd' : mode === 'ghost' ? 'ghost' : 'online';
+                return (
+                  <div className={`sh-status-badge sh-status-${effective}`}>
+                    {effective === 'dnd' && <div className="sh-status-dnd-bar" />}
+                  </div>
+                );
+              })()}
             </div>
 
             {userData.bubleText && (
