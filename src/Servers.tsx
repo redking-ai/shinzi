@@ -22,10 +22,22 @@ import {
   Sliders,
   LogOut,
   Ban,
+  Trash2,
   CheckCircle2,
 } from 'lucide-react';
 import { auth, db } from './firebaseConfig';
-import { collection, doc, getDocs, setDoc, query, where } from 'firebase/firestore';
+import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
+import {
+  collection,
+  doc,
+  getDocs,
+  setDoc,
+  deleteDoc,
+  query,
+  where,
+  arrayUnion,
+  updateDoc,
+} from 'firebase/firestore';
 import { useDriveStore } from './driveStore';
 
 interface ServerChannel {
@@ -46,16 +58,20 @@ export interface ServerData {
   id: string;
   name: string;
   creatorName?: string;
+  ownerId?: string;
   description?: string;
   iconUrl?: string;
   bannerUrl?: string;
   memberCount: string;
+  memberIds?: string[];
+  visibility?: 'public' | 'private';
   isOfficial?: boolean;
   isCustomTag?: boolean;
   isCreatedByMe?: boolean;
   isPrivate?: boolean;
   onlineCount?: string;
   categories: ServerCategory[];
+  createdAt?: number;
 }
 
 interface ServersProps {
@@ -64,188 +80,50 @@ interface ServersProps {
   onOpenProfile?: () => void;
 }
 
-// Initial curated servers from sketches
-const DEFAULT_JOINED_SERVERS: ServerData[] = [
-  {
-    id: 'shinzi-hub',
-    name: 'Shinzi Hub',
-    creatorName: 'Shinzi Official',
-    description: 'This is the 1st server of the Shinzi hub by the way.',
-    memberCount: '101.4M members',
-    onlineCount: '42,910 online',
-    isOfficial: true,
-    isCustomTag: true,
-    iconUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=80',
-    bannerUrl: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=800&auto=format&fit=crop&q=80',
-    categories: [
-      {
-        id: 'cat-welcome',
-        name: 'Welcome',
-        channels: [
-          { id: 'ch-welcome', name: 'welcome', type: 'text' },
-          { id: 'ch-announcements', name: 'announcements', type: 'announcement' },
-        ],
-      },
-      {
-        id: 'cat-events',
-        name: 'Events',
-        channels: [
-          { id: 'ch-events', name: 'Events', type: 'text' },
-          { id: 'ch-special-events', name: 'Special Events', type: 'text' },
-        ],
-      },
-      {
-        id: 'cat-community',
-        name: 'Community',
-        channels: [
-          { id: 'ch-chats', name: 'Chats', type: 'text' },
-          { id: 'ch-chill-chat', name: 'Chill Chat', type: 'text' },
-          { id: 'ch-reel-chat', name: 'Reel Chat', type: 'text' },
-          { id: 'ch-photo-chat', name: 'Photo Chat', type: 'text' },
-          { id: 'ch-about-me', name: 'chat about me', type: 'text' },
-          { id: 'ch-suggests', name: 'suggests', type: 'text' },
-          { id: 'ch-creations', name: 'Creations', type: 'text' },
-        ],
-      },
-      {
-        id: 'cat-voice',
-        name: 'Voice Rooms',
-        channels: [
-          { id: 'ch-voice-1', name: 'Voice Room 1', type: 'voice', listenerCount: '19K People in' },
-          { id: 'ch-voice-2', name: 'Voice Room 2', type: 'voice', listenerCount: '5K People in' },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'minecraft',
-    name: 'Minecraft',
-    creatorName: 'Mojang',
-    description: 'Official Minecraft community for builders and adventurers.',
-    memberCount: '500K members',
-    isOfficial: true,
-    iconUrl: 'https://images.unsplash.com/photo-1627856013091-fed6e4e30025?w=150&auto=format&fit=crop&q=80',
-    bannerUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800&auto=format&fit=crop&q=80',
-    categories: [
-      {
-        id: 'mc-general',
-        name: 'General',
-        channels: [
-          { id: 'mc-rules', name: 'rules', type: 'text' },
-          { id: 'mc-chat', name: 'general-chat', type: 'text' },
-          { id: 'mc-builds', name: 'showcase-builds', type: 'text' },
-        ],
-      },
-      {
-        id: 'mc-voice',
-        name: 'Voice',
-        channels: [
-          { id: 'mc-v1', name: 'Survival Lobby', type: 'voice', listenerCount: '1.2K People in' },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'roblox',
-    name: 'Roblox',
-    creatorName: 'Roblox',
-    description: 'Official Roblox creators and developers hangout.',
-    memberCount: '11.2M members',
-    isOfficial: true,
-    iconUrl: 'https://images.unsplash.com/photo-1579373903781-fd5c0c30c4cd?w=150&auto=format&fit=crop&q=80',
-    bannerUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=800&auto=format&fit=crop&q=80',
-    categories: [
-      {
-        id: 'rb-main',
-        name: 'Main',
-        channels: [
-          { id: 'rb-chat', name: 'general', type: 'text' },
-          { id: 'rb-games', name: 'game-recommendations', type: 'text' },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'mcpedl',
-    name: 'MCPedl',
-    creatorName: 'MCPedl Team',
-    description: 'Minecraft Bedrock mods, textures and addon hub.',
-    memberCount: '89.3K members',
-    isOfficial: true,
-    iconUrl: 'https://images.unsplash.com/photo-1563089145-599997674d42?w=150&auto=format&fit=crop&q=80',
-    bannerUrl: 'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=800&auto=format&fit=crop&q=80',
-    categories: [
-      {
-        id: 'mcp-main',
-        name: 'Addons',
-        channels: [
-          { id: 'mcp-chat', name: 'addons-chat', type: 'text' },
-          { id: 'mcp-releases', name: 'new-releases', type: 'text' },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'ishowspeed',
-    name: 'IShowSpeed Hub',
-    creatorName: 'Speed',
-    description: 'Live streams, reactions and hype community!',
-    memberCount: '24.9M members',
-    isOfficial: true,
-    iconUrl: 'https://images.unsplash.com/photo-1566492031773-4f4e44671857?w=150&auto=format&fit=crop&q=80',
-    bannerUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&auto=format&fit=crop&q=80',
-    categories: [
-      {
-        id: 'spd-main',
-        name: 'Lobby',
-        channels: [
-          { id: 'spd-chat', name: 'hype-chat', type: 'text' },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'steak-kitchen',
-    name: 'Steak Kitchen',
-    creatorName: 'Steak & Co',
-    description: 'Gaming clips, highlights and community cooking.',
-    memberCount: '100.7M members',
-    iconUrl: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=150&auto=format&fit=crop&q=80',
-    bannerUrl: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=800&auto=format&fit=crop&q=80',
-    categories: [
-      {
-        id: 'stk-main',
-        name: 'Community',
-        channels: [
-          { id: 'stk-chat', name: 'kitchen-chat', type: 'text' },
-        ],
-      },
-    ],
-  },
-];
+// Legacy mock server IDs to clean out from localStorage
+const FAKE_SERVER_IDS = new Set([
+  'shinzi-hub',
+  'minecraft',
+  'roblox',
+  'mcpedl',
+  'ishowspeed',
+  'steak-kitchen',
+]);
+
+const cleanSavedServers = (saved: string | null): ServerData[] => {
+  if (!saved) return [];
+  try {
+    const list: ServerData[] = JSON.parse(saved);
+    if (!Array.isArray(list)) return [];
+    return list.filter((s) => s && s.id && !FAKE_SERVER_IDS.has(s.id));
+  } catch {
+    return [];
+  }
+};
 
 export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersProps) {
   const drive = useDriveStore();
-  const uid = auth.currentUser?.uid;
+  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(() => auth.currentUser);
 
-  // Servers State
+  // Keep Firebase user state synchronized
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setCurrentUser(u);
+    });
+    return unsubscribe;
+  }, []);
+
+  // Servers State - strictly real data, no hardcoded mocks
   const [createdServers, setCreatedServers] = useState<ServerData[]>(() => {
-    try {
-      const saved = localStorage.getItem('shinzi_created_servers');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
+    return cleanSavedServers(localStorage.getItem('shinzi_created_servers'));
   });
 
   const [joinedServers, setJoinedServers] = useState<ServerData[]>(() => {
-    try {
-      const saved = localStorage.getItem('shinzi_joined_servers');
-      return saved ? JSON.parse(saved) : DEFAULT_JOINED_SERVERS;
-    } catch {
-      return DEFAULT_JOINED_SERVERS;
-    }
+    return cleanSavedServers(localStorage.getItem('shinzi_joined_servers'));
   });
+
+  // Discoverable public servers loaded from Firestore
+  const [discoverableServers, setDiscoverableServers] = useState<ServerData[]>([]);
 
   // Navigation / Modal States
   const [activeServer, setActiveServer] = useState<ServerData | null>(null);
@@ -257,7 +135,23 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
 
   // Search Screen State
   const [searchQuery, setSearchQuery] = useState('');
-  const [recentSearches, setRecentSearches] = useState<string[]>(['Roblox', 'Minecraft', 'Shinzi Hub']);
+  const [recentSearches, setRecentSearches] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('shinzi_recent_searches');
+      if (!saved) return [];
+      const list = JSON.parse(saved);
+      if (!Array.isArray(list)) return [];
+      return list.filter(
+        (name) =>
+          typeof name === 'string' &&
+          !['roblox', 'minecraft', 'shinzi hub', 'mcpedl', 'ishowspeed', 'steak kitchen'].includes(
+            name.toLowerCase()
+          )
+      );
+    } catch {
+      return [];
+    }
+  });
 
   // Create Server Form State
   const [formName, setFormName] = useState('');
@@ -286,92 +180,163 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     }
   };
 
-  const handleJoinServer = (srv: ServerData) => {
-    setJoinedServers((prev) => {
-      if (prev.some((s) => s.id === srv.id)) return prev;
-      const updated = [srv, ...prev];
+  const addRecentSearch = (term: string) => {
+    if (!term.trim()) return;
+    setRecentSearches((prev) => {
+      const updated = Array.from(new Set([term.trim(), ...prev])).slice(0, 10);
       try {
-        localStorage.setItem('shinzi_joined_servers', JSON.stringify(updated));
-      } catch {
-        // ignore storage errors
-      }
+        localStorage.setItem('shinzi_recent_searches', JSON.stringify(updated));
+      } catch {}
       return updated;
     });
   };
 
-  // Load created servers from Firestore
-  useEffect(() => {
-    if (!uid) return;
-    const fetchServers = async () => {
+  const handleJoinServer = async (srv: ServerData) => {
+    setJoinedServers((prev) => {
+      if (prev.some((s) => s.id === srv.id) || createdServers.some((s) => s.id === srv.id)) {
+        return prev;
+      }
+      const updated = [srv, ...prev];
       try {
-        const q = query(collection(db, 'servers'), where('ownerId', '==', uid));
+        localStorage.setItem('shinzi_joined_servers', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    // If user is authenticated, add uid to memberIds in Firestore
+    if (currentUser?.uid && srv.id) {
+      try {
+        const srvRef = doc(db, 'servers', srv.id);
+        await updateDoc(srvRef, {
+          memberIds: arrayUnion(currentUser.uid),
+        });
+      } catch (err) {
+        console.warn('Could not record server join in Firestore:', err);
+      }
+    }
+  };
+
+  // 1. Fetch all public discoverable servers from Firestore
+  useEffect(() => {
+    const fetchPublicServers = async () => {
+      try {
+        const q = query(collection(db, 'servers'), where('visibility', '==', 'public'));
         const snap = await getDocs(q);
         if (!snap.empty) {
           const list: ServerData[] = snap.docs.map((docSnap) => ({
             id: docSnap.id,
             ...(docSnap.data() as any),
           }));
+          setDiscoverableServers(list);
+        }
+      } catch (err) {
+        console.warn('Could not load public servers from Firestore:', err);
+      }
+    };
+    void fetchPublicServers();
+  }, []);
+
+  // 2. Fetch current user's created and joined servers from Firestore
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+    const fetchUserServers = async () => {
+      try {
+        // Created servers
+        const qCreated = query(collection(db, 'servers'), where('ownerId', '==', currentUser.uid));
+        const snapCreated = await getDocs(qCreated);
+        if (!snapCreated.empty) {
+          const list: ServerData[] = snapCreated.docs.map((docSnap) => ({
+            id: docSnap.id,
+            ...(docSnap.data() as any),
+            isCreatedByMe: true,
+          }));
           setCreatedServers(list);
           localStorage.setItem('shinzi_created_servers', JSON.stringify(list));
         }
+
+        // Joined servers
+        const qJoined = query(
+          collection(db, 'servers'),
+          where('memberIds', 'array-contains', currentUser.uid)
+        );
+        const snapJoined = await getDocs(qJoined);
+        if (!snapJoined.empty) {
+          const list: ServerData[] = snapJoined.docs
+            .map((docSnap) => ({
+              id: docSnap.id,
+              ...(docSnap.data() as any),
+            }))
+            .filter((s) => s.ownerId !== currentUser.uid);
+          setJoinedServers(list);
+          localStorage.setItem('shinzi_joined_servers', JSON.stringify(list));
+        }
       } catch (err) {
-        console.warn('Could not load servers from Firestore:', err);
+        console.warn('Could not load user servers from Firestore:', err);
       }
     };
-    void fetchServers();
-  }, [uid]);
+    void fetchUserServers();
+  }, [currentUser?.uid]);
 
-  // Handle avatar upload
-  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle avatar upload (Supports image & animated GIF)
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const localUrl = URL.createObjectURL(file);
-    setFormAvatarPreview(localUrl);
+    // Convert immediately to persistent Base64 Data URL (never expires on reload)
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
+      setFormAvatarPreview(dataUrl);
 
-    // Upload to Drive folder 'server' if configured
-    try {
-      if (drive.hasActiveSession && drive.uploadFile) {
-        const res = await drive.uploadFile({
-          file,
-          fileName: file.name,
-          mimeType: file.type || 'image/jpeg',
-          folderType: 'server',
-        });
-        if (res?.fileId) {
-          await drive.makeFilePublic(res.fileId);
-          setFormAvatarPreview(`https://lh3.googleusercontent.com/d/${res.fileId}=s1600`);
+      // Upload to Drive folder 'server' if configured
+      try {
+        if (drive.hasActiveSession && drive.uploadFile) {
+          const res = await drive.uploadFile({
+            file,
+            fileName: `server_avatar_${Date.now()}_${file.name}`,
+            mimeType: file.type || 'image/png',
+            folderType: 'server',
+          });
+          if (res?.fileId) {
+            await drive.makeFilePublic(res.fileId);
+            setFormAvatarPreview(`https://lh3.googleusercontent.com/d/${res.fileId}=s1600`);
+          }
         }
+      } catch (err) {
+        console.warn('Drive avatar upload note:', err);
       }
-    } catch (err) {
-      console.warn('Failed to upload server avatar to Drive:', err);
-    }
+    };
+    reader.readAsDataURL(file);
   };
 
-  // Handle banner upload
-  const handleBannerChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle banner upload (Supports image & animated GIF)
+  const handleBannerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const localUrl = URL.createObjectURL(file);
-    setFormBannerPreview(localUrl);
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
+      setFormBannerPreview(dataUrl);
 
-    try {
-      if (drive.hasActiveSession && drive.uploadFile) {
-        const res = await drive.uploadFile({
-          file,
-          fileName: file.name,
-          mimeType: file.type || 'image/jpeg',
-          folderType: 'server',
-        });
-        if (res?.fileId) {
-          await drive.makeFilePublic(res.fileId);
-          setFormBannerPreview(`https://lh3.googleusercontent.com/d/${res.fileId}=s1600`);
+      try {
+        if (drive.hasActiveSession && drive.uploadFile) {
+          const res = await drive.uploadFile({
+            file,
+            fileName: `server_banner_${Date.now()}_${file.name}`,
+            mimeType: file.type || 'image/png',
+            folderType: 'server',
+          });
+          if (res?.fileId) {
+            await drive.makeFilePublic(res.fileId);
+            setFormBannerPreview(`https://lh3.googleusercontent.com/d/${res.fileId}=s1600`);
+          }
         }
+      } catch (err) {
+        console.warn('Drive banner upload note:', err);
       }
-    } catch (err) {
-      console.warn('Failed to upload server banner to Drive:', err);
-    }
+    };
+    reader.readAsDataURL(file);
   };
 
   // Create Server Action
@@ -379,18 +344,25 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     if (!formName.trim() || createBusy) return;
     setCreateBusy(true);
 
+    const userUid = currentUser?.uid || auth.currentUser?.uid || `anon-${Date.now()}`;
+    const authorName = currentUser?.displayName || 'Community Member';
     const newServerId = `server-${Date.now()}`;
+
     const newServer: ServerData = {
       id: newServerId,
       name: formName.trim(),
-      creatorName: auth.currentUser?.displayName || 'You',
-      description: formDesc.trim() || 'A new Shinzi community server.',
-      iconUrl: formAvatarPreview || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150',
-      bannerUrl: formBannerPreview || 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=800',
+      creatorName: authorName,
+      ownerId: userUid,
+      description: formDesc.trim() || 'A community server on Shinzi.',
+      iconUrl: formAvatarPreview || '',
+      bannerUrl: formBannerPreview || '',
       memberCount: '1 member',
+      memberIds: [userUid],
+      visibility: formIsPrivate ? 'private' : 'public',
       isOfficial: false,
       isCreatedByMe: true,
       isPrivate: formIsPrivate,
+      createdAt: Date.now(),
       categories: [
         {
           id: `cat-welcome-${Date.now()}`,
@@ -412,42 +384,42 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
         {
           id: `cat-sugg-${Date.now()}`,
           name: 'Suggestions',
-          channels: [
-            { id: `ch-sugg-${Date.now()}`, name: 'suggestions', type: 'text' },
-          ],
+          channels: [{ id: `ch-sugg-${Date.now()}`, name: 'suggestions', type: 'text' }],
         },
         {
           id: `cat-voice-${Date.now()}`,
           name: 'Voice Rooms',
           channels: [
-            { id: `ch-v1-${Date.now()}`, name: 'Voice Room 1', type: 'voice', listenerCount: '0 People in' },
+            {
+              id: `ch-v1-${Date.now()}`,
+              name: 'Voice Room 1',
+              type: 'voice',
+              listenerCount: '0 People in',
+            },
           ],
         },
         {
           id: `cat-logs-${Date.now()}`,
           name: 'Logs',
-          channels: [
-            { id: `ch-logs-${Date.now()}`, name: 'logs', type: 'text', isPrivate: true },
-          ],
+          channels: [{ id: `ch-logs-${Date.now()}`, name: 'logs', type: 'text', isPrivate: true }],
         },
       ],
     };
 
+    // Save to Firestore with valid memberIds and visibility adhering to firestore.rules
     try {
-      if (uid) {
-        await setDoc(doc(db, 'servers', newServerId), {
-          ...newServer,
-          ownerId: uid,
-          createdAt: Date.now(),
-        });
-      }
+      await setDoc(doc(db, 'servers', newServerId), newServer);
     } catch (err) {
       console.warn('Firestore server write fallback:', err);
     }
 
+    // Update local state and localStorage
     const updated = [newServer, ...createdServers];
     setCreatedServers(updated);
-    localStorage.setItem('shinzi_created_servers', JSON.stringify(updated));
+    setDiscoverableServers((prev) => [newServer, ...prev.filter((s) => s.id !== newServer.id)]);
+    try {
+      localStorage.setItem('shinzi_created_servers', JSON.stringify(updated));
+    } catch {}
 
     // Reset form
     setFormName('');
@@ -463,6 +435,29 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     setSelectedChannel(newServer.categories[1]?.channels[0] || newServer.categories[0]?.channels[0]);
   };
 
+  // Delete Server Action (Owner only)
+  const handleDeleteServer = async (srv: ServerData) => {
+    if (!confirm(`Are you sure you want to delete "${srv.name}" permanently?`)) return;
+
+    try {
+      await deleteDoc(doc(db, 'servers', srv.id));
+    } catch (err) {
+      console.warn('Firestore delete error:', err);
+    }
+
+    setCreatedServers((prev) => {
+      const updated = prev.filter((s) => s.id !== srv.id);
+      try {
+        localStorage.setItem('shinzi_created_servers', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    setDiscoverableServers((prev) => prev.filter((s) => s.id !== srv.id));
+    setShowDetailsModal(false);
+    setActiveServer(null);
+  };
+
   // Toggle Category Collapse
   const toggleCategory = (catId: string) => {
     setCollapsedCategories((prev) => ({
@@ -471,14 +466,19 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     }));
   };
 
-  // Filtered servers for search
-  const allServers = [...createdServers, ...joinedServers];
+  // Deduplicate and combine all real servers for search and discovery
+  const allServersMap = new Map<string, ServerData>();
+  discoverableServers.forEach((s) => allServersMap.set(s.id, s));
+  joinedServers.forEach((s) => allServersMap.set(s.id, s));
+  createdServers.forEach((s) => allServersMap.set(s.id, s));
+  const allServers = Array.from(allServersMap.values());
+
   const searchResults = searchQuery.trim()
     ? allServers.filter(
         (s) =>
-          s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          s.creatorName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          s.id.toLowerCase().includes(searchQuery.toLowerCase())
+          s.name.toLowerCase().includes(searchQuery.toLowerCase().trim()) ||
+          s.creatorName?.toLowerCase().includes(searchQuery.toLowerCase().trim()) ||
+          s.id.toLowerCase().includes(searchQuery.toLowerCase().trim())
       )
     : [];
 
@@ -524,29 +524,49 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
               <div className="sh-servers-section-title">Recents</div>
               {recentSearches.length > 0 ? (
                 recentSearches.map((rec) => {
-                  const match = allServers.find((s) => s.name.toLowerCase() === rec.toLowerCase()) || allServers[0];
+                  const match = allServers.find((s) => s.name.toLowerCase() === rec.toLowerCase());
                   return (
                     <div
                       key={rec}
                       className="sh-search-result-card"
-                      style={{ backgroundImage: `url(${match.bannerUrl})` }}
+                      style={{
+                        backgroundImage: match?.bannerUrl ? `url(${match.bannerUrl})` : undefined,
+                        background: match?.bannerUrl
+                          ? undefined
+                          : 'linear-gradient(135deg, #1e1f22 0%, #2b2d31 100%)',
+                      }}
                       onClick={() => {
-                        handleJoinServer(match);
-                        setActiveServer(match);
-                        setSelectedChannel(match.categories[0]?.channels[0]);
-                        setShowSearchModal(false);
+                        if (match) {
+                          handleJoinServer(match);
+                          setActiveServer(match);
+                          setSelectedChannel(match.categories[0]?.channels[0]);
+                          setShowSearchModal(false);
+                        } else {
+                          setSearchQuery(rec);
+                        }
                       }}
                     >
                       <div className="sh-search-result-overlay" />
                       <div className="sh-search-result-body">
-                        <img
-                          src={match.iconUrl}
-                          alt={match.name}
-                          className="sh-search-result-avatar"
-                        />
+                        {match?.iconUrl ? (
+                          <img
+                            src={match.iconUrl}
+                            alt={match.name}
+                            className="sh-search-result-avatar"
+                          />
+                        ) : (
+                          <div
+                            className="sh-server-card-avatar-placeholder"
+                            style={{ width: 40, height: 40, fontSize: 16, margin: 0 }}
+                          >
+                            {(match?.name || rec).charAt(0).toUpperCase()}
+                          </div>
+                        )}
                         <div className="sh-search-result-info">
-                          <span className="sh-search-result-name">{match.name}</span>
-                          <span className="sh-search-result-creator">by {match.creatorName || 'Roblox'}</span>
+                          <span className="sh-search-result-name">{match?.name || rec}</span>
+                          <span className="sh-search-result-creator">
+                            by {match?.creatorName || 'Community'}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -568,10 +588,15 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                 <div
                   key={srv.id}
                   className="sh-search-result-card"
-                  style={{ backgroundImage: `url(${srv.bannerUrl})` }}
+                  style={{
+                    backgroundImage: srv.bannerUrl ? `url(${srv.bannerUrl})` : undefined,
+                    background: srv.bannerUrl
+                      ? undefined
+                      : 'linear-gradient(135deg, #1e1f22 0%, #2b2d31 100%)',
+                  }}
                   onClick={() => {
                     handleJoinServer(srv);
-                    setRecentSearches((prev) => Array.from(new Set([srv.name, ...prev])).slice(0, 5));
+                    addRecentSearch(srv.name);
                     setActiveServer(srv);
                     setSelectedChannel(srv.categories[0]?.channels[0]);
                     setShowSearchModal(false);
@@ -579,14 +604,25 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                 >
                   <div className="sh-search-result-overlay" />
                   <div className="sh-search-result-body">
-                    <img
-                      src={srv.iconUrl}
-                      alt={srv.name}
-                      className="sh-search-result-avatar"
-                    />
+                    {srv.iconUrl ? (
+                      <img
+                        src={srv.iconUrl}
+                        alt={srv.name}
+                        className="sh-search-result-avatar"
+                      />
+                    ) : (
+                      <div
+                        className="sh-server-card-avatar-placeholder"
+                        style={{ width: 40, height: 40, fontSize: 16, margin: 0 }}
+                      >
+                        {srv.name.charAt(0).toUpperCase()}
+                      </div>
+                    )}
                     <div className="sh-search-result-info">
                       <span className="sh-search-result-name">{srv.name}</span>
-                      <span className="sh-search-result-creator">by {srv.creatorName || 'Shinzi'}</span>
+                      <span className="sh-search-result-creator">
+                        by {srv.creatorName || 'Community'}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -596,7 +632,9 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
             <div className="sh-servers-empty">
               <Search size={32} color="#636b75" />
               <div className="sh-servers-empty-title">No Results</div>
-              <div className="sh-servers-empty-desc">We couldn't find any server matching "{searchQuery}".</div>
+              <div className="sh-servers-empty-desc">
+                We couldn't find any server matching "{searchQuery}".
+              </div>
             </div>
           )}
         </div>
@@ -605,14 +643,22 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
   }
 
   // ==========================================================
-  // RENDER: FULL SERVER DETAILS VIEW (20261109_223029)
+  // RENDER: FULL SERVER DETAILS (20261109_223029)
   // ==========================================================
   if (showDetailsModal && activeServer) {
+    const isOwner =
+      activeServer.ownerId === currentUser?.uid || activeServer.isCreatedByMe;
+
     return (
       <div className="sh-server-details-page">
         <div
           className="sh-server-details-banner"
-          style={{ backgroundImage: `url(${activeServer.bannerUrl})` }}
+          style={{
+            backgroundImage: activeServer.bannerUrl ? `url(${activeServer.bannerUrl})` : undefined,
+            background: activeServer.bannerUrl
+              ? undefined
+              : 'linear-gradient(135deg, #1e1f22 0%, #2b2d31 100%)',
+          }}
         >
           <button
             type="button"
@@ -627,11 +673,20 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
 
         <div className="sh-server-details-body">
           <div className="sh-server-details-avatar-wrap">
-            <img
-              src={activeServer.iconUrl}
-              alt={activeServer.name}
-              className="sh-server-details-avatar"
-            />
+            {activeServer.iconUrl ? (
+              <img
+                src={activeServer.iconUrl}
+                alt={activeServer.name}
+                className="sh-server-details-avatar"
+              />
+            ) : (
+              <div
+                className="sh-server-card-avatar-placeholder"
+                style={{ width: 68, height: 68, fontSize: 28, margin: 0 }}
+              >
+                {activeServer.name.charAt(0).toUpperCase()}
+              </div>
+            )}
           </div>
 
           <div className="sh-server-details-title-row">
@@ -640,16 +695,17 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
           </div>
 
           <p className="sh-server-details-desc">
-            {activeServer.description || 'This is the 1st server of the Shinzi hub by the way.'}
+            {activeServer.description || 'Welcome to our community server.'}
           </p>
 
           <div className="sh-server-details-stats">
-            {activeServer.memberCount} • {activeServer.isOfficial ? 'official • ' : ''} {activeServer.onlineCount || '10,900 online'}
+            {activeServer.memberCount} • {activeServer.isOfficial ? 'official • ' : ''}
+            {activeServer.onlineCount || '1 online'}
           </div>
 
           <div className="sh-server-details-mutual">
             <User size={16} />
-            <span>6 friends are mutual</span>
+            <span>by {activeServer.creatorName || 'Community'}</span>
           </div>
 
           {/* 3 Quick Action Cards */}
@@ -669,7 +725,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
             <button
               type="button"
               className="sh-server-action-card"
-              onClick={() => alert('Notifications updated')}
+              onClick={() => alert('Notifications enabled')}
             >
               <Bell size={20} />
               <span className="sh-server-action-card-label">Notification</span>
@@ -705,11 +761,43 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
               <ChevronRight size={18} color="#636b75" />
             </button>
 
+            {isOwner ? (
+              <button
+                type="button"
+                className="sh-server-menu-item sh-server-menu-danger"
+                onClick={() => handleDeleteServer(activeServer)}
+              >
+                <span>Delete server</span>
+                <Trash2 size={18} color="#ff4b4b" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="sh-server-menu-item sh-server-menu-danger"
+                onClick={() => {
+                  if (confirm(`Leave ${activeServer.name}?`)) {
+                    setJoinedServers((prev) => {
+                      const updated = prev.filter((s) => s.id !== activeServer.id);
+                      try {
+                        localStorage.setItem('shinzi_joined_servers', JSON.stringify(updated));
+                      } catch {}
+                      return updated;
+                    });
+                    setShowDetailsModal(false);
+                    setActiveServer(null);
+                  }
+                }}
+              >
+                <span>Leave server</span>
+                <LogOut size={18} color="#ff4b4b" />
+              </button>
+            )}
+
             <button
               type="button"
               className="sh-server-menu-item sh-server-menu-danger"
               onClick={() => {
-                if (confirm('Are you sure you want to block this server?')) {
+                if (confirm(`Block ${activeServer.name}?`)) {
                   setShowDetailsModal(false);
                   setActiveServer(null);
                 }
@@ -717,20 +805,6 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
             >
               <span>Block server</span>
               <Ban size={18} color="#ff4b4b" />
-            </button>
-
-            <button
-              type="button"
-              className="sh-server-menu-item sh-server-menu-danger"
-              onClick={() => {
-                if (confirm('Leave this server?')) {
-                  setShowDetailsModal(false);
-                  setActiveServer(null);
-                }
-              }}
-            >
-              <span>Leave server</span>
-              <LogOut size={18} color="#ff4b4b" />
             </button>
           </div>
         </div>
@@ -747,7 +821,12 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
         {/* Banner Header with Expandable Thumbnail */}
         <div
           className="sh-server-banner-header"
-          style={{ backgroundImage: `url(${activeServer.bannerUrl})` }}
+          style={{
+            backgroundImage: activeServer.bannerUrl ? `url(${activeServer.bannerUrl})` : undefined,
+            background: activeServer.bannerUrl
+              ? undefined
+              : 'linear-gradient(135deg, #1e1f22 0%, #2b2d31 100%)',
+          }}
         >
           <div className="sh-server-banner-overlay" />
 
@@ -766,11 +845,20 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
           {/* Server Info Row & 4 Side Actions (Event, Invite, Search, >) */}
           <div className="sh-server-header-info">
             <div className="sh-server-header-left">
-              <img
-                src={activeServer.iconUrl}
-                alt={activeServer.name}
-                className="sh-server-header-avatar"
-              />
+              {activeServer.iconUrl ? (
+                <img
+                  src={activeServer.iconUrl}
+                  alt={activeServer.name}
+                  className="sh-server-header-avatar"
+                />
+              ) : (
+                <div
+                  className="sh-server-card-avatar-placeholder"
+                  style={{ width: 44, height: 44, fontSize: 18, margin: 0 }}
+                >
+                  {activeServer.name.charAt(0).toUpperCase()}
+                </div>
+              )}
               <div className="sh-server-header-details">
                 <h1 className="sh-server-header-name">
                   {activeServer.name}
@@ -782,13 +870,13 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
               </div>
             </div>
 
-            {/* 4 Header Actions from sketch: Event, Invite, Search, > */}
+            {/* 4 Header Actions: Event, Invite, Search, > */}
             <div className="sh-server-header-actions">
               <button
                 type="button"
                 className="sh-servers-icon-btn"
                 title="Events"
-                onClick={() => alert('Server events')}
+                onClick={() => alert('No active server events currently.')}
               >
                 <Calendar size={18} />
               </button>
@@ -796,7 +884,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
               <button
                 type="button"
                 className="sh-servers-icon-btn"
-                title="Invite People"
+                title="Invite to Server"
                 onClick={() => setShowInviteSheet(true)}
               >
                 <UserPlus size={18} />
@@ -823,7 +911,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
           </div>
         </div>
 
-        {/* Categories and Channels List */}
+        {/* Server Channels & Categories List */}
         <div className="sh-server-channels-content">
           {activeServer.categories.map((cat) => {
             const isCollapsed = collapsedCategories[cat.id];
@@ -833,8 +921,11 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                   className="sh-category-header"
                   onClick={() => toggleCategory(cat.id)}
                 >
-                  <span>{cat.name}</span>
-                  {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+                  <span className="sh-category-name">{cat.name}</span>
+                  <ChevronDown
+                    size={15}
+                    className={`sh-category-chevron ${isCollapsed ? 'sh-category-chevron-collapsed' : ''}`}
+                  />
                 </div>
 
                 {!isCollapsed &&
@@ -848,7 +939,10 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                       >
                         <div className="sh-channel-left">
                           {ch.type === 'voice' ? (
-                            <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#949ba4' }}>
+                            <span
+                              className="material-symbols-outlined"
+                              style={{ fontSize: 18, color: '#949ba4' }}
+                            >
                               mic
                             </span>
                           ) : ch.isPrivate ? (
@@ -891,7 +985,9 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                   type="button"
                   className="sh-invite-share-item"
                   onClick={() => {
-                    navigator.clipboard?.writeText(window.location.origin + `/servers?invite=${activeServer.id}`);
+                    navigator.clipboard?.writeText(
+                      window.location.origin + `/servers?invite=${activeServer.id}`
+                    );
                     setInviteCopied(true);
                     setTimeout(() => setInviteCopied(false), 2000);
                   }}
@@ -899,13 +995,15 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                   <div className="sh-invite-share-icon">
                     {inviteCopied ? <Check size={22} color="#5865F2" /> : <Copy size={22} />}
                   </div>
-                  <span className="sh-invite-share-label">{inviteCopied ? 'Copied!' : 'Copy Link'}</span>
+                  <span className="sh-invite-share-label">
+                    {inviteCopied ? 'Copied!' : 'Copy Link'}
+                  </span>
                 </button>
 
                 <button
                   type="button"
                   className="sh-invite-share-item"
-                  onClick={() => alert('Select friends to send invite')}
+                  onClick={() => alert('Select friends from chat to invite')}
                 >
                   <div className="sh-invite-share-icon">
                     <User size={22} />
@@ -917,7 +1015,9 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                   type="button"
                   className="sh-invite-share-item"
                   onClick={() => {
-                    const text = encodeURIComponent(`Join my server ${activeServer.name} on Shinzi: ${window.location.origin}/servers?invite=${activeServer.id}`);
+                    const text = encodeURIComponent(
+                      `Join my server ${activeServer.name} on Shinzi: ${window.location.origin}/servers?invite=${activeServer.id}`
+                    );
                     window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
                   }}
                 >
@@ -969,15 +1069,20 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                   value={inviteChannel}
                   onChange={(e) => setInviteChannel(e.target.value)}
                 >
-                  <option value="# chat"># chat</option>
-                  <option value="# welcome"># welcome</option>
-                  <option value="# chill-chat"># chill-chat</option>
+                  {activeServer.categories.flatMap((cat) =>
+                    cat.channels.map((ch) => (
+                      <option key={ch.id} value={ch.name}>
+                        {ch.type === 'voice' ? '🔊 ' : '# '}
+                        {ch.name}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
 
-              {/* Expiry Dropdown */}
+              {/* Invite Expiry */}
               <div className="sh-invite-field">
-                <label>Expiry</label>
+                <label>Invite Link Expires In</label>
                 <select
                   className="sh-invite-select"
                   value={inviteExpiry}
@@ -985,9 +1090,8 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                 >
                   <option value="Never ∞">Never ∞</option>
                   <option value="24 Hours">24 Hours</option>
-                  <option value="1 Week">1 Week</option>
-                  <option value="1 Month">1 Month</option>
-                  <option value="12 Month">12 Month</option>
+                  <option value="7 Days">7 Days</option>
+                  <option value="30 Days">30 Days</option>
                 </select>
               </div>
 
@@ -1006,11 +1110,11 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
   }
 
   // ==========================================================
-  // RENDER: MAIN SERVERS DASHBOARD (20261109_222440 & 222405)
+  // RENDER: MAIN SERVERS DASHBOARD (20261109_222510)
   // ==========================================================
   return (
     <div className="sh-servers-page">
-      {/* Top Bar with + and Q (NO 3-dots menu per user request) */}
+      {/* Top Bar with Title Servers, + and Search (NO 3-dot menu) */}
       <header className="sh-servers-topbar">
         <h1 className="sh-servers-topbar-title">Servers</h1>
         <div className="sh-servers-topbar-actions">
@@ -1047,7 +1151,12 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                 <div
                   key={srv.id}
                   className="sh-server-card"
-                  style={{ backgroundImage: `url(${srv.bannerUrl})` }}
+                  style={{
+                    backgroundImage: srv.bannerUrl ? `url(${srv.bannerUrl})` : undefined,
+                    background: srv.bannerUrl
+                      ? undefined
+                      : 'linear-gradient(135deg, #1e1f22 0%, #2b2d31 100%)',
+                  }}
                   onClick={() => {
                     setActiveServer(srv);
                     setSelectedChannel(srv.categories[0]?.channels[0]);
@@ -1075,7 +1184,9 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
             <div className="sh-servers-empty">
               <ServerIcon size={32} color="#636b75" />
               <div className="sh-servers-empty-title">No servers created yet</div>
-              <div className="sh-servers-empty-desc">Tap the + button to create your own community server!</div>
+              <div className="sh-servers-empty-desc">
+                Tap the + button to create your own community server!
+              </div>
             </div>
           )}
         </section>
@@ -1089,7 +1200,12 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                 <div
                   key={srv.id}
                   className="sh-server-card"
-                  style={{ backgroundImage: `url(${srv.bannerUrl})` }}
+                  style={{
+                    backgroundImage: srv.bannerUrl ? `url(${srv.bannerUrl})` : undefined,
+                    background: srv.bannerUrl
+                      ? undefined
+                      : 'linear-gradient(135deg, #1e1f22 0%, #2b2d31 100%)',
+                  }}
                   onClick={() => {
                     setActiveServer(srv);
                     setSelectedChannel(srv.categories[0]?.channels[0]);
@@ -1115,8 +1231,11 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
             </div>
           ) : (
             <div className="sh-servers-empty">
-              <div className="sh-servers-empty-title">No joined servers</div>
-              <div className="sh-servers-empty-desc">Search and discover exciting servers to join!</div>
+              <ServerIcon size={32} color="#636b75" />
+              <div className="sh-servers-empty-title">No servers joined yet</div>
+              <div className="sh-servers-empty-desc">
+                Search and discover exciting community servers to join!
+              </div>
             </div>
           )}
         </section>
@@ -1154,15 +1273,37 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
               />
               <div
                 className="sh-create-thumbnail-box"
-                style={formBannerPreview ? { backgroundImage: `url(${formBannerPreview})` } : {}}
+                style={
+                  formBannerPreview
+                    ? {
+                        backgroundImage: `url(${formBannerPreview})`,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                      }
+                    : {}
+                }
                 onClick={() => bannerInputRef.current?.click()}
               >
-                <span className="material-symbols-outlined" style={{ fontSize: 26, color: '#ffffff' }}>
-                  image
-                </span>
-                <span className="sh-create-thumbnail-label">
-                  {formBannerPreview ? 'Change Thumbnail / Banner' : 'Server Thumbnail / Banner'}
-                </span>
+                {formBannerPreview ? (
+                  <span
+                    className="sh-create-thumbnail-label"
+                    style={{ background: 'rgba(0,0,0,0.6)', padding: '4px 10px', borderRadius: 6 }}
+                  >
+                    Change Thumbnail / Banner
+                  </span>
+                ) : (
+                  <>
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: 26, color: '#ffffff' }}
+                    >
+                      image
+                    </span>
+                    <span className="sh-create-thumbnail-label">
+                      Server Thumbnail / Banner (Supports GIF)
+                    </span>
+                  </>
+                )}
               </div>
 
               {/* Avatar Upload Circle & Server Name */}
@@ -1176,13 +1317,26 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                 />
                 <div
                   className="sh-create-avatar-circle"
-                  style={formAvatarPreview ? { backgroundImage: `url(${formAvatarPreview})` } : {}}
+                  style={
+                    formAvatarPreview
+                      ? {
+                          backgroundImage: `url(${formAvatarPreview})`,
+                          backgroundSize: 'cover',
+                          backgroundPosition: 'center',
+                        }
+                      : {}
+                  }
                   onClick={() => avatarInputRef.current?.click()}
                   title="Upload Server Profile (Image / GIF)"
                 >
-                  <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#ffffff' }}>
-                    account_circle
-                  </span>
+                  {!formAvatarPreview && (
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: 22, color: '#ffffff' }}
+                    >
+                      account_circle
+                    </span>
+                  )}
                 </div>
 
                 <div className="sh-create-input-group" style={{ flex: 1 }}>
@@ -1199,10 +1353,11 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
 
               {/* Server Description */}
               <div className="sh-create-input-group">
-                <label className="sh-create-label">Server Description</label>
+                <label className="sh-create-label">Description</label>
                 <textarea
                   className="sh-create-textarea"
                   placeholder="What is your server about?"
+                  rows={3}
                   value={formDesc}
                   onChange={(e) => setFormDesc(e.target.value)}
                 />
@@ -1210,19 +1365,20 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
 
               {/* Private Server Toggle */}
               <div className="sh-create-toggle-row">
-                <div className="sh-create-toggle-text">
-                  <span className="sh-create-toggle-title">Private Server</span>
-                  <span className="sh-create-toggle-desc">You can change settings any time</span>
+                <div className="sh-create-toggle-label">
+                  <span>Private Server</span>
+                  <span className="sh-create-toggle-sub">
+                    Only invited members can find and join
+                  </span>
                 </div>
-                <button
-                  type="button"
-                  className={`sh-settings-toggle ${formIsPrivate ? 'sh-settings-toggle-on' : ''}`}
-                  onClick={() => setFormIsPrivate(!formIsPrivate)}
-                  role="switch"
-                  aria-checked={formIsPrivate}
-                >
-                  <span className="sh-settings-toggle-knob" />
-                </button>
+                <label className="sh-switch">
+                  <input
+                    type="checkbox"
+                    checked={formIsPrivate}
+                    onChange={(e) => setFormIsPrivate(e.target.checked)}
+                  />
+                  <span className="sh-slider" />
+                </label>
               </div>
 
               {/* Submit Button */}
@@ -1232,20 +1388,19 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                 disabled={!formName.trim() || createBusy}
                 onClick={handleCreateServer}
               >
-                {createBusy ? 'Creating…' : 'Create Server'}
+                {createBusy ? 'Creating Server…' : 'Create Server'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Bottom Navigation matching Shinzi Chat */}
-      <nav className="shc-bottom" aria-label="Main navigation">
+      {/* Bottom Navigation Bar */}
+      <nav className="sh-servers-bottom-nav">
         <button
           type="button"
           onClick={() => {
-            if (onOpenChat) onOpenChat();
-            else window.location.href = '/chat';
+            alert('AI Assistant is active in chats.');
           }}
           aria-label="AI"
         >
@@ -1254,7 +1409,11 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
 
         <button
           type="button"
-          className="shc-bottom-active"
+          className="sh-nav-active"
+          onClick={() => {
+            setActiveServer(null);
+            setShowSearchModal(false);
+          }}
           aria-label="Servers"
         >
           <ServerIcon size={22} />
@@ -1268,7 +1427,15 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
           }}
           aria-label="Chat"
         >
-          <MessageCircle size={23} />
+          <MessageCircle size={22} />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setShowSearchModal(true)}
+          aria-label="Search"
+        >
+          <Search size={22} />
         </button>
 
         <button
@@ -1279,7 +1446,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
           }}
           aria-label="Profile"
         >
-          <User size={23} />
+          <User size={22} />
         </button>
       </nav>
     </div>
