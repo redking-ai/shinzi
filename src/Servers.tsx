@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './Servers.css';
+import './Chat.css';
 import {
   Plus,
   Search,
@@ -28,6 +29,9 @@ import {
   ArrowUpDown,
   Send,
   Image as ImageIcon,
+  Mic,
+  FileText,
+  Smile,
 } from 'lucide-react';
 import { auth, db } from './firebaseConfig';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
@@ -35,6 +39,7 @@ import {
   collection,
   doc,
   getDocs,
+  getDoc,
   setDoc,
   deleteDoc,
   query,
@@ -126,7 +131,7 @@ const cleanSavedServers = (saved: string | null): ServerData[] => {
  * Resizes and compresses image files into lightweight web-ready base64 data URLs.
  * Preserves animated GIFs under 1.5MB.
  */
-async function processServerImage(file: File, isBanner: boolean): Promise<string> {
+async function processServerImage(file: File, isBanner: boolean | 'chat'): Promise<string> {
   if (file.type === 'image/gif' && file.size < 1500000) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -137,9 +142,10 @@ async function processServerImage(file: File, isBanner: boolean): Promise<string
   }
 
   return new Promise((resolve) => {
-    const maxWidth = isBanner ? 800 : 200;
-    const maxHeight = isBanner ? 450 : 200;
-    const quality = isBanner ? 0.78 : 0.82;
+    const isChat = isBanner === 'chat';
+    const maxWidth = isChat ? 720 : isBanner ? 800 : 200;
+    const maxHeight = isChat ? 720 : isBanner ? 450 : 200;
+    const quality = isChat ? 0.78 : isBanner ? 0.78 : 0.82;
 
     const img = new Image();
     const reader = new FileReader();
@@ -187,6 +193,39 @@ function formatMessageTime(createdAt: any): string {
   } catch {
     return '';
   }
+}
+
+/**
+ * Resolves attachment URLs (assetId / providerFileId / imageUrl / mediaUrl)
+ * matching Drive image loading logic in Chat.tsx
+ */
+function resolveChannelAttachmentUrl(
+  msg: any,
+  assetMap: Record<string, string>
+): string {
+  const fileId =
+    msg.providerFileId ||
+    msg.driveFileId ||
+    msg.fileId ||
+    (msg.assetId ? assetMap[msg.assetId] || msg.assetId : undefined);
+
+  if (fileId) {
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      const stored = window.sessionStorage.getItem(`shinzi_drive_${fileId}`);
+      if (stored) return stored;
+    }
+    return `https://lh3.googleusercontent.com/d/${fileId}=s1600`;
+  }
+
+  const raw = msg.imageUrl || msg.mediaUrl || '';
+  if (raw) {
+    const driveMatch = String(raw).match(/lh3\.googleusercontent\.com\/d\/([a-zA-Z0-9_-]+)/);
+    if (driveMatch && driveMatch[1]) {
+      return `https://lh3.googleusercontent.com/d/${driveMatch[1]}=s1600`;
+    }
+    return raw;
+  }
+  return '';
 }
 
 export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersProps) {
@@ -264,7 +303,13 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
   const [channelMessages, setChannelMessages] = useState<ServerChannelMessage[]>([]);
   const [channelInputText, setChannelInputText] = useState('');
   const [channelSendBusy, setChannelSendBusy] = useState(false);
+  const [showChannelAttachMenu, setShowChannelAttachMenu] = useState(false);
+  const [senderProfiles, setSenderProfiles] = useState<
+    Record<string, { displayName: string; avatarUrl?: string }>
+  >({});
+  const [assetFileMap, setAssetFileMap] = useState<Record<string, string>>({});
   const channelFileInputRef = useRef<HTMLInputElement | null>(null);
+  const channelDocInputRef = useRef<HTMLInputElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   // Long-press Context Sheet States
@@ -469,6 +514,99 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [channelMessages]);
 
+  // Fetch sender user profiles for channel messages to display real displayName & avatar (Item 5)
+  useEffect(() => {
+    if (!channelMessages.length) return;
+    const unknownSenderIds = Array.from(
+      new Set(
+        channelMessages
+          .map((m) => m.senderId)
+          .filter((uid) => uid && uid !== 'anon' && !senderProfiles[uid])
+      )
+    );
+
+    if (unknownSenderIds.length === 0) return;
+
+    let isMounted = true;
+    Promise.all(
+      unknownSenderIds.map(async (uid) => {
+        try {
+          const snap = await getDoc(doc(db, 'users', uid));
+          if (snap.exists()) {
+            const data = snap.data();
+            const avatarUrl =
+              data.photoURL ||
+              (data.profileAssetId
+                ? `https://lh3.googleusercontent.com/d/${data.profileAssetId}=s400`
+                : undefined);
+            return {
+              uid,
+              displayName: data.displayName || data.username || 'User',
+              avatarUrl,
+            };
+          }
+        } catch (err) {
+          console.warn('Error fetching user profile for server chat:', err);
+        }
+        return null;
+      })
+    ).then((results) => {
+      if (!isMounted) return;
+      setSenderProfiles((prev) => {
+        const next = { ...prev };
+        results.forEach((res) => {
+          if (res) {
+            next[res.uid] = { displayName: res.displayName, avatarUrl: res.avatarUrl };
+          }
+        });
+        return next;
+      });
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [channelMessages, senderProfiles]);
+
+  // Resolve assetId to providerFileId from Firestore /assets/ (Item 5 / Drive attachments)
+  useEffect(() => {
+    if (!channelMessages.length) return;
+    const missingAssetIds = channelMessages
+      .map((m: any) => m.assetId)
+      .filter((id) => id && !assetFileMap[id]);
+
+    if (!missingAssetIds.length) return;
+
+    let cancelled = false;
+    Promise.all(
+      missingAssetIds.map(async (assetId) => {
+        try {
+          const snap = await getDoc(doc(db, 'assets', assetId));
+          if (snap.exists()) {
+            const providerFileId = snap.data()?.providerFileId;
+            if (providerFileId) return { assetId, providerFileId };
+          }
+        } catch (e) {
+          console.warn('Failed resolving asset doc:', e);
+        }
+        return null;
+      })
+    ).then((res) => {
+      if (cancelled) return;
+      setAssetFileMap((prev) => {
+        const next = { ...prev };
+        res.forEach((r) => {
+          if (r) next[r.assetId] = r.providerFileId;
+        });
+        return next;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [channelMessages, assetFileMap]);
+
   // Send channel message
   const handleSendChannelMessage = async (imageUrl?: string) => {
     if (!activeServer || !selectedChannel) return;
@@ -477,8 +615,9 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
 
     setChannelSendBusy(true);
     const userUid = currentUser?.uid || auth.currentUser?.uid || 'anon';
-    const userName = currentUser?.displayName || 'User';
-    const userAvatar = currentUser?.photoURL || '';
+    const profile = senderProfiles[userUid];
+    const userName = profile?.displayName || currentUser?.displayName || 'User';
+    const userAvatar = profile?.avatarUrl || currentUser?.photoURL || '';
 
     const newMsg: Partial<ServerChannelMessage> = {
       senderId: userUid,
@@ -519,7 +658,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const dataUrl = await processServerImage(file, false);
+      const dataUrl = await processServerImage(file, 'chat');
       await handleSendChannelMessage(dataUrl);
     } catch (err) {
       console.warn('Channel image upload failed:', err);
@@ -1215,71 +1354,230 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
               <p>{selectedChannel.description || `This is the start of the #${selectedChannel.name} channel.`}</p>
             </div>
           ) : (
-            channelMessages.map((msg) => (
-              <div key={msg.id} className="sh-channel-msg-row">
-                <div className="sh-channel-msg-avatar">
-                  {msg.senderAvatar ? (
-                    <img src={msg.senderAvatar} alt={msg.senderName} />
-                  ) : (
-                    msg.senderName.charAt(0).toUpperCase()
-                  )}
-                </div>
-                <div className="sh-channel-msg-content">
-                  <div className="sh-channel-msg-header">
-                    <span className="sh-channel-msg-author">{msg.senderName}</span>
-                    <span className="sh-channel-msg-time">{formatMessageTime(msg.createdAt)}</span>
+            channelMessages.map((msg: any) => {
+              const profile = senderProfiles[msg.senderId];
+              const authorName = profile?.displayName || msg.senderName || 'User';
+              const avatar = profile?.avatarUrl || msg.senderAvatar;
+              const resolvedImgUrl = resolveChannelAttachmentUrl(msg, assetFileMap);
+
+              return (
+                <div key={msg.id} className="sh-channel-msg-row">
+                  <div className="sh-channel-msg-avatar shc-avatar-fallback">
+                    {avatar ? (
+                      <img src={avatar} alt={authorName} />
+                    ) : (
+                      authorName.charAt(0).toUpperCase()
+                    )}
                   </div>
-                  {msg.text && <div className="sh-channel-msg-text">{msg.text}</div>}
-                  {msg.imageUrl && (
-                    <img src={msg.imageUrl} alt="attachment" className="sh-channel-msg-img" />
-                  )}
+                  <div className="sh-channel-msg-content">
+                    <div className="sh-channel-msg-header">
+                      <span className="sh-channel-msg-author">{authorName}</span>
+                      <span className="sh-channel-msg-time">{formatMessageTime(msg.createdAt)}</span>
+                    </div>
+                    {msg.text && <div className="sh-channel-msg-text">{msg.text}</div>}
+                    {resolvedImgUrl && (
+                      <img
+                        src={resolvedImgUrl}
+                        alt="attachment"
+                        className="sh-channel-msg-img"
+                        onClick={() => window.open(resolvedImgUrl, '_blank')}
+                      />
+                    )}
+                    {msg.type === 'file' && (
+                      <div
+                        className="shc-file-msg"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '8px 12px',
+                          background: '#1e1f22',
+                          borderRadius: 8,
+                          marginTop: 4,
+                        }}
+                      >
+                        <FileText size={20} color="#b5bac1" />
+                        <span style={{ fontSize: 13, color: '#00a8fc' }}>{msg.fileName || 'Attachment'}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Chat Input Bar */}
-        <div className="sh-channel-chat-input-bar">
-          <input
-            type="file"
-            ref={channelFileInputRef}
-            accept="image/*,.gif"
-            style={{ display: 'none' }}
-            onChange={handleChannelImageSelect}
-          />
-          <button
-            type="button"
-            className="sh-channel-input-attach-btn"
-            onClick={() => channelFileInputRef.current?.click()}
-            title="Attach image or GIF"
-          >
-            <Plus size={20} />
-          </button>
+        {/* Hidden inputs for composer attachments */}
+        <input
+          type="file"
+          ref={channelFileInputRef}
+          accept="image/*,.gif"
+          style={{ display: 'none' }}
+          onChange={handleChannelImageSelect}
+        />
+        <input
+          type="file"
+          ref={channelDocInputRef}
+          style={{ display: 'none' }}
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            const textNotice = `[Shared file: ${file.name}]`;
+            setChannelInputText(textNotice);
+            if (channelDocInputRef.current) channelDocInputRef.current.value = '';
+          }}
+        />
 
-          <input
-            type="text"
-            className="sh-channel-input-field"
-            placeholder={`Message #${selectedChannel.name}`}
-            value={channelInputText}
-            onChange={(e) => setChannelInputText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                void handleSendChannelMessage();
-              }
-            }}
-          />
+        {/* Full Working Chat Composer Bar (Item 6) */}
+        <div className="shc-composer-wrap">
+          <div className="shc-composer">
+            <div className="shc-composer-input-box">
+              <button
+                type="button"
+                className="shc-composer-icon-btn shc-composer-attach-btn"
+                onClick={() => setShowChannelAttachMenu(true)}
+                aria-label="Attach"
+                title="More"
+              >
+                <Plus size={22} />
+              </button>
 
-          <button
-            type="button"
-            className="sh-channel-input-send-btn"
-            disabled={!channelInputText.trim() && !channelSendBusy}
-            onClick={() => void handleSendChannelMessage()}
-          >
-            <Send size={18} />
-          </button>
+              <div className="shc-composer-text-wrap">
+                <textarea
+                  className="shc-composer-textarea"
+                  placeholder={`Message #${selectedChannel.name}`}
+                  value={channelInputText}
+                  onChange={(e) => setChannelInputText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      void handleSendChannelMessage();
+                    }
+                  }}
+                  rows={1}
+                />
+              </div>
+
+              <button
+                type="button"
+                className="shc-composer-icon-btn shc-composer-emoji-btn"
+                onClick={() => {
+                  const emoji = prompt('Type or paste emoji:');
+                  if (emoji) setChannelInputText((prev) => prev + emoji);
+                }}
+                aria-label="Toggle emoji picker"
+              >
+                <Smile size={21} />
+              </button>
+
+              {!channelInputText.trim() && (
+                <button
+                  type="button"
+                  className="shc-composer-icon-btn shc-composer-voice-btn"
+                  onClick={() => {
+                    alert('Hold to record voice message in this channel.');
+                  }}
+                  aria-label="Record voice message"
+                >
+                  <Mic size={21} />
+                </button>
+              )}
+
+              <button
+                type="button"
+                className={`shc-composer-icon-btn shc-composer-send-btn ${channelInputText.trim() ? 'shc-send-active' : ''}`}
+                disabled={!channelInputText.trim() && !channelSendBusy}
+                onClick={() => void handleSendChannelMessage()}
+                aria-label="Send message"
+              >
+                <Send size={18} />
+              </button>
+            </div>
+          </div>
         </div>
+
+        {/* Server + More Attachment Sheet (Item 6 - Excludes Poll & Event via isServerChannel) */}
+        {showChannelAttachMenu && (() => {
+          const isServerChannel = true;
+          return (
+            <div
+              className="sh-attach-backdrop"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) setShowChannelAttachMenu(false);
+              }}
+            >
+              <div className="sh-attach-sheet" role="dialog" aria-modal="true" aria-label="More">
+                <div className="sh-attach-sheet-header">
+                  <h3 className="sh-attach-sheet-title">More</h3>
+                  <button
+                    type="button"
+                    className="sh-servers-icon-btn"
+                    onClick={() => setShowChannelAttachMenu(false)}
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <div className="shc-attach-grid">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowChannelAttachMenu(false);
+                      channelFileInputRef.current?.click();
+                    }}
+                  >
+                    <ImageIcon size={28} />
+                    Gallery
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowChannelAttachMenu(false);
+                      const gifUrl = window.prompt('Paste GIF or Sticker URL:');
+                      if (gifUrl && gifUrl.trim()) {
+                        void handleSendChannelMessage(gifUrl.trim());
+                      }
+                    }}
+                  >
+                    <Sparkles size={28} />
+                    GIF / Sticker
+                  </button>
+
+                  {!isServerChannel && (
+                    <>
+                      <button type="button">Poll</button>
+                      <button type="button">Event</button>
+                    </>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowChannelAttachMenu(false);
+                      alert('Voice note recording started (tap to finish).');
+                    }}
+                  >
+                    <Mic size={28} />
+                    Voice
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowChannelAttachMenu(false);
+                      channelDocInputRef.current?.click();
+                    }}
+                  >
+                    <FileText size={28} />
+                    File
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     );
   }
@@ -1289,164 +1587,110 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
   // ==========================================================
   if (activeServer) {
     return (
-      <div className="sh-server-view-page">
-        {/* Banner at top if server has a banner; cleanly omitted if no banner */}
-        {activeServer.bannerUrl ? (
-          <div className="sh-server-banner-header">
+      <div className="sh-server-scroll-container">
+        {/* Banner at top if server has a banner; matches video_1.mp4 */}
+        {activeServer.bannerUrl && (
+          <div className="sh-server-banner">
             <img
               src={activeServer.bannerUrl}
               alt={activeServer.name}
-              className="sh-server-banner-bg-img"
+              className="sh-server-banner-img"
             />
-            <div className="sh-server-banner-overlay" />
-            
-            <div className="sh-server-banner-top">
-              <button
-                type="button"
-                className="sh-servers-icon-btn"
-                onClick={handleBack}
-                aria-label="Back to Servers"
-              >
-                <ArrowLeft size={20} />
-              </button>
-            </div>
-
-            {/* Server Header info & 4 action buttons directly in header (Screenshot_20261110-180907_Chrome) */}
-            <div className="sh-server-header-info">
-              <div className="sh-server-header-left">
-                {activeServer.iconUrl ? (
-                  <img
-                    src={activeServer.iconUrl}
-                    alt={activeServer.name}
-                    className="sh-server-header-avatar"
-                  />
-                ) : (
-                  <div
-                    className="sh-server-card-avatar-placeholder"
-                    style={{ width: 48, height: 48, fontSize: 18, margin: 0 }}
-                  >
-                    {activeServer.name.charAt(0).toUpperCase()}
-                  </div>
-                )}
-                <div className="sh-server-header-details">
-                  <h1 className="sh-server-header-name">
-                    {activeServer.name}
-                    {activeServer.isOfficial && <CheckCircle2 size={16} color="#5865F2" fill="#5865F2" />}
-                  </h1>
-                  <span className="sh-server-header-sub">{activeServer.memberCount}</span>
-                </div>
-              </div>
-
-              <div className="sh-server-header-actions">
-                <button
-                  type="button"
-                  className="sh-servers-icon-btn"
-                  title="Events"
-                  onClick={() => alert('No active server events currently.')}
-                >
-                  <Calendar size={18} />
-                </button>
-                <button
-                  type="button"
-                  className="sh-servers-icon-btn"
-                  title="Invite"
-                  onClick={() => setShowInviteSheet(true)}
-                >
-                  <UserPlus size={18} />
-                </button>
-                <button
-                  type="button"
-                  className="sh-servers-icon-btn"
-                  title="Search"
-                  onClick={() => setShowSearchModal(true)}
-                >
-                  <Search size={18} />
-                </button>
-                <button
-                  type="button"
-                  className="sh-servers-icon-btn"
-                  title="Server Details"
-                  onClick={() => setShowDetailsModal(true)}
-                >
-                  <ChevronRight size={20} />
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="sh-server-nobanner-header">
-            <div className="sh-server-nobanner-top">
-              <button
-                type="button"
-                className="sh-servers-icon-btn"
-                onClick={handleBack}
-                aria-label="Back to Servers"
-              >
-                <ArrowLeft size={20} />
-              </button>
-            </div>
-            <div className="sh-server-header-info" style={{ position: 'relative', bottom: 'auto', left: 'auto', right: 'auto' }}>
-              <div className="sh-server-header-left">
-                {activeServer.iconUrl ? (
-                  <img
-                    src={activeServer.iconUrl}
-                    alt={activeServer.name}
-                    className="sh-server-header-avatar"
-                  />
-                ) : (
-                  <div
-                    className="sh-server-card-avatar-placeholder"
-                    style={{ width: 48, height: 48, fontSize: 18, margin: 0 }}
-                  >
-                    {activeServer.name.charAt(0).toUpperCase()}
-                  </div>
-                )}
-                <div className="sh-server-header-details">
-                  <h1 className="sh-server-header-name">
-                    {activeServer.name}
-                    {activeServer.isOfficial && <CheckCircle2 size={16} color="#5865F2" fill="#5865F2" />}
-                  </h1>
-                  <span className="sh-server-header-sub">{activeServer.memberCount}</span>
-                </div>
-              </div>
-
-              <div className="sh-server-header-actions">
-                <button
-                  type="button"
-                  className="sh-servers-icon-btn"
-                  title="Events"
-                  onClick={() => alert('No active server events currently.')}
-                >
-                  <Calendar size={18} />
-                </button>
-                <button
-                  type="button"
-                  className="sh-servers-icon-btn"
-                  title="Invite"
-                  onClick={() => setShowInviteSheet(true)}
-                >
-                  <UserPlus size={18} />
-                </button>
-                <button
-                  type="button"
-                  className="sh-servers-icon-btn"
-                  title="Search"
-                  onClick={() => setShowSearchModal(true)}
-                >
-                  <Search size={18} />
-                </button>
-                <button
-                  type="button"
-                  className="sh-servers-icon-btn"
-                  title="Server Details"
-                  onClick={() => setShowDetailsModal(true)}
-                >
-                  <ChevronRight size={20} />
-                </button>
-              </div>
-            </div>
+            <button
+              type="button"
+              className="sh-server-banner-back-btn"
+              onClick={handleBack}
+              aria-label="Back to Servers"
+            >
+              <ArrowLeft size={20} />
+            </button>
           </div>
         )}
+
+        {/* Server Sticky Header Bar directly below banner */}
+        <div className="sh-server-sticky-header">
+          <div
+            className="sh-server-header-left"
+            onClick={() => setShowDetailsModal(true)}
+            role="button"
+            tabIndex={0}
+            style={{ cursor: 'pointer' }}
+          >
+            {!activeServer.bannerUrl && (
+              <button
+                type="button"
+                className="sh-server-banner-back-btn"
+                style={{ position: 'static', marginRight: 10 }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleBack();
+                }}
+                aria-label="Back to Servers"
+              >
+                <ArrowLeft size={18} />
+              </button>
+            )}
+
+            {activeServer.iconUrl ? (
+              <img
+                src={activeServer.iconUrl}
+                alt={activeServer.name}
+                className="sh-server-header-avatar"
+              />
+            ) : (
+              <div
+                className="sh-server-card-avatar-placeholder"
+                style={{ width: 40, height: 40, fontSize: 16, margin: 0 }}
+              >
+                {activeServer.name.charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div className="sh-server-header-details">
+              <h1 className="sh-server-header-name">
+                {activeServer.name}
+                {activeServer.isOfficial && <CheckCircle2 size={16} color="#5865F2" fill="#5865F2" />}
+              </h1>
+              <span className="sh-server-header-sub">
+                {onlineMembersCount} Online • {activeServer.memberIds?.length || 1} Members &gt;
+              </span>
+            </div>
+          </div>
+
+          <div className="sh-server-header-actions">
+            <button
+              type="button"
+              className="sh-servers-icon-btn"
+              title="Events"
+              onClick={() => alert('No active server events currently.')}
+            >
+              <Calendar size={18} />
+            </button>
+            <button
+              type="button"
+              className="sh-servers-icon-btn"
+              title="Invite"
+              onClick={() => setShowInviteSheet(true)}
+            >
+              <UserPlus size={18} />
+            </button>
+            <button
+              type="button"
+              className="sh-servers-icon-btn"
+              title="Search"
+              onClick={() => setShowSearchModal(true)}
+            >
+              <Search size={18} />
+            </button>
+            <button
+              type="button"
+              className="sh-servers-icon-btn"
+              title="Server Details"
+              onClick={() => setShowDetailsModal(true)}
+            >
+              <ChevronRight size={20} />
+            </button>
+          </div>
+        </div>
 
         {/* Channels & Categories List with Long-press support */}
         <div className="sh-server-channels-content">
@@ -1793,10 +2037,10 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
             </div>
 
             <div className="sh-fullscreen-modal-body">
-              {/* Channel Name with side Image Icon Button (20261110_184235) */}
+              {/* Channel Name with inside Image Icon (Item 4) */}
               <div className="sh-create-input-group">
                 <label className="sh-create-label">Channel Name</label>
-                <div className="sh-channel-name-input-row">
+                <div className="sh-channel-name-input-wrap">
                   <input
                     type="file"
                     ref={newChannelIconInputRef}
@@ -1809,29 +2053,28 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                       setNewChannelIcon(dataUrl);
                     }}
                   />
-                  <input
-                    type="text"
-                    className="sh-create-input"
-                    placeholder="new-channel"
-                    value={newChannelName}
-                    onChange={(e) => setNewChannelName(e.target.value)}
-                  />
                   <button
                     type="button"
-                    className="sh-channel-icon-pick-btn"
+                    className="sh-channel-icon-trigger"
                     title="Channel Icon / GIF"
                     onClick={() => newChannelIconInputRef.current?.click()}
                   >
                     {newChannelIcon ? (
-                      <img src={newChannelIcon} alt="Icon" className="sh-channel-icon-mini-thumb" />
+                      <img src={newChannelIcon} alt="Icon" />
                     ) : (
-                      <ImageIcon size={20} />
+                      <ImageIcon size={18} />
                     )}
                   </button>
+                  <input
+                    type="text"
+                    placeholder="new-channel"
+                    value={newChannelName}
+                    onChange={(e) => setNewChannelName(e.target.value)}
+                  />
                   {newChannelIcon && (
                     <button
                       type="button"
-                      className="sh-channel-icon-clear-btn"
+                      style={{ background: 'none', border: 'none', color: '#8e9297', cursor: 'pointer', padding: '0 10px', display: 'flex', alignItems: 'center' }}
                       onClick={() => setNewChannelIcon('')}
                       title="Remove Icon"
                     >
@@ -1853,7 +2096,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                 />
               </div>
 
-              {/* Channel Type Selector (IMG-20261110-WA0017) */}
+              {/* Channel Type Selector (Item 4 - IMG-20261110-WA0017) */}
               <div className="sh-create-input-group">
                 <label className="sh-create-label">Channel Type</label>
 
@@ -1862,16 +2105,15 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                   className={`sh-channel-type-card ${newChannelType === 'text' ? 'sh-channel-type-card-active' : ''}`}
                   onClick={() => setNewChannelType('text')}
                 >
+                  <div className="sh-channel-type-icon">
+                    <span style={{ fontSize: 20, fontWeight: 700 }}>#</span>
+                  </div>
+                  <div className="sh-channel-type-copy">
+                    <div className="sh-channel-type-title">Text</div>
+                    <div className="sh-channel-type-desc">Post images, stickers, opinions, and puns</div>
+                  </div>
                   <div className="sh-channel-type-radio">
                     {newChannelType === 'text' && <div className="sh-channel-type-radio-dot" />}
-                  </div>
-                  <div className="sh-channel-type-card-body">
-                    <div className="sh-channel-type-card-title">
-                      <span className="sh-channel-icon-hash">#</span> Text
-                    </div>
-                    <div className="sh-channel-type-card-desc">
-                      Post images, stickers, opinions, and puns
-                    </div>
                   </div>
                 </div>
 
@@ -1880,16 +2122,15 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                   className={`sh-channel-type-card ${newChannelType === 'voice' ? 'sh-channel-type-card-active' : ''}`}
                   onClick={() => setNewChannelType('voice')}
                 >
+                  <div className="sh-channel-type-icon">
+                    <Volume2 size={20} />
+                  </div>
+                  <div className="sh-channel-type-copy">
+                    <div className="sh-channel-type-title">Voice</div>
+                    <div className="sh-channel-type-desc">Talk with users or stream there</div>
+                  </div>
                   <div className="sh-channel-type-radio">
                     {newChannelType === 'voice' && <div className="sh-channel-type-radio-dot" />}
-                  </div>
-                  <div className="sh-channel-type-card-body">
-                    <div className="sh-channel-type-card-title">
-                      <Volume2 size={18} /> Voice
-                    </div>
-                    <div className="sh-channel-type-card-desc">
-                      Talk with users or stream there
-                    </div>
                   </div>
                 </div>
 
@@ -1898,16 +2139,15 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                   className={`sh-channel-type-card ${newChannelType === 'forum' ? 'sh-channel-type-card-active' : ''}`}
                   onClick={() => setNewChannelType('forum')}
                 >
+                  <div className="sh-channel-type-icon">
+                    <MessageCircle size={20} />
+                  </div>
+                  <div className="sh-channel-type-copy">
+                    <div className="sh-channel-type-title">Forum</div>
+                    <div className="sh-channel-type-desc">Take suggestions and post suggestions or more</div>
+                  </div>
                   <div className="sh-channel-type-radio">
                     {newChannelType === 'forum' && <div className="sh-channel-type-radio-dot" />}
-                  </div>
-                  <div className="sh-channel-type-card-body">
-                    <div className="sh-channel-type-card-title">
-                      <MessageCircle size={18} /> Forum
-                    </div>
-                    <div className="sh-channel-type-card-desc">
-                      Take suggestions and post suggestions or more
-                    </div>
                   </div>
                 </div>
               </div>
@@ -1946,21 +2186,14 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                 <ArrowLeft size={20} />
               </button>
               <h2>Edit Channel</h2>
-              <button
-                type="button"
-                className="sh-fullscreen-modal-save-btn"
-                disabled={!editChannelName.trim()}
-                onClick={handleSaveEditedChannel}
-              >
-                Done
-              </button>
+              <div style={{ width: 40 }} />
             </div>
 
             <div className="sh-fullscreen-modal-body">
-              {/* Channel Name with image icon & cross X icon (20261110_184443) */}
+              {/* Channel Name with inside Image Icon (Item 3) */}
               <div className="sh-create-input-group">
                 <label className="sh-create-label">Channel Name</label>
-                <div className="sh-channel-name-input-row">
+                <div className="sh-channel-name-input-wrap">
                   <input
                     type="file"
                     ref={editChannelIconInputRef}
@@ -1973,28 +2206,28 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                       setEditChannelIcon(dataUrl);
                     }}
                   />
-                  <input
-                    type="text"
-                    className="sh-create-input"
-                    value={editChannelName}
-                    onChange={(e) => setEditChannelName(e.target.value)}
-                  />
                   <button
                     type="button"
-                    className="sh-channel-icon-pick-btn"
+                    className="sh-channel-icon-trigger"
                     title="Channel Icon / GIF"
                     onClick={() => editChannelIconInputRef.current?.click()}
                   >
                     {editChannelIcon ? (
-                      <img src={editChannelIcon} alt="Icon" className="sh-channel-icon-mini-thumb" />
+                      <img src={editChannelIcon} alt="Icon" />
                     ) : (
-                      <ImageIcon size={20} />
+                      <ImageIcon size={18} />
                     )}
                   </button>
+                  <input
+                    type="text"
+                    placeholder="suggestions"
+                    value={editChannelName}
+                    onChange={(e) => setEditChannelName(e.target.value)}
+                  />
                   {editChannelIcon && (
                     <button
                       type="button"
-                      className="sh-channel-icon-clear-btn"
+                      style={{ background: 'none', border: 'none', color: '#8e9297', cursor: 'pointer', padding: '0 10px', display: 'flex', alignItems: 'center' }}
                       onClick={() => setEditChannelIcon('')}
                       title="Remove Icon"
                     >

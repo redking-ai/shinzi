@@ -630,104 +630,169 @@
    SERVER CHANNEL & CATEGORY VIEW (20261109_222903 & 222918)
    ========================================================== */
 
+.sh-server-scroll-container,
 .sh-server-view-page {
   position: fixed;
   inset: 0;
+  height: 100vh;
   background: #000000;
   color: #ffffff;
   z-index: 950;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
-/* Expandable Banner Header */
-.sh-server-banner-header {
+/* Tall clean Server Banner (Item 1) */
+.sh-server-banner {
   position: relative;
   width: 100%;
-  height: 160px;
+  height: 155px;
   background-size: cover;
   background-position: center;
   background-color: #1a1b20;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 14px;
-  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
-.sh-server-banner-top {
+.sh-server-banner-back-btn {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 25;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  backdrop-filter: blur(4px);
+  transition: background 0.12s ease;
+}
+
+.sh-server-banner-back-btn:hover {
+  background: rgba(0, 0, 0, 0.75);
+}
+
+/* Sticky Server Header Bar below banner (Item 1) */
+.sh-server-sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: 100%;
-  z-index: 5;
-}
-
-.sh-server-banner-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.3) 0%, rgba(0, 0, 0, 0.85) 100%);
-  pointer-events: none;
-}
-
-/* Header Text & 4 Side Actions (Event, Invite, Search, >) */
-.sh-server-header-info {
-  position: relative;
-  z-index: 5;
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  width: 100%;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.96);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid #181822;
+  box-sizing: border-box;
 }
 
 .sh-server-header-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+  cursor: pointer;
 }
 
 .sh-server-header-avatar {
-  width: 52px;
-  height: 52px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  border: 2px solid #ffffff;
   object-fit: cover;
   background: #2b2d31;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sh-server-header-avatar-placeholder {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #2b2d31;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .sh-server-header-details {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .sh-server-header-name {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 700;
   color: #ffffff;
   display: flex;
   align-items: center;
   gap: 6px;
   margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sh-server-header-sub {
   font-size: 12px;
   color: #949ba4;
   margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
 }
 
 .sh-server-header-actions {
+  display: grid;
+  grid-auto-flow: column;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.sh-server-header-actions .sh-servers-icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #ffffff;
   display: flex;
   align-items: center;
-  gap: 6px;
-  z-index: 5;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.12s ease;
+}
+
+.sh-server-header-actions .sh-servers-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
 }
 
 /* Channel & Category List */
 .sh-server-channels-content {
   flex: 1;
   padding: 14px;
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
   max-width: 720px;
   margin: 0 auto;
   width: 100%;
@@ -1664,105 +1729,122 @@
   box-sizing: border-box;
 }
 
-/* Channel image button inside input */
-.sh-channel-input-row {
+/* Channel name input box with icon trigger inside (Items 3 & 4) */
+.sh-channel-name-input-wrap {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  background: #12131a;
+  border: 1px solid #262736;
+  border-radius: 10px;
+  padding: 0 12px;
+  height: 46px;
+  box-sizing: border-box;
 }
 
-.sh-channel-img-picker-btn {
-  width: 42px;
-  height: 42px;
-  border-radius: 10px;
-  background: #1e1f24;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  display: flex;
+.sh-channel-icon-trigger {
+  background: transparent !important;
+  border: 0 !important;
+  color: #a6a8b8;
+  padding: 4px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #ffffff;
   cursor: pointer;
   flex-shrink: 0;
-  position: relative;
-  overflow: hidden;
 }
 
-.sh-channel-img-preview {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.sh-channel-icon-trigger:hover {
+  color: #ffffff;
 }
 
-.sh-channel-img-remove-btn {
-  position: absolute;
-  top: 1px;
-  right: 1px;
-  background: rgba(0, 0, 0, 0.7);
-  border: none;
-  border-radius: 50%;
-  width: 16px;
-  height: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  cursor: pointer;
+.sh-channel-name-input-wrap input {
+  flex: 1;
+  background: transparent !important;
+  border: 0 !important;
+  color: #ffffff;
+  font-size: 15px;
+  outline: none;
+  padding: 0;
 }
 
-/* Channel type cards */
+/* Channel type cards (Item 4) */
 .sh-channel-type-card {
+  width: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  text-align: left;
+  gap: 14px;
   padding: 14px 16px;
-  background: #111215;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #0d0e14;
+  border: 1px solid #222433;
+  color: #ffffff;
+  box-sizing: border-box;
   margin-bottom: 10px;
   cursor: pointer;
   user-select: none;
+  transition: background 0.12s ease, border-color 0.12s ease;
 }
 
+.sh-channel-type-card.active,
 .sh-channel-type-card-active {
-  border-color: #5865F2;
-  background: rgba(88, 101, 242, 0.08);
+  background: #11162b;
+  border-color: #3b4880;
 }
 
-.sh-channel-type-info {
+.sh-channel-type-icon {
+  width: 24px;
   display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #b5b8cc;
+}
+
+.sh-channel-type-copy {
+  display: flex;
+  flex-direction: column;
   align-items: flex-start;
-  gap: 12px;
+  gap: 3px;
+  flex: 1;
 }
 
 .sh-channel-type-title {
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 600;
   color: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .sh-channel-type-desc {
   font-size: 12px;
-  color: #949ba4;
-  margin-top: 2px;
+  color: #8a8d9b;
+  line-height: 1.35;
 }
 
-.sh-channel-radio {
+.sh-channel-type-radio {
+  margin-left: auto;
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  border: 2px solid #555770;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 
-.sh-channel-radio-active {
+.sh-channel-type-card.active .sh-channel-type-radio,
+.sh-channel-type-card-active .sh-channel-type-radio {
   border-color: #5865F2;
   background: #5865F2;
 }
 
-.sh-channel-radio-dot {
+.sh-channel-type-radio-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
@@ -1820,5 +1902,155 @@
   font-size: 12px;
   color: #dbdee1;
   border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ==========================================================
+   SERVER TEXT CHANNEL CHAT & MORE ATTACHMENT MENU (Items 5 & 6)
+   ========================================================== */
+.sh-channel-msg-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.sh-channel-msg-avatar,
+.shc-avatar-fallback {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #2b2d31;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1;
+  flex-shrink: 0;
+  overflow: hidden;
+  user-select: none;
+}
+
+.sh-channel-msg-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
+}
+
+.sh-channel-msg-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 3px;
+  flex: 1;
+}
+
+.sh-channel-msg-header {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.sh-channel-msg-author {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.sh-channel-msg-time {
+  font-size: 11px;
+  color: #949ba4;
+}
+
+.sh-channel-msg-text {
+  font-size: 14.5px;
+  color: #dbdee1;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.sh-channel-msg-img,
+.sh-channel-msg-image {
+  margin-top: 6px;
+  max-width: 260px;
+  max-height: 260px;
+  border-radius: 10px;
+  object-fit: cover;
+  display: block;
+  cursor: pointer;
+}
+
+/* More menu attachment sheet */
+.sh-attach-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 9999;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.sh-attach-sheet {
+  background: #111215;
+  border-radius: 20px 20px 0 0;
+  padding: 16px 16px 28px;
+  max-width: 520px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.sh-attach-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 4px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 12px;
+}
+
+.sh-attach-sheet-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0;
+}
+
+.shc-attach-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.shc-attach-grid button {
+  min-height: 88px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: #1e1f22;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff !important;
+  cursor: pointer;
+  transition: background 0.12s ease;
+  padding: 10px;
+}
+
+.shc-attach-grid button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.shc-attach-grid button svg {
+  color: #ffffff !important;
 }
 
