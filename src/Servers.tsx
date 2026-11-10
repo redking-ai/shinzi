@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './Servers.css';
 import {
   Plus,
@@ -35,8 +35,6 @@ import {
   deleteDoc,
   query,
   where,
-  arrayUnion,
-  updateDoc,
 } from 'firebase/firestore';
 import { useDriveStore } from './driveStore';
 
@@ -100,6 +98,66 @@ const cleanSavedServers = (saved: string | null): ServerData[] => {
     return [];
   }
 };
+
+/**
+ * Resizes and compresses image files into lightweight web-ready base64 data URLs.
+ * This guarantees the image stays well under Firestore's 1MB document limit,
+ * prevents localStorage quota errors, and preserves animated GIFs.
+ */
+async function processServerImage(file: File, isBanner: boolean): Promise<string> {
+  // If animated GIF under 1.5MB, preserve raw bytes for animated GIF playback
+  if (file.type === 'image/gif' && file.size < 1500000) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // Compress other images (JPEG, PNG, WEBP, high-res phone camera shots)
+  return new Promise((resolve) => {
+    const maxWidth = isBanner ? 800 : 200;
+    const maxHeight = isBanner ? 450 : 200;
+    const quality = isBanner ? 0.78 : 0.82;
+
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      img.src = e.target?.result as string;
+    };
+    img.onload = () => {
+      let width = img.width;
+      let height = img.height;
+
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      }
+      if (height > maxHeight) {
+        width = Math.round((width * maxHeight) / height);
+        height = maxHeight;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(img.src);
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => {
+      const fallbackReader = new FileReader();
+      fallbackReader.onload = () => resolve(fallbackReader.result as string);
+      fallbackReader.readAsDataURL(file);
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersProps) {
   const drive = useDriveStore();
@@ -191,50 +249,34 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     });
   };
 
-  const handleJoinServer = async (srv: ServerData) => {
-    setJoinedServers((prev) => {
-      if (prev.some((s) => s.id === srv.id) || createdServers.some((s) => s.id === srv.id)) {
-        return prev;
-      }
-      const updated = [srv, ...prev];
-      try {
-        localStorage.setItem('shinzi_joined_servers', JSON.stringify(updated));
-      } catch {}
-      return updated;
-    });
-
-    // If user is authenticated, add uid to memberIds in Firestore
-    if (currentUser?.uid && srv.id) {
-      try {
-        const srvRef = doc(db, 'servers', srv.id);
-        await updateDoc(srvRef, {
-          memberIds: arrayUnion(currentUser.uid),
-        });
-      } catch (err) {
-        console.warn('Could not record server join in Firestore:', err);
-      }
-    }
-  };
-
   // 1. Fetch all public discoverable servers from Firestore
-  useEffect(() => {
-    const fetchPublicServers = async () => {
-      try {
-        const q = query(collection(db, 'servers'), where('visibility', '==', 'public'));
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          const list: ServerData[] = snap.docs.map((docSnap) => ({
-            id: docSnap.id,
-            ...(docSnap.data() as any),
-          }));
-          setDiscoverableServers(list);
-        }
-      } catch (err) {
-        console.warn('Could not load public servers from Firestore:', err);
+  const fetchPublicServers = useCallback(async () => {
+    try {
+      const q = query(collection(db, 'servers'), where('visibility', '==', 'public'));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const list: ServerData[] = snap.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as any),
+        }));
+        setDiscoverableServers(list);
       }
-    };
-    void fetchPublicServers();
+    } catch (err) {
+      console.warn('Could not load public servers from Firestore:', err);
+    }
   }, []);
+
+  // Fetch when user state resolves
+  useEffect(() => {
+    void fetchPublicServers();
+  }, [currentUser?.uid, fetchPublicServers]);
+
+  // Re-fetch whenever Search modal opens so newly created servers from other devices appear immediately
+  useEffect(() => {
+    if (showSearchModal) {
+      void fetchPublicServers();
+    }
+  }, [showSearchModal, fetchPublicServers]);
 
   // 2. Fetch current user's created and joined servers from Firestore
   useEffect(() => {
@@ -277,66 +319,57 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     void fetchUserServers();
   }, [currentUser?.uid]);
 
-  // Handle avatar upload (Supports image & animated GIF)
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle avatar upload (Supports image & animated GIF, compressed for web speed)
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Convert immediately to persistent Base64 Data URL (never expires on reload)
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUrl = reader.result as string;
+    try {
+      const dataUrl = await processServerImage(file, false);
       setFormAvatarPreview(dataUrl);
 
       // Upload to Drive folder 'server' if configured
-      try {
-        if (drive.hasActiveSession && drive.uploadFile) {
-          const res = await drive.uploadFile({
-            file,
-            fileName: `server_avatar_${Date.now()}_${file.name}`,
-            mimeType: file.type || 'image/png',
-            folderType: 'server',
-          });
-          if (res?.fileId) {
-            await drive.makeFilePublic(res.fileId);
-            setFormAvatarPreview(`https://lh3.googleusercontent.com/d/${res.fileId}=s1600`);
-          }
+      if (drive.hasActiveSession && drive.uploadFile) {
+        const res = await drive.uploadFile({
+          file,
+          fileName: `server_avatar_${Date.now()}_${file.name}`,
+          mimeType: file.type || 'image/png',
+          folderType: 'server',
+        });
+        if (res?.fileId) {
+          await drive.makeFilePublic(res.fileId);
+          setFormAvatarPreview(`https://lh3.googleusercontent.com/d/${res.fileId}=s1600`);
         }
-      } catch (err) {
-        console.warn('Drive avatar upload note:', err);
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      console.warn('Avatar processing note:', err);
+    }
   };
 
-  // Handle banner upload (Supports image & animated GIF)
-  const handleBannerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle banner upload (Supports image & animated GIF, compressed for web speed)
+  const handleBannerChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUrl = reader.result as string;
+    try {
+      const dataUrl = await processServerImage(file, true);
       setFormBannerPreview(dataUrl);
 
-      try {
-        if (drive.hasActiveSession && drive.uploadFile) {
-          const res = await drive.uploadFile({
-            file,
-            fileName: `server_banner_${Date.now()}_${file.name}`,
-            mimeType: file.type || 'image/png',
-            folderType: 'server',
-          });
-          if (res?.fileId) {
-            await drive.makeFilePublic(res.fileId);
-            setFormBannerPreview(`https://lh3.googleusercontent.com/d/${res.fileId}=s1600`);
-          }
+      if (drive.hasActiveSession && drive.uploadFile) {
+        const res = await drive.uploadFile({
+          file,
+          fileName: `server_banner_${Date.now()}_${file.name}`,
+          mimeType: file.type || 'image/png',
+          folderType: 'server',
+        });
+        if (res?.fileId) {
+          await drive.makeFilePublic(res.fileId);
+          setFormBannerPreview(`https://lh3.googleusercontent.com/d/${res.fileId}=s1600`);
         }
-      } catch (err) {
-        console.warn('Drive banner upload note:', err);
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      console.warn('Banner processing note:', err);
+    }
   };
 
   // Create Server Action
@@ -344,7 +377,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     if (!formName.trim() || createBusy) return;
     setCreateBusy(true);
 
-    const userUid = currentUser?.uid || auth.currentUser?.uid || `anon-${Date.now()}`;
+    const userUid = currentUser?.uid || auth.currentUser?.uid || `user-${Date.now()}`;
     const authorName = currentUser?.displayName || 'Community Member';
     const newServerId = `server-${Date.now()}`;
 
@@ -409,6 +442,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     // Save to Firestore with valid memberIds and visibility adhering to firestore.rules
     try {
       await setDoc(doc(db, 'servers', newServerId), newServer);
+      console.log('Server successfully created in Firestore:', newServerId);
     } catch (err) {
       console.warn('Firestore server write fallback:', err);
     }
@@ -529,23 +563,21 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                     <div
                       key={rec}
                       className="sh-search-result-card"
-                      style={{
-                        backgroundImage: match?.bannerUrl ? `url(${match.bannerUrl})` : undefined,
-                        background: match?.bannerUrl
-                          ? undefined
-                          : 'linear-gradient(135deg, #1e1f22 0%, #2b2d31 100%)',
-                      }}
                       onClick={() => {
-                        if (match) {
-                          handleJoinServer(match);
-                          setActiveServer(match);
-                          setSelectedChannel(match.categories[0]?.channels[0]);
-                          setShowSearchModal(false);
-                        } else {
+                        if (!match) {
                           setSearchQuery(rec);
                         }
                       }}
                     >
+                      {match?.bannerUrl ? (
+                        <img
+                          src={match.bannerUrl}
+                          alt={match.name}
+                          className="sh-search-card-bg-img"
+                        />
+                      ) : (
+                        <div className="sh-server-card-bg-gradient" />
+                      )}
                       <div className="sh-search-result-overlay" />
                       <div className="sh-search-result-body">
                         {match?.iconUrl ? (
@@ -588,20 +620,20 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                 <div
                   key={srv.id}
                   className="sh-search-result-card"
-                  style={{
-                    backgroundImage: srv.bannerUrl ? `url(${srv.bannerUrl})` : undefined,
-                    background: srv.bannerUrl
-                      ? undefined
-                      : 'linear-gradient(135deg, #1e1f22 0%, #2b2d31 100%)',
-                  }}
                   onClick={() => {
-                    handleJoinServer(srv);
+                    // Record in recent searches without auto-joining (per user requirement)
                     addRecentSearch(srv.name);
-                    setActiveServer(srv);
-                    setSelectedChannel(srv.categories[0]?.channels[0]);
-                    setShowSearchModal(false);
                   }}
                 >
+                  {srv.bannerUrl ? (
+                    <img
+                      src={srv.bannerUrl}
+                      alt={srv.name}
+                      className="sh-search-card-bg-img"
+                    />
+                  ) : (
+                    <div className="sh-server-card-bg-gradient" />
+                  )}
                   <div className="sh-search-result-overlay" />
                   <div className="sh-search-result-body">
                     {srv.iconUrl ? (
@@ -651,15 +683,16 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
 
     return (
       <div className="sh-server-details-page">
-        <div
-          className="sh-server-details-banner"
-          style={{
-            backgroundImage: activeServer.bannerUrl ? `url(${activeServer.bannerUrl})` : undefined,
-            background: activeServer.bannerUrl
-              ? undefined
-              : 'linear-gradient(135deg, #1e1f22 0%, #2b2d31 100%)',
-          }}
-        >
+        <div className="sh-server-details-banner">
+          {activeServer.bannerUrl ? (
+            <img
+              src={activeServer.bannerUrl}
+              alt={activeServer.name}
+              className="sh-server-banner-bg-img"
+            />
+          ) : (
+            <div className="sh-server-card-bg-gradient" />
+          )}
           <button
             type="button"
             className="sh-servers-icon-btn"
@@ -819,15 +852,16 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     return (
       <div className="sh-server-view-page">
         {/* Banner Header with Expandable Thumbnail */}
-        <div
-          className="sh-server-banner-header"
-          style={{
-            backgroundImage: activeServer.bannerUrl ? `url(${activeServer.bannerUrl})` : undefined,
-            background: activeServer.bannerUrl
-              ? undefined
-              : 'linear-gradient(135deg, #1e1f22 0%, #2b2d31 100%)',
-          }}
-        >
+        <div className="sh-server-banner-header">
+          {activeServer.bannerUrl ? (
+            <img
+              src={activeServer.bannerUrl}
+              alt={activeServer.name}
+              className="sh-server-banner-bg-img"
+            />
+          ) : (
+            <div className="sh-server-card-bg-gradient" />
+          )}
           <div className="sh-server-banner-overlay" />
 
           {/* Top Bar inside Server View */}
@@ -1151,17 +1185,20 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                 <div
                   key={srv.id}
                   className="sh-server-card"
-                  style={{
-                    backgroundImage: srv.bannerUrl ? `url(${srv.bannerUrl})` : undefined,
-                    background: srv.bannerUrl
-                      ? undefined
-                      : 'linear-gradient(135deg, #1e1f22 0%, #2b2d31 100%)',
-                  }}
                   onClick={() => {
                     setActiveServer(srv);
                     setSelectedChannel(srv.categories[0]?.channels[0]);
                   }}
                 >
+                  {srv.bannerUrl ? (
+                    <img
+                      src={srv.bannerUrl}
+                      alt={srv.name}
+                      className="sh-server-card-bg-img"
+                    />
+                  ) : (
+                    <div className="sh-server-card-bg-gradient" />
+                  )}
                   <div className="sh-server-card-overlay" />
                   <div className="sh-server-card-body">
                     {srv.iconUrl ? (
@@ -1200,17 +1237,20 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                 <div
                   key={srv.id}
                   className="sh-server-card"
-                  style={{
-                    backgroundImage: srv.bannerUrl ? `url(${srv.bannerUrl})` : undefined,
-                    background: srv.bannerUrl
-                      ? undefined
-                      : 'linear-gradient(135deg, #1e1f22 0%, #2b2d31 100%)',
-                  }}
                   onClick={() => {
                     setActiveServer(srv);
                     setSelectedChannel(srv.categories[0]?.channels[0]);
                   }}
                 >
+                  {srv.bannerUrl ? (
+                    <img
+                      src={srv.bannerUrl}
+                      alt={srv.name}
+                      className="sh-server-card-bg-img"
+                    />
+                  ) : (
+                    <div className="sh-server-card-bg-gradient" />
+                  )}
                   <div className="sh-server-card-overlay" />
                   <div className="sh-server-card-body">
                     {srv.iconUrl ? (
@@ -1273,24 +1313,37 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
               />
               <div
                 className="sh-create-thumbnail-box"
-                style={
-                  formBannerPreview
-                    ? {
-                        backgroundImage: `url(${formBannerPreview})`,
-                        backgroundSize: 'cover',
-                        backgroundPosition: 'center',
-                      }
-                    : {}
-                }
                 onClick={() => bannerInputRef.current?.click()}
               >
                 {formBannerPreview ? (
-                  <span
-                    className="sh-create-thumbnail-label"
-                    style={{ background: 'rgba(0,0,0,0.6)', padding: '4px 10px', borderRadius: 6 }}
-                  >
-                    Change Thumbnail / Banner
-                  </span>
+                  <>
+                    <img
+                      src={formBannerPreview}
+                      alt="Banner Preview"
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        borderRadius: 12,
+                      }}
+                    />
+                    <div
+                      style={{
+                        position: 'absolute',
+                        bottom: 8,
+                        background: 'rgba(0,0,0,0.65)',
+                        padding: '4px 10px',
+                        borderRadius: 6,
+                        color: '#fff',
+                        fontSize: 12,
+                        zIndex: 2,
+                      }}
+                    >
+                      Change Thumbnail / Banner
+                    </div>
+                  </>
                 ) : (
                   <>
                     <span
@@ -1317,19 +1370,21 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                 />
                 <div
                   className="sh-create-avatar-circle"
-                  style={
-                    formAvatarPreview
-                      ? {
-                          backgroundImage: `url(${formAvatarPreview})`,
-                          backgroundSize: 'cover',
-                          backgroundPosition: 'center',
-                        }
-                      : {}
-                  }
                   onClick={() => avatarInputRef.current?.click()}
                   title="Upload Server Profile (Image / GIF)"
                 >
-                  {!formAvatarPreview && (
+                  {formAvatarPreview ? (
+                    <img
+                      src={formAvatarPreview}
+                      alt="Avatar Preview"
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        borderRadius: '50%',
+                      }}
+                    />
+                  ) : (
                     <span
                       className="material-symbols-outlined"
                       style={{ fontSize: 22, color: '#ffffff' }}
