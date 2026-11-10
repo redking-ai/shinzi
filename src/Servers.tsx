@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './Servers.css';
 import './Chat.css';
+import { searchKlipy, getCachedKlipy, type KlipyItem } from './klipyService';
 import {
   Plus,
   Search,
@@ -308,6 +309,11 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     Record<string, { displayName: string; avatarUrl?: string }>
   >({});
   const [assetFileMap, setAssetFileMap] = useState<Record<string, string>>({});
+  const [showChannelGifSheet, setShowChannelGifSheet] = useState(false);
+  const [channelGifMode, setChannelGifMode] = useState<'gif' | 'sticker'>('gif');
+  const [channelGifSearch, setChannelGifSearch] = useState('');
+  const [channelKlipyItems, setChannelKlipyItems] = useState<KlipyItem[]>([]);
+  const [channelKlipyLoading, setChannelKlipyLoading] = useState(false);
   const channelFileInputRef = useRef<HTMLInputElement | null>(null);
   const channelDocInputRef = useRef<HTMLInputElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -606,6 +612,41 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
       cancelled = true;
     };
   }, [channelMessages, assetFileMap]);
+
+  // Klipy GIF & Sticker search effect (Item 6 - No window.prompt)
+  useEffect(() => {
+    if (!showChannelGifSheet) return;
+    let active = true;
+    const cached = getCachedKlipy(channelGifMode, channelGifSearch);
+    if (cached) {
+      setChannelKlipyItems(cached);
+      setChannelKlipyLoading(false);
+      return;
+    }
+    setChannelKlipyLoading(true);
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const items = await searchKlipy(channelGifMode, channelGifSearch, 24, controller.signal);
+        if (active) {
+          setChannelKlipyItems(items);
+          setChannelKlipyLoading(false);
+        }
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return;
+        if (active) {
+          setChannelKlipyItems([]);
+          setChannelKlipyLoading(false);
+        }
+      }
+    }, channelGifSearch ? 180 : 0);
+
+    return () => {
+      active = false;
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [showChannelGifSheet, channelGifMode, channelGifSearch]);
 
   // Send channel message
   const handleSendChannelMessage = async (imageUrl?: string) => {
@@ -1535,10 +1576,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                     type="button"
                     onClick={() => {
                       setShowChannelAttachMenu(false);
-                      const gifUrl = window.prompt('Paste GIF or Sticker URL:');
-                      if (gifUrl && gifUrl.trim()) {
-                        void handleSendChannelMessage(gifUrl.trim());
-                      }
+                      setShowChannelGifSheet(true);
                     }}
                   >
                     <Sparkles size={28} />
@@ -1578,6 +1616,112 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
             </div>
           );
         })()}
+
+        {/* Klipy GIF & Sticker Sheet (Item 6 - No window.prompt!) */}
+        {showChannelGifSheet && (
+          <div
+            className="sh-attach-backdrop"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setShowChannelGifSheet(false);
+            }}
+          >
+            <div
+              className="sh-attach-sheet"
+              style={{ maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}
+              role="dialog"
+              aria-modal="true"
+              aria-label="GIFs & stickers"
+            >
+              <div className="sh-attach-sheet-header">
+                <h3 className="sh-attach-sheet-title">GIFs & stickers</h3>
+                <button
+                  type="button"
+                  className="sh-servers-icon-btn"
+                  onClick={() => setShowChannelGifSheet(false)}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="shc-segments" style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                {(['gif', 'sticker'] as const).map((type) => (
+                  <button
+                    type="button"
+                    key={type}
+                    className={channelGifMode === type ? 'shc-segment shc-segment-on' : 'shc-segment'}
+                    onClick={() => {
+                      if (channelGifMode !== type) {
+                        setChannelGifMode(type);
+                        setChannelGifSearch('');
+                      }
+                    }}
+                    style={
+                      channelGifMode === type
+                        ? { flex: 1, padding: '8px 12px', borderRadius: 8, backgroundColor: '#ffffff', color: '#000000', border: 'none', fontWeight: 800, cursor: 'pointer' }
+                        : { flex: 1, padding: '8px 12px', borderRadius: 8, backgroundColor: '#1e1f22', color: '#949ba4', border: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer' }
+                    }
+                  >
+                    {type === 'gif' ? 'GIF' : 'Sticker'}
+                  </button>
+                ))}
+              </div>
+
+              <input
+                className="shc-gif-search"
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  marginBottom: 12,
+                  padding: '10px 14px',
+                  borderRadius: 8,
+                  background: '#1e1f22',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  color: '#fff',
+                  outline: 'none',
+                }}
+                placeholder={channelGifMode === 'gif' ? 'Search gifs' : 'Search stickers'}
+                value={channelGifSearch}
+                onChange={(e) => setChannelGifSearch(e.target.value)}
+              />
+
+              <div style={{ flex: 1, overflowY: 'auto', minHeight: 200, maxHeight: 380 }}>
+                {channelKlipyLoading ? (
+                  <div style={{ display: 'flex', justifyContent: 'center', padding: 40, color: '#949ba4' }}>
+                    Loading...
+                  </div>
+                ) : channelKlipyItems.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: 40, color: '#949ba4' }}>
+                    {channelGifSearch.trim()
+                      ? `No result for "${channelGifSearch.trim()}"`
+                      : `No ${channelGifMode}s found`}
+                  </div>
+                ) : (
+                  <div className="shc-klipy-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                    {channelKlipyItems.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        style={{ border: 'none', background: 'transparent', padding: 0, borderRadius: 8, overflow: 'hidden', cursor: 'pointer', aspectRatio: '1/1' }}
+                        onClick={() => {
+                          setShowChannelGifSheet(false);
+                          void handleSendChannelMessage(item.originalUrl || item.previewUrl);
+                        }}
+                        title={item.title}
+                      >
+                        <img
+                          src={item.previewUrl || item.originalUrl}
+                          alt={item.title}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                          loading="lazy"
+                        />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -1650,9 +1794,6 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                 {activeServer.name}
                 {activeServer.isOfficial && <CheckCircle2 size={16} color="#5865F2" fill="#5865F2" />}
               </h1>
-              <span className="sh-server-header-sub">
-                {onlineMembersCount} Online • {activeServer.memberIds?.length || 1} Members &gt;
-              </span>
             </div>
           </div>
 
