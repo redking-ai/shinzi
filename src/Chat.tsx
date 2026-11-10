@@ -1813,6 +1813,7 @@ export default function Chat({ onNavigate }: ChatProps) {
     } catch {}
     return initial;
   });
+  const [userLivePresence, setUserLivePresence] = useState<Record<string, Rec>>({});
   const presenceUnsubsRef = useRef<Map<string, () => void>>(new Map());
 
   // Presence ticker to refresh status badges when lastSeen expires (> 60s)
@@ -1841,13 +1842,16 @@ export default function Chat({ onNavigate }: ChatProps) {
       return;
     }
 
-    return onSnapshot(
+    const unsubUser = onSnapshot(
       doc(db, 'users', activeDmTargetUid),
       (snap) => {
         if (snap.exists()) {
           const data = snap.data() as Rec;
           setLiveTargetProfile(data);
           setUserLiveProfiles((prev) => ({ ...prev, [activeDmTargetUid]: data }));
+          if (data?.onlineStatusMode || data?.lastSeen) {
+            setUserLivePresence((prev) => ({ ...prev, [activeDmTargetUid]: { ...prev[activeDmTargetUid], ...data } }));
+          }
           try {
             localStorage.setItem(`shinzi_profile_${activeDmTargetUid}`, JSON.stringify(data));
           } catch {}
@@ -1864,6 +1868,22 @@ export default function Chat({ onNavigate }: ChatProps) {
         console.warn('Error listening to target user profile:', err);
       }
     );
+
+    const unsubPresence = onSnapshot(
+      doc(db, 'users', activeDmTargetUid, 'friends', 'presence'),
+      (snap) => {
+        if (snap.exists()) {
+          const pdata = snap.data() as Rec;
+          setUserLivePresence((prev) => ({ ...prev, [activeDmTargetUid]: pdata }));
+        }
+      },
+      () => {}
+    );
+
+    return () => {
+      unsubUser();
+      unsubPresence();
+    };
   }, [activeDmTargetUid]);
 
   useEffect(() => {
@@ -1878,12 +1898,27 @@ export default function Chat({ onNavigate }: ChatProps) {
 
     directOtherUids.forEach((targetId) => {
       try {
+        const unsubPresence = onSnapshot(
+          doc(db, 'users', targetId, 'friends', 'presence'),
+          (snap) => {
+            if (snap.exists()) {
+              const pdata = snap.data() as Rec;
+              setUserLivePresence((prev) => ({ ...prev, [targetId]: pdata }));
+            }
+          },
+          () => {}
+        );
+        presenceUnsubsRef.current.set(`${targetId}_presence`, unsubPresence);
+
         const unsub = onSnapshot(
           doc(db, 'users', targetId),
           (snap) => {
             if (snap.exists()) {
               const udata = snap.data() as Rec;
               setUserLiveProfiles((prev) => ({ ...prev, [targetId]: udata }));
+              if (udata?.onlineStatusMode || udata?.lastSeen) {
+                setUserLivePresence((prev) => ({ ...prev, [targetId]: { ...prev[targetId], ...udata } }));
+              }
               try {
                 localStorage.setItem(`shinzi_profile_${targetId}`, JSON.stringify(udata));
               } catch {}
@@ -5090,7 +5125,6 @@ const handleSearchMessage = async (target: Rec) => {
           photoURL={profile?.photoURL}
           profileAssetId={profile?.profileAssetId}
           size="nav"
-          status={getUserEffectiveStatus(profile)}
         />
       </button>
     </nav>
@@ -5184,7 +5218,7 @@ const handleSearchMessage = async (target: Rec) => {
 
             const otherId = otherMemberId(item);
             const otherProfile = userLiveProfiles[otherId] || (item.memberProfiles?.[otherId]);
-            const otherStatus = item.type === 'group' ? undefined : getUserEffectiveStatus(otherProfile);
+            const otherStatus = item.type === 'group' ? undefined : getUserEffectiveStatus(otherProfile, userLivePresence[otherId]);
 
             return (
               <button
@@ -5576,7 +5610,7 @@ const handleSearchMessage = async (target: Rec) => {
                 photoURL={targetProfile?.photoURL}
                 profileAssetId={targetProfile?.profileAssetId}
                 size="sm"
-                status={isGroup ? undefined : getUserEffectiveStatus(liveTargetProfile || targetProfile || userLiveProfiles[targetUid])}
+                status={isGroup ? undefined : getUserEffectiveStatus(liveTargetProfile || targetProfile || userLiveProfiles[targetUid], userLivePresence[targetUid])}
               />
             </button>
           ) : (

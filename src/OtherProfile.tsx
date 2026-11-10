@@ -234,6 +234,8 @@ export default function OtherProfile({
   }, [loadProfile]);
 
   // Real-time snapshot listener for target user presence & profile changes
+  const [presenceData, setPresenceData] = useState<AnyRecord | null>(null);
+
   useEffect(() => {
     if (!targetUid) return;
 
@@ -251,7 +253,20 @@ export default function OtherProfile({
       }
     );
 
-    return () => unsub();
+    const unsubPresence = onSnapshot(
+      doc(db, 'users', targetUid, 'friends', 'presence'),
+      (snap) => {
+        if (snap.exists()) {
+          setPresenceData(snap.data() as AnyRecord);
+        }
+      },
+      () => {}
+    );
+
+    return () => {
+      unsub();
+      unsubPresence();
+    };
   }, [targetUid]);
 
   // Periodic presence tick to re-evaluate lastSeen (< 60s)
@@ -620,7 +635,7 @@ export default function OtherProfile({
 
               {/* Status Badge */}
               {(() => {
-                const effective = getUserEffectiveStatus(userData);
+                const effective = getUserEffectiveStatus(userData, presenceData);
                 return (
                   <div className={`sh-status-badge sh-status-${effective}`}>
                     {effective === 'dnd' && <div className="sh-status-dnd-bar" />}

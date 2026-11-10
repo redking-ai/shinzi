@@ -1275,11 +1275,6 @@ useEffect(() => {
                 </span>
               </div>
             )}
-            <div className={`sh-status-badge-nav sh-status-${effectiveStatus}`}>
-              {effectiveStatus === 'dnd' && (
-                <div style={{ width: 4, height: 1, backgroundColor: '#fff', borderRadius: 1 }} />
-              )}
-            </div>
           </div>
         </button>
       </nav>
