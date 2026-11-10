@@ -1418,23 +1418,20 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                 />
               </div>
 
-              {/* Private Server Toggle */}
-              <div className="sh-create-toggle-row">
-                <div className="sh-create-toggle-label">
-                  <span>Private Server</span>
-                  <span className="sh-create-toggle-sub">
-                    Only invited members can find and join
-                  </span>
+              {/* Private Server Checkbox */}
+              <div
+                className="sh-create-toggle-row"
+                onClick={() => setFormIsPrivate(!formIsPrivate)}
+              >
+                <span className="sh-create-toggle-title">Private Server</span>
+                <div
+                  className={`sh-create-checkbox ${formIsPrivate ? 'sh-create-checkbox-checked' : ''}`}
+                >
+                  {formIsPrivate && <Check size={16} color="#ffffff" strokeWidth={3} />}
                 </div>
-                <label className="sh-switch">
-                  <input
-                    type="checkbox"
-                    checked={formIsPrivate}
-                    onChange={(e) => setFormIsPrivate(e.target.checked)}
-                  />
-                  <span className="sh-slider" />
-                </label>
               </div>
+
+              <div className="sh-create-note">• you can change settings any Time</div>
 
               {/* Submit Button */}
               <button

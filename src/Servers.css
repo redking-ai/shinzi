@@ -428,32 +428,51 @@
   resize: vertical;
 }
 
-/* Private Server Toggle Row */
+/* Private Server Row */
 .sh-create-toggle-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px;
+  padding: 12px 14px;
   background: #1a1b20;
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.sh-create-toggle-text {
-  display: flex;
-  flex-direction: column;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .sh-create-toggle-title {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   color: #ffffff;
 }
 
-.sh-create-toggle-desc {
-  font-size: 11px;
+.sh-create-checkbox {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.sh-create-checkbox-checked {
+  background: #5865F2;
+  border-color: #5865F2;
+}
+
+.sh-create-note {
+  font-size: 12px;
   color: #949ba4;
-  margin-top: 2px;
+  margin-top: 8px;
+  margin-bottom: 12px;
+  padding-left: 2px;
 }
 
 /* Create Button */
