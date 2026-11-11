@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import './Servers.css';
 import './Chat.css';
+import type { CategoryButtonRenderProps } from 'emoji-picker-react';
+import { loadEmojiPickerData, saveRecentEmoji, isEmojiOnly } from './emojiData';
 import { searchKlipy, getCachedKlipy, type KlipyItem } from './klipyService';
 import {
   Plus,
@@ -229,6 +231,52 @@ function resolveChannelAttachmentUrl(
   return '';
 }
 
+const EmojiPicker = lazy(() => import('emoji-picker-react'));
+
+function EmojiCategoryButton({
+  category,
+  className,
+  onClick,
+  style,
+  ...buttonProps
+}: CategoryButtonRenderProps) {
+  const handleClick: React.MouseEventHandler<HTMLButtonElement> = (event) => {
+    onClick?.(event);
+    if (event.defaultPrevented) return;
+
+    const button = event.currentTarget;
+    window.requestAnimationFrame(() => {
+      const picker = button.closest<HTMLElement>('[data-epr-part="root"]');
+      const scrollBody = picker?.querySelector<HTMLElement>('.epr-body');
+      const section = Array.from(
+        picker?.querySelectorAll<HTMLElement>('[data-epr-part="category"]') || [],
+      ).find((item) => item.dataset.eprCategory === category.id);
+
+      if (!scrollBody || !section) return;
+
+      const top =
+        section.getBoundingClientRect().top -
+        scrollBody.getBoundingClientRect().top +
+        scrollBody.scrollTop;
+      scrollBody.scrollTo({ top, behavior: 'smooth' });
+    });
+  };
+
+  return (
+    <button
+      {...buttonProps}
+      className={`${className || ''} shc-emoji-category-tab`}
+      onClick={handleClick}
+      style={{
+        ...style,
+        background: 'transparent',
+        border: 0,
+        borderRadius: 8,
+      }}
+    />
+  );
+}
+
 export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersProps) {
   const drive = useDriveStore();
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(() => auth.currentUser);
@@ -309,6 +357,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     Record<string, { displayName: string; avatarUrl?: string }>
   >({});
   const [assetFileMap, setAssetFileMap] = useState<Record<string, string>>({});
+  const [showChannelEmojiPicker, setShowChannelEmojiPicker] = useState(false);
   const [showChannelGifSheet, setShowChannelGifSheet] = useState(false);
   const [channelGifMode, setChannelGifMode] = useState<'gif' | 'sticker'>('gif');
   const [channelGifSearch, setChannelGifSearch] = useState('');
@@ -1510,7 +1559,15 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                       <span className="sh-channel-msg-author">{authorName}</span>
                       <span className="sh-channel-msg-time">{formatMessageTime(msg.createdAt)}</span>
                     </div>
-                    {msg.text && <div className="sh-channel-msg-text">{msg.text}</div>}
+                    {msg.text && (
+                      <div className="sh-channel-msg-text">
+                        {isEmojiOnly(msg.text) ? (
+                          <span className="shc-dc-jumbo-emoji">{msg.text.trim()}</span>
+                        ) : (
+                          msg.text
+                        )}
+                      </div>
+                    )}
                     {resolvedImgUrl && (
                       <img
                         src={resolvedImgUrl}
@@ -1635,8 +1692,9 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                 type="button"
                 className="shc-composer-icon-btn shc-composer-emoji-btn"
                 onClick={() => {
-                  const emoji = prompt('Type or paste emoji:');
-                  if (emoji) setChannelInputText((prev) => prev + emoji);
+                  setShowChannelAttachMenu(false);
+                  setShowChannelGifSheet(false);
+                  setShowChannelEmojiPicker((prev) => !prev);
                 }}
                 aria-label="Toggle emoji picker"
               >
@@ -1854,6 +1912,46 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Full Unicode Emoji Picker Sheet */}
+        {showChannelEmojiPicker && (
+          <div
+            className="shc-sheet-backdrop"
+            onClick={() => setShowChannelEmojiPicker(false)}
+          >
+            <div
+              className="shc-emoji-picker-sheet"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="shc-sheet-handle" />
+              <Suspense
+                fallback={
+                  <div className="shc-emoji-picker-loading" role="status">
+                    <span className="shc-spinner shc-spinner-sm" />
+                    <span>Loading emojis…</span>
+                  </div>
+                }
+              >
+                <EmojiPicker
+                  className="shc-emoji-picker"
+                  components={{ CategoryButton: EmojiCategoryButton }}
+                  colorScheme="dark"
+                  emojiStyle="native"
+                  width="100%"
+                  height="100%"
+                  emojiData={loadEmojiPickerData}
+                  previewConfig={{ showPreview: false }}
+                  searchPlaceholder="Search all emojis"
+                  onEmojiClick={({ emoji }) => {
+                    saveRecentEmoji(emoji);
+                    setChannelInputText((previous) => previous + emoji);
+                    setShowChannelEmojiPicker(false);
+                  }}
+                />
+              </Suspense>
             </div>
           </div>
         )}

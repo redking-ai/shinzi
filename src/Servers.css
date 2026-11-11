@@ -810,11 +810,6 @@
   width: 100%;
   box-sizing: border-box;
 }
-  max-width: 720px;
-  margin: 0 auto;
-  width: 100%;
-  box-sizing: border-box;
-}
 
 .sh-category-group {
   margin-bottom: 16px;

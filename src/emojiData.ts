@@ -113,3 +113,12 @@ export function saveRecentEmoji(emoji: string): string[] {
   }
   return DEFAULT_RECENT_EMOJIS.slice(0, 5);
 }
+
+export const EMOJI_ONLY_REGEX = /^(?:\s*(?:(?:\p{Extended_Pictographic}|\p{Regional_Indicator}{2}|[0-9#*]\uFE0F?\u20E3)(?:\uFE0F|\uFE0E)?(?:\p{Emoji_Modifier})?(?:\u200D(?:\p{Extended_Pictographic}|\p{Regional_Indicator}{2}|[0-9#*]\uFE0F?\u20E3)(?:\uFE0F|\uFE0E)?(?:\p{Emoji_Modifier})?)*)\s*)+$/u;
+
+export const isEmojiOnly = (text?: string): boolean => {
+  if (!text) return false;
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  return EMOJI_ONLY_REGEX.test(trimmed);
+};
