@@ -847,8 +847,31 @@
 }
 
 .sh-channel-item-active {
-  background: rgba(255, 255, 255, 0.12) !important;
+  background: #2b2d31 !important;
   color: #ffffff !important;
+}
+
+.sh-channel-item-active .sh-channel-left {
+  color: #ffffff !important;
+  font-weight: 600 !important;
+}
+
+.sh-channel-item-active .sh-channel-icon-hash {
+  color: #ffffff !important;
+  font-weight: 700 !important;
+}
+
+.sh-channel-item-active .sh-channel-name {
+  color: #ffffff !important;
+  font-weight: 600 !important;
+}
+
+.sh-channel-item-active svg {
+  color: #ffffff !important;
+}
+
+.sh-channel-item-active .sh-channel-icon-mini-thumb {
+  border-color: #ffffff !important;
 }
 
 .sh-channel-left {
@@ -1391,6 +1414,16 @@
   z-index: 990;
   display: flex;
   flex-direction: column;
+  animation: sh-slide-in-right 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes sh-slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
 }
 
 .sh-channel-chat-header {

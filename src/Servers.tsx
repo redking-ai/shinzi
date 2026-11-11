@@ -372,6 +372,77 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
   const channelRecordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
+  // Memory Booter: Remember last visited channel per server (IMG-20261111-WA0001)
+  const [lastChannelByServer, setLastChannelByServer] = useState<Record<string, string>>(() => {
+    const memory: Record<string, string> = {};
+    if (typeof window !== 'undefined') {
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('shinzi_last_channel_')) {
+            const sId = key.replace('shinzi_last_channel_', '');
+            const chId = localStorage.getItem(key);
+            if (chId) memory[sId] = chId;
+          }
+        }
+      } catch {}
+    }
+    return memory;
+  });
+
+  // Touch Swipe Gestures (VID-20261111-WA0002)
+  const touchStartXRef = useRef<number | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
+
+  const handleChannelChatTouchStart = (e: React.TouchEvent) => {
+    touchStartXRef.current = e.touches[0].clientX;
+    touchStartYRef.current = e.touches[0].clientY;
+  };
+
+  const handleChannelChatTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartXRef.current === null || touchStartYRef.current === null) return;
+    const diffX = e.changedTouches[0].clientX - touchStartXRef.current;
+    const diffY = e.changedTouches[0].clientY - touchStartYRef.current;
+    touchStartXRef.current = null;
+    touchStartYRef.current = null;
+
+    // Swipe right (horizontal drag > 60px) -> Close channel chat and go back to server view
+    if (diffX > 60 && Math.abs(diffX) > Math.abs(diffY) * 1.4) {
+      setSelectedChannel(null);
+    }
+  };
+
+  const handleServerViewTouchStart = (e: React.TouchEvent) => {
+    touchStartXRef.current = e.touches[0].clientX;
+    touchStartYRef.current = e.touches[0].clientY;
+  };
+
+  const handleServerViewTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartXRef.current === null || touchStartYRef.current === null) return;
+    const diffX = e.changedTouches[0].clientX - touchStartXRef.current;
+    const diffY = e.changedTouches[0].clientY - touchStartYRef.current;
+    touchStartXRef.current = null;
+    touchStartYRef.current = null;
+
+    // Swipe left (horizontal drag < -60px) -> Open the active/remembered channel
+    if (diffX < -60 && Math.abs(diffX) > Math.abs(diffY) * 1.4) {
+      if (activeServer) {
+        const targetChId =
+          lastChannelByServer[activeServer.id] ||
+          activeServer.categories[0]?.channels[0]?.id;
+        if (targetChId) {
+          for (const cat of activeServer.categories) {
+            const found = cat.channels.find((c) => c.id === targetChId);
+            if (found && found.type === 'text') {
+              setSelectedChannel(found);
+              break;
+            }
+          }
+        }
+      }
+    }
+  };
+
   // Long-press Context Sheet States
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [contextCategory, setContextCategory] = useState<ServerCategory | null>(null);
@@ -1505,7 +1576,11 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
   // ==========================================================
   if (activeServer && selectedChannel && selectedChannel.type === 'text') {
     return (
-      <div className="sh-channel-chat-page">
+      <div
+        className="sh-channel-chat-page"
+        onTouchStart={handleChannelChatTouchStart}
+        onTouchEnd={handleChannelChatTouchEnd}
+      >
         {/* Header matching IMG-20261110-WA0014 */}
         <div className="sh-channel-chat-header">
           <button
@@ -1982,7 +2057,11 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
   // ==========================================================
   if (activeServer) {
     return (
-      <div className="sh-server-scroll-container">
+      <div
+        className="sh-server-scroll-container"
+        onTouchStart={handleServerViewTouchStart}
+        onTouchEnd={handleServerViewTouchEnd}
+      >
         {/* Banner at top if server has a banner; matches video_1.mp4 */}
         {activeServer.bannerUrl && (
           <div className="sh-server-banner">
@@ -2109,7 +2188,11 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
 
                 {!isCollapsed &&
                   cat.channels.map((ch) => {
-                    const isActive = selectedChannel?.id === ch.id;
+                    const activeChannelId =
+                      selectedChannel?.id ||
+                      (activeServer ? lastChannelByServer[activeServer.id] : null) ||
+                      (activeServer?.categories[0]?.channels[0]?.id || null);
+                    const isActive = activeChannelId === ch.id;
                     return (
                       <div
                         key={ch.id}
@@ -2117,10 +2200,22 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                         onClick={() => {
                           if (ch.type === 'text') {
                             setSelectedChannel(ch);
+                            if (activeServer) {
+                              try {
+                                localStorage.setItem(`shinzi_last_channel_${activeServer.id}`, ch.id);
+                              } catch {}
+                              setLastChannelByServer((prev) => ({ ...prev, [activeServer.id]: ch.id }));
+                            }
                           } else if (ch.type === 'voice') {
                             alert(`Voice Room: ${ch.name} (${ch.listenerCount || '0 People in'})`);
                           } else {
                             setSelectedChannel(ch);
+                            if (activeServer) {
+                              try {
+                                localStorage.setItem(`shinzi_last_channel_${activeServer.id}`, ch.id);
+                              } catch {}
+                              setLastChannelByServer((prev) => ({ ...prev, [activeServer.id]: ch.id }));
+                            }
                           }
                         }}
                         onTouchStart={() => startChannelLongPress(cat.id, ch)}
