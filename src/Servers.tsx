@@ -1523,7 +1523,16 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
               setEditingChannel({ catId: activeServer.categories[0]?.id || '', channel: selectedChannel });
             }}
           >
-            <span className="sh-channel-chat-title">#{selectedChannel.name}</span>
+            {selectedChannel.iconUrl ? (
+              <img
+                src={selectedChannel.iconUrl}
+                alt={selectedChannel.name}
+                className="sh-channel-header-icon"
+              />
+            ) : (
+              <span className="sh-channel-chat-hash">#</span>
+            )}
+            <span className="sh-channel-chat-title">{selectedChannel.name}</span>
             <ChevronRight size={18} color="#949ba4" />
           </div>
 
@@ -1534,9 +1543,18 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
         <div className="sh-channel-chat-messages">
           {channelMessages.length === 0 ? (
             <div className="sh-channel-chat-welcome">
-              <div className="sh-channel-chat-welcome-hash">#</div>
-              <h3>Welcome to #{selectedChannel.name}!</h3>
-              <p>{selectedChannel.description || `This is the start of the #${selectedChannel.name} channel.`}</p>
+              {selectedChannel.iconUrl && (
+                <img
+                  src={selectedChannel.iconUrl}
+                  alt={selectedChannel.name}
+                  className="sh-channel-welcome-icon"
+                />
+              )}
+              <h3>Welcome to {selectedChannel.iconUrl ? '' : '#'}{selectedChannel.name}!</h3>
+              <p>This is the start of the #{selectedChannel.name} channel.</p>
+              {selectedChannel.description && (
+                <p className="sh-channel-chat-desc">{selectedChannel.description}</p>
+              )}
             </div>
           ) : (
             channelMessages.map((msg: any) => {
@@ -2016,8 +2034,8 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
               />
             ) : (
               <div
-                className="sh-server-card-avatar-placeholder"
-                style={{ width: 40, height: 40, fontSize: 16, margin: 0 }}
+                className="sh-server-header-avatar-placeholder"
+                style={{ width: 40, height: 40, fontSize: 16, margin: 0, borderRadius: 12 }}
               >
                 {activeServer.name.charAt(0).toUpperCase()}
               </div>
@@ -2542,8 +2560,8 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                   type="button"
                   className={`sh-settings-toggle ${newChannelIsPrivate ? 'sh-settings-toggle-on' : ''}`}
                   style={{
-                    background: newChannelIsPrivate ? '#5865F2' : '#23252b',
-                    borderColor: newChannelIsPrivate ? '#5865F2' : 'rgba(255, 255, 255, 0.15)',
+                    background: newChannelIsPrivate ? '#ffffff' : '#23252b',
+                    borderColor: newChannelIsPrivate ? '#ffffff' : 'rgba(255, 255, 255, 0.15)',
                     flexShrink: 0,
                     marginLeft: 12,
                   }}
@@ -2555,6 +2573,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                   <div
                     className="sh-settings-toggle-knob"
                     style={{
+                      background: newChannelIsPrivate ? '#000000' : '#ffffff',
                       transform: newChannelIsPrivate ? 'translateX(20px)' : 'translateX(0)',
                     }}
                   />
