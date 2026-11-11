@@ -2400,18 +2400,11 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                 <X size={20} />
               </button>
               <h2>Create Channel</h2>
-              <button
-                type="button"
-                className="sh-fullscreen-modal-save-btn"
-                disabled={!newChannelName.trim()}
-                onClick={handleCreateChannel}
-              >
-                Create
-              </button>
+              <div style={{ width: 40 }} />
             </div>
 
             <div className="sh-fullscreen-modal-body">
-              {/* Channel Name with inside Image Icon (Item 4) */}
+              {/* Channel Name with inside Image Icon */}
               <div className="sh-create-input-group">
                 <label className="sh-create-label">Channel Name</label>
                 <div className="sh-channel-name-input-wrap">
@@ -2427,34 +2420,40 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                       setNewChannelIcon(dataUrl);
                     }}
                   />
-                  <button
-                    type="button"
-                    className="sh-channel-icon-trigger"
-                    title="Channel Icon / GIF"
-                    onClick={() => newChannelIconInputRef.current?.click()}
-                  >
-                    {newChannelIcon ? (
-                      <img src={newChannelIcon} alt="Icon" />
-                    ) : (
-                      <ImageIcon size={18} />
+                  <div className="sh-channel-icon-wrap">
+                    <button
+                      type="button"
+                      className="sh-channel-icon-trigger"
+                      title="Channel Icon / GIF"
+                      onClick={() => newChannelIconInputRef.current?.click()}
+                    >
+                      {newChannelIcon ? (
+                        <img src={newChannelIcon} alt="Channel Icon" className="sh-channel-icon-thumb" />
+                      ) : (
+                        <ImageIcon size={18} />
+                      )}
+                    </button>
+                    {newChannelIcon && (
+                      <button
+                        type="button"
+                        className="sh-channel-icon-remove-badge"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setNewChannelIcon('');
+                        }}
+                        title="Remove Icon"
+                        aria-label="Remove Icon"
+                      >
+                        <X size={11} strokeWidth={2.5} />
+                      </button>
                     )}
-                  </button>
+                  </div>
                   <input
                     type="text"
                     placeholder="new-channel"
                     value={newChannelName}
                     onChange={(e) => setNewChannelName(e.target.value)}
                   />
-                  {newChannelIcon && (
-                    <button
-                      type="button"
-                      style={{ background: 'none', border: 'none', color: '#8e9297', cursor: 'pointer', padding: '0 10px', display: 'flex', alignItems: 'center' }}
-                      onClick={() => setNewChannelIcon('')}
-                      title="Remove Icon"
-                    >
-                      <X size={16} />
-                    </button>
-                  )}
                 </div>
               </div>
 
@@ -2526,24 +2525,52 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                 </div>
               </div>
 
-              {/* Private Channel Toggle */}
+              {/* Private Channel Toggle (No Grid Box) */}
               <div
-                className="sh-create-toggle-row"
-                style={{ marginTop: 14 }}
+                className="sh-channel-private-row"
                 onClick={() => setNewChannelIsPrivate(!newChannelIsPrivate)}
               >
                 <div>
-                  <div className="sh-create-toggle-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div className="sh-create-toggle-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <Lock size={16} /> Private Channel
                   </div>
-                  <div style={{ fontSize: 12, color: '#949ba4', marginTop: 2 }}>
+                  <div style={{ fontSize: 13, color: '#949ba4', marginTop: 3 }}>
                     Only selected members and roles will be able to view this channel.
                   </div>
                 </div>
-                <div className={`sh-create-checkbox ${newChannelIsPrivate ? 'sh-create-checkbox-checked' : ''}`}>
-                  {newChannelIsPrivate && <Check size={16} color="#ffffff" strokeWidth={3} />}
-                </div>
+                <button
+                  type="button"
+                  className={`sh-settings-toggle ${newChannelIsPrivate ? 'sh-settings-toggle-on' : ''}`}
+                  style={{
+                    background: newChannelIsPrivate ? '#5865F2' : '#23252b',
+                    borderColor: newChannelIsPrivate ? '#5865F2' : 'rgba(255, 255, 255, 0.15)',
+                    flexShrink: 0,
+                    marginLeft: 12,
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setNewChannelIsPrivate(!newChannelIsPrivate);
+                  }}
+                >
+                  <div
+                    className="sh-settings-toggle-knob"
+                    style={{
+                      transform: newChannelIsPrivate ? 'translateX(20px)' : 'translateX(0)',
+                    }}
+                  />
+                </button>
               </div>
+
+              {/* Create Channel Button in Bottom Bar */}
+              <button
+                type="button"
+                className="sh-create-submit-btn"
+                style={{ marginTop: 20 }}
+                disabled={!newChannelName.trim()}
+                onClick={handleCreateChannel}
+              >
+                Create Channel
+              </button>
             </div>
           </div>
         )}
@@ -2580,34 +2607,40 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                       setEditChannelIcon(dataUrl);
                     }}
                   />
-                  <button
-                    type="button"
-                    className="sh-channel-icon-trigger"
-                    title="Channel Icon / GIF"
-                    onClick={() => editChannelIconInputRef.current?.click()}
-                  >
-                    {editChannelIcon ? (
-                      <img src={editChannelIcon} alt="Icon" />
-                    ) : (
-                      <ImageIcon size={18} />
+                  <div className="sh-channel-icon-wrap">
+                    <button
+                      type="button"
+                      className="sh-channel-icon-trigger"
+                      title="Channel Icon / GIF"
+                      onClick={() => editChannelIconInputRef.current?.click()}
+                    >
+                      {editChannelIcon ? (
+                        <img src={editChannelIcon} alt="Channel Icon" className="sh-channel-icon-thumb" />
+                      ) : (
+                        <ImageIcon size={18} />
+                      )}
+                    </button>
+                    {editChannelIcon && (
+                      <button
+                        type="button"
+                        className="sh-channel-icon-remove-badge"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditChannelIcon('');
+                        }}
+                        title="Remove Icon"
+                        aria-label="Remove Icon"
+                      >
+                        <X size={11} strokeWidth={2.5} />
+                      </button>
                     )}
-                  </button>
+                  </div>
                   <input
                     type="text"
                     placeholder="suggestions"
                     value={editChannelName}
                     onChange={(e) => setEditChannelName(e.target.value)}
                   />
-                  {editChannelIcon && (
-                    <button
-                      type="button"
-                      style={{ background: 'none', border: 'none', color: '#8e9297', cursor: 'pointer', padding: '0 10px', display: 'flex', alignItems: 'center' }}
-                      onClick={() => setEditChannelIcon('')}
-                      title="Remove Icon"
-                    >
-                      <X size={16} />
-                    </button>
-                  )}
                 </div>
               </div>
 

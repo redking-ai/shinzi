@@ -1764,6 +1764,9 @@
   margin: 0 auto;
   width: 100%;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
 /* Channel name input box with icon trigger inside (Items 3 & 4) */
@@ -1775,34 +1778,95 @@
   border: 1px solid #262736;
   border-radius: 10px;
   padding: 0 12px;
-  height: 46px;
+  height: 48px;
   box-sizing: border-box;
 }
 
+.sh-channel-icon-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
 .sh-channel-icon-trigger {
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 6px;
   background: transparent !important;
   border: 0 !important;
   color: #a6a8b8;
-  padding: 4px;
+  padding: 0 !important;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
+  overflow: visible;
 }
 
 .sh-channel-icon-trigger:hover {
   color: #ffffff;
 }
 
+.sh-channel-icon-trigger img,
+.sh-channel-icon-thumb {
+  width: 28px !important;
+  height: 28px !important;
+  max-width: 28px !important;
+  max-height: 28px !important;
+  object-fit: cover !important;
+  border-radius: 6px !important;
+  display: block !important;
+}
+
+.sh-channel-icon-remove-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #f23f43;
+  color: #ffffff;
+  border: 1.5px solid #12131a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  z-index: 5;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  transition: transform 0.1s ease;
+}
+
+.sh-channel-icon-remove-badge:hover {
+  transform: scale(1.15);
+}
+
 .sh-channel-name-input-wrap input {
   flex: 1;
+  min-width: 0;
   background: transparent !important;
   border: 0 !important;
   color: #ffffff;
   font-size: 15px;
   outline: none;
   padding: 0;
+}
+
+/* Private Channel Seamless Row - No Box Grid */
+.sh-channel-private-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  background: transparent !important;
+  border: none !important;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Channel type cards (Item 4) */
