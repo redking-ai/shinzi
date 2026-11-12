@@ -660,7 +660,7 @@ export default function OtherProfile({
             </h2>
 
             <p className="sh-username">
-              @{userData.username || 'username'}
+              {userData.username || 'username'}
             </p>
 
             {userData.pronouns && (

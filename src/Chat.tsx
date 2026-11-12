@@ -5060,7 +5060,11 @@ const handleSearchMessage = async (target: Rec) => {
 
     return (
       <div key={item.id} id={`shc-msg-${item.id}`}>
-        {showDay && <div className="shc-day">{dateLabel(item.createdAt)}</div>}
+        {showDay && (
+          <div className="shc-day">
+            <span>{dateLabel(item.createdAt)}</span>
+          </div>
+        )}
         <SwipeableMessage
           item={item}
           own={own}

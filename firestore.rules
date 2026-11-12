@@ -156,7 +156,7 @@ match /users/{userId} {
           || resource.data.usernameLastChanged == null  
           || request.time  
             > resource.data.usernameLastChanged  
-              + duration.value(30, 'd')  
+              + duration.value(2, 'd')  
         )  
 
         && existsAfter(  

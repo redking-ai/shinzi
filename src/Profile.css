@@ -245,7 +245,7 @@
 }
 
 .sh-username {
-  color: #80cfff;
+  color: var(--sh-muted);
   margin: 0 0 5px;
   font-size: 14px;
 }
@@ -737,7 +737,6 @@ body {
   border-color: var(--sh-line);
 }
 
-.sh-username,
 .sh-accent {
   color: var(--sh-accent);
 }

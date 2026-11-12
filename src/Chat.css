@@ -965,14 +965,35 @@
 }
 
 .shc-day {
-  align-self: center;
-  margin: 8px auto 12px;
-  padding: 3px 12px;
-  border-radius: 12px;
-  background: var(--surface);
-  color: var(--muted);
-  font-size: 11px;
-  text-align: center;
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+  margin: 18px 0 10px !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  color: #949ba4 !important;
+  font-size: 11.5px !important;
+  font-weight: 700 !important;
+  text-align: center !important;
+  user-select: none !important;
+}
+
+.shc-day::before,
+.shc-day::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #4e5058;
+}
+
+.shc-day span {
+  padding: 0 12px;
+  color: #949ba4;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
 }
 
 .shc-msg-row {

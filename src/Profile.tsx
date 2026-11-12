@@ -562,14 +562,14 @@ useEffect(() => {
 
       if (usernameChanged) {
         const lastChanged = dateValue(userData.usernameLastChanged);
-        const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+        const twoDays = 2 * 24 * 60 * 60 * 1000;
 
         if (
           lastChanged &&
-          Date.now() - lastChanged.getTime() < thirtyDays
+          Date.now() - lastChanged.getTime() < twoDays
         ) {
           const daysLeft = Math.ceil(
-            (thirtyDays - (Date.now() - lastChanged.getTime())) /
+            (twoDays - (Date.now() - lastChanged.getTime())) /
               (24 * 60 * 60 * 1000),
           );
 
@@ -1070,7 +1070,7 @@ useEffect(() => {
           <div className="sh-identity-copy">
             <h2>{userData.displayName || 'Shinzi User'}</h2>
             <p className="sh-username">
-              @{userData.username || 'username'}
+              {userData.username || 'username'}
             </p>
             {userData.pronouns && (
               <p className="sh-pronouns">
@@ -1132,7 +1132,7 @@ useEffect(() => {
               />
               <small>
                 3–15 lowercase letters, numbers, or underscores.
-                Username changes are limited to once every 30 days.
+                Username can be changed up to 2 days per change.
               </small>
             </label>
 
