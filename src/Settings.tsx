@@ -73,7 +73,13 @@ const MaterialIcon: React.FC<{
 );
 
 export default function Settings({ onBack }: SettingsProps) {
-  const [devEnabled, setDevEnabled] = useState(false);
+  const [devEnabled, setDevEnabled] = useState(() => {
+    try {
+      return localStorage.getItem('shinzi_developer_settings_enabled') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [showTextStyles, setShowTextStyles] = useState(false);
   const [toastText, setToastText] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
@@ -603,6 +609,9 @@ export default function Settings({ onBack }: SettingsProps) {
               onClick={() => {
                 const next = !devEnabled;
                 setDevEnabled(next);
+                try {
+                  localStorage.setItem('shinzi_developer_settings_enabled', String(next));
+                } catch {}
                 showToast(next ? 'Developer settings enabled' : 'Developer settings disabled');
               }}
               role="switch"

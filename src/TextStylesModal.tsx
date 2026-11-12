@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { ArrowLeft, Plus, Type, Trash2, Upload, Check } from 'lucide-react';
+import { ArrowLeft, Plus, Type, Trash2 } from 'lucide-react';
 import { useDriveStore } from './driveStore';
 import {
   getAllTextStyles,
@@ -20,7 +20,6 @@ interface TextStylesModalProps {
 export default function TextStylesModal({ onBack, showToast }: TextStylesModalProps) {
   const drive = useDriveStore();
   const [styles, setStyles] = useState<Record<string, TextStyleDefinition>>(() => getAllTextStyles());
-  const [copiedTag, setCopiedTag] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -182,9 +181,7 @@ export default function TextStylesModal({ onBack, showToast }: TextStylesModalPr
       if (navigator.clipboard?.writeText) {
         void navigator.clipboard.writeText(tag);
       }
-      setCopiedTag(id);
       if (showToast) showToast(`Copied ${tag}`);
-      setTimeout(() => setCopiedTag((curr) => (curr === id ? null : curr)), 2000);
     } catch {
       if (showToast) showToast(`Use: ${tag}`);
     }
@@ -193,20 +190,23 @@ export default function TextStylesModal({ onBack, showToast }: TextStylesModalPr
   const styleList = Object.values(styles);
 
   return (
-    <div className="sh-settings-overlay">
-      <div className="sh-settings-header">
-        <button
-          type="button"
-          className="sh-settings-back-btn"
-          onClick={onBack}
-          aria-label="Back to Settings"
-        >
-          <ArrowLeft size={20} />
-        </button>
-        <h1 className="sh-settings-title">Text styles</h1>
-      </div>
+    <div className="sh-settings-page sh-ts-page">
+      <header className="sh-settings-header">
+        <div className="sh-settings-header-left">
+          <button
+            type="button"
+            className="sh-settings-back-btn"
+            onClick={onBack}
+            aria-label="Back to Settings"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <h1 className="sh-settings-title">Text styles</h1>
+        </div>
+        <div className="sh-settings-header-spacer" />
+      </header>
 
-      <div className="sh-settings-content" style={{ paddingBottom: 40 }}>
+      <main className="sh-settings-content" style={{ paddingBottom: 40 }}>
         {/* Hidden File Input supporting .txt and font files */}
         <input
           type="file"
@@ -246,7 +246,6 @@ export default function TextStylesModal({ onBack, showToast }: TextStylesModalPr
               <div
                 key={item.id}
                 className="sh-ts-card"
-                onClick={() => handleCopyTag(item.id)}
               >
                 <div className="sh-ts-icon-wrap">
                   <Type size={20} color="#ffffff" />
@@ -265,14 +264,14 @@ export default function TextStylesModal({ onBack, showToast }: TextStylesModalPr
                   <div className="sh-ts-syntax">Tag: (ts {item.id}) or {'{'}ts {item.id}{'}'}</div>
                 </div>
 
-                <div className="sh-ts-actions" onClick={(e) => e.stopPropagation()}>
+                <div className="sh-ts-actions">
                   <button
                     type="button"
                     className="sh-ts-copy-pill"
                     onClick={() => handleCopyTag(item.id)}
                     title="Copy tag"
                   >
-                    {copiedTag === item.id ? <Check size={14} color="#57f287" /> : <span>(ts {item.id})</span>}
+                    <span>(ts {item.id})</span>
                   </button>
                   {item.isCustom && (
                     <button
@@ -289,19 +288,7 @@ export default function TextStylesModal({ onBack, showToast }: TextStylesModalPr
             );
           })}
         </div>
-
-        {/* Bottom "+ Add new text style" button */}
-        <button
-          type="button"
-          className="sh-ts-add-btn"
-          style={{ marginTop: 24 }}
-          disabled={uploading}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <Upload size={18} />
-          <span>{uploading ? 'Uploading to Drive...' : '+ Add new text style'}</span>
-        </button>
-      </div>
+      </main>
     </div>
   );
 }

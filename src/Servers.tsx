@@ -3634,23 +3634,15 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
             <img
               src={currentUserProfile?.photoURL || currentUser?.photoURL || ''}
               alt="Profile"
-              style={{
-                width: 26,
-                height: 26,
-                borderRadius: '50%',
-                objectFit: 'cover',
-                border: '1.5px solid rgba(255,255,255,0.4)',
-              }}
+              className="shc-avatar-img shc-avatar-nav"
             />
           ) : (
             <div
+              className="shc-avatar-nav"
               style={{
-                width: 26,
-                height: 26,
-                borderRadius: '50%',
                 backgroundColor: '#5865f2',
                 color: '#fff',
-                fontSize: 12,
+                fontSize: 13,
                 fontWeight: 700,
                 display: 'flex',
                 alignItems: 'center',

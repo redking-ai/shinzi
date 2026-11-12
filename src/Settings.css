@@ -366,6 +366,11 @@
 /* ==========================================================
    TEXT STYLES MODAL (from notebook 20261112_175229.jpg)
    ========================================================== */
+.sh-ts-page {
+  z-index: 1000 !important;
+  background: #000000 !important;
+}
+
 .sh-ts-add-btn {
   display: flex;
   align-items: center;
