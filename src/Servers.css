@@ -1866,6 +1866,30 @@
   box-sizing: border-box;
 }
 
+/* Category name input box (clean without icon trigger) */
+.sh-category-name-input-wrap {
+  display: flex;
+  align-items: center;
+  background: #12131a;
+  border: 1px solid #262736;
+  border-radius: 10px;
+  padding: 0 14px;
+  height: 48px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.sh-category-name-input-wrap input {
+  flex: 1;
+  width: 100%;
+  background: transparent !important;
+  border: 0 !important;
+  color: #ffffff;
+  font-size: 15px;
+  outline: none;
+  padding: 0;
+}
+
 .sh-channel-icon-wrap {
   position: relative;
   display: inline-flex;

@@ -71,6 +71,7 @@ export interface ServerCategory {
   id: string;
   name: string;
   channels: ServerChannel[];
+  isPrivate?: boolean;
 }
 
 export interface ServerData {
@@ -465,6 +466,11 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
   const [editChannelIsPrivate, setEditChannelIsPrivate] = useState(false);
   const [editChannelIcon, setEditChannelIcon] = useState<string>('');
   const editChannelIconInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Edit Category Modal State
+  const [editingCategory, setEditingCategory] = useState<ServerCategory | null>(null);
+  const [editCategoryName, setEditCategoryName] = useState('');
+  const [editCategoryIsPrivate, setEditCategoryIsPrivate] = useState(false);
 
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const bannerInputRef = useRef<HTMLInputElement | null>(null);
@@ -1205,6 +1211,83 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     setEditingChannel(null);
   };
 
+  // Save Edited Category Action
+  const handleSaveEditedCategory = async () => {
+    if (!activeServer || !editingCategory || !editCategoryName.trim()) return;
+    const isNowPrivate = editCategoryIsPrivate;
+
+    const updatedCategories = activeServer.categories.map((cat) => {
+      if (cat.id === editingCategory.id) {
+        // If category is private, all channels inside it become auto private
+        const updatedChannels = isNowPrivate
+          ? cat.channels.map((ch) => ({ ...ch, isPrivate: true }))
+          : cat.channels;
+        return {
+          ...cat,
+          name: editCategoryName.trim(),
+          isPrivate: isNowPrivate,
+          channels: updatedChannels,
+        };
+      }
+      return cat;
+    });
+
+    const updatedServer: ServerData = {
+      ...activeServer,
+      categories: updatedCategories,
+    };
+
+    await updateServerInStateAndStorage(updatedServer);
+    setEditingCategory(null);
+  };
+
+  // Delete Category Action
+  const handleDeleteCategory = async (catId: string) => {
+    if (!activeServer) return;
+    const cat = activeServer.categories.find((c) => c.id === catId);
+    if (!cat) return;
+    if (!confirm(`Are you sure you want to delete category "${cat.name}" and all its channels?`)) {
+      return;
+    }
+    const updatedCategories = activeServer.categories.filter((c) => c.id !== catId);
+    await updateServerInStateAndStorage({
+      ...activeServer,
+      categories: updatedCategories,
+    });
+    setContextCategory(null);
+  };
+
+  // Delete Channel Action
+  const handleDeleteChannel = async (catId: string, channelId: string) => {
+    if (!activeServer) return;
+    let chName = 'this channel';
+    const updatedCategories = activeServer.categories.map((cat) => {
+      if (cat.id === catId) {
+        const target = cat.channels.find((c) => c.id === channelId);
+        if (target) chName = target.name;
+        return {
+          ...cat,
+          channels: cat.channels.filter((c) => c.id !== channelId),
+        };
+      }
+      return cat;
+    });
+
+    if (!confirm(`Are you sure you want to delete #${chName}?`)) {
+      return;
+    }
+
+    if (selectedChannel?.id === channelId) {
+      setSelectedChannel(null);
+    }
+
+    await updateServerInStateAndStorage({
+      ...activeServer,
+      categories: updatedCategories,
+    });
+    setContextChannel(null);
+  };
+
   // Delete Server Action (Owner only)
   const handleDeleteServer = async (srv: ServerData) => {
     if (!confirm(`Are you sure you want to delete "${srv.name}" permanently?`)) return;
@@ -1627,9 +1710,6 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
               )}
               <h3>Welcome to {selectedChannel.iconUrl ? '' : '#'}{selectedChannel.name}!</h3>
               <p>This is the start of the #{selectedChannel.name} channel.</p>
-              {selectedChannel.description && (
-                <p className="sh-channel-chat-desc">{selectedChannel.description}</p>
-              )}
             </div>
           ) : (
             channelMessages.map((msg: any) => {
@@ -2179,7 +2259,10 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                   onMouseUp={clearLongPress}
                   onMouseLeave={clearLongPress}
                 >
-                  <span className="sh-category-name">{cat.name}</span>
+                  <span className="sh-category-name" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    {cat.name}
+                    {cat.isPrivate && <Lock size={12} color="#949ba4" />}
+                  </span>
                   <ChevronDown
                     size={15}
                     className={`sh-category-chevron ${isCollapsed ? 'sh-category-chevron-collapsed' : ''}`}
@@ -2425,16 +2508,9 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                 type="button"
                 className="sh-context-sheet-item"
                 onClick={() => {
-                  const newName = prompt('Edit Category Name:', contextCategory.name);
-                  if (newName && newName.trim() && activeServer) {
-                    const updatedCategories = activeServer.categories.map((c) =>
-                      c.id === contextCategory.id ? { ...c, name: newName.trim() } : c
-                    );
-                    void updateServerInStateAndStorage({
-                      ...activeServer,
-                      categories: updatedCategories,
-                    });
-                  }
+                  setEditingCategory(contextCategory);
+                  setEditCategoryName(contextCategory.name);
+                  setEditCategoryIsPrivate(!!contextCategory.isPrivate);
                   setContextCategory(null);
                 }}
               >
@@ -2451,6 +2527,14 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
               >
                 <ArrowUpDown size={18} />
                 <span>Move Category</span>
+              </button>
+              <button
+                type="button"
+                className="sh-context-sheet-item sh-context-sheet-item-danger"
+                onClick={() => void handleDeleteCategory(contextCategory.id)}
+              >
+                <Trash2 size={18} color="#ff4b4b" />
+                <span>Delete Category</span>
               </button>
             </div>
           </div>
@@ -2496,6 +2580,14 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
               >
                 <ArrowUpDown size={18} />
                 <span>Move Channel</span>
+              </button>
+              <button
+                type="button"
+                className="sh-context-sheet-item sh-context-sheet-item-danger"
+                onClick={() => void handleDeleteChannel(contextChannel.catId, contextChannel.channel.id)}
+              >
+                <Trash2 size={18} color="#ff4b4b" />
+                <span>Delete Channel</span>
               </button>
             </div>
           </div>
@@ -2808,6 +2900,70 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                 style={{ marginTop: 24 }}
                 disabled={!editChannelName.trim()}
                 onClick={handleSaveEditedChannel}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Category Modal */}
+        {editingCategory && (
+          <div className="sh-fullscreen-modal">
+            <div className="sh-fullscreen-modal-header">
+              <button
+                type="button"
+                className="sh-servers-icon-btn"
+                onClick={() => setEditingCategory(null)}
+              >
+                <ArrowLeft size={20} />
+              </button>
+              <h2>Edit Category</h2>
+              <div style={{ width: 40 }} />
+            </div>
+
+            <div className="sh-fullscreen-modal-body">
+              {/* Category Name */}
+              <div className="sh-create-input-group">
+                <label className="sh-create-label">Category Name</label>
+                <div className="sh-category-name-input-wrap">
+                  <input
+                    type="text"
+                    placeholder="Category Name"
+                    value={editCategoryName}
+                    onChange={(e) => setEditCategoryName(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Category Type Segmented Toggle: [ Public | Private ] */}
+              <div className="sh-create-input-group">
+                <label className="sh-create-label">Category Type</label>
+                <div className="sh-segmented-toggle">
+                  <button
+                    type="button"
+                    className={`sh-segmented-btn ${!editCategoryIsPrivate ? 'sh-segmented-btn-active' : ''}`}
+                    onClick={() => setEditCategoryIsPrivate(false)}
+                  >
+                    Public
+                  </button>
+                  <button
+                    type="button"
+                    className={`sh-segmented-btn ${editCategoryIsPrivate ? 'sh-segmented-btn-active' : ''}`}
+                    onClick={() => setEditCategoryIsPrivate(true)}
+                  >
+                    Private
+                  </button>
+                </div>
+              </div>
+
+              {/* Done Button at bottom */}
+              <button
+                type="button"
+                className="sh-create-submit-btn"
+                style={{ marginTop: 24 }}
+                disabled={!editCategoryName.trim()}
+                onClick={handleSaveEditedCategory}
               >
                 Done
               </button>
