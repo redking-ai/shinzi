@@ -1622,3 +1622,258 @@ body {
   border-radius: 50%;
   background-color: #5865F2;
 }
+
+/* ===== Discord-style Status Thought Bubble (IMG-20261112-WA0009, IMG-20261112-WA0010) ===== */
+.sh-status-bubble-wrap {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+  align-self: center;
+  margin-bottom: 8px;
+  margin-left: 6px;
+  cursor: pointer;
+  user-select: none;
+  z-index: 10;
+  transition: transform 0.1s ease;
+}
+
+.sh-status-bubble-wrap:active {
+  transform: scale(0.97);
+}
+
+/* Small dot 1 beside avatar edge */
+.sh-status-bubble-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #000000;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+/* Main thought bubble body */
+.sh-status-bubble {
+  position: relative;
+  background: #000000;
+  border-radius: 20px;
+  padding: 7px 16px;
+  color: #ffffff;
+  font-size: 13.5px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 165px);
+  word-break: break-word;
+  white-space: pre-wrap;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+
+/* Top bump on thought bubble */
+.sh-status-bubble::before {
+  content: "";
+  position: absolute;
+  left: 14px;
+  top: -6px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #000000;
+}
+
+.sh-status-plus-circle {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #000000;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sh-status-bubble-text {
+  position: relative;
+  z-index: 1;
+}
+
+/* ===== Set a status Screen (Screenshot_20261104-175239_Root) ===== */
+.sh-set-status-page {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  background: #0b0e14;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
+  animation: fadeIn 0.2s ease;
+}
+
+.sh-set-status-topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.sh-set-status-back-btn {
+  background: transparent;
+  border: none;
+  color: #dbdee1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 50%;
+}
+
+.sh-set-status-back-btn:active {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.sh-set-status-title {
+  font-size: 19px;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0;
+}
+
+.sh-set-status-card {
+  margin: 20px 16px 24px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #1e1f22;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.sh-set-status-banner {
+  height: 130px;
+  background-size: cover;
+  background-position: center;
+  background-color: #eb459e;
+}
+
+.sh-set-status-card-body {
+  height: 54px;
+  position: relative;
+  background: #1e1f22;
+  padding: 0 16px;
+}
+
+.sh-set-status-avatar-wrap {
+  position: absolute;
+  left: 16px;
+  top: -38px;
+  width: 72px;
+  height: 72px;
+  border-radius: 18px;
+  border: 4px solid #1e1f22;
+  background: #2b2d31;
+  overflow: visible;
+}
+
+.sh-set-status-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 14px;
+  object-fit: cover;
+  display: block;
+}
+
+.sh-set-status-avatar-fallback {
+  width: 100%;
+  height: 100%;
+  border-radius: 14px;
+  background: #5865f2;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.sh-set-status-form {
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.sh-set-status-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #949ba4;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.sh-set-status-input-box {
+  background: #111214;
+  border: 1px solid #35363c;
+  border-radius: 8px;
+  padding: 12px 14px;
+  transition: border-color 0.15s ease;
+}
+
+.sh-set-status-input-box:focus-within {
+  border-color: #5865f2;
+}
+
+.sh-set-status-input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: #ffffff;
+  font-size: 15px;
+  outline: none;
+  font-family: inherit;
+}
+
+.sh-set-status-input::placeholder {
+  color: #80848e;
+}
+
+.sh-set-status-counter {
+  text-align: right;
+  font-size: 12px;
+  color: #80848e;
+  margin-top: 6px;
+}
+
+.sh-set-status-bottom {
+  margin-top: auto;
+  padding: 16px 16px max(24px, env(safe-area-inset-bottom, 24px));
+}
+
+.sh-set-status-save-btn {
+  width: 100%;
+  height: 48px;
+  border-radius: 24px;
+  border: none;
+  background: #35373c;
+  color: #80848e;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: default;
+  transition: all 0.15s ease;
+}
+
+.sh-set-status-save-btn.sh-set-status-save-active {
+  background: #5865f2;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.sh-set-status-save-btn.sh-set-status-save-active:active {
+  background: #4752c4;
+}

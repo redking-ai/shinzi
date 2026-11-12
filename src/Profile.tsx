@@ -8,6 +8,7 @@ import {
 } from 'firebase/firestore';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import {
+  ArrowLeft,
   MessageCircle,
   Pencil,
   Plus,
@@ -171,6 +172,53 @@ useEffect(() => {
   });
 
   const [showStatusSheet, setShowStatusSheet] = useState(false);
+  const [showSetStatusModal, setShowSetStatusModal] = useState(false);
+  const [statusInput, setStatusInput] = useState('');
+  const [statusSaving, setStatusSaving] = useState(false);
+
+  useEffect(() => {
+    if (!showSetStatusModal) return;
+    const handlePopState = () => {
+      setShowSetStatusModal(false);
+    };
+    window.history.pushState({ modal: 'set-status' }, '');
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [showSetStatusModal]);
+
+  const handleCloseSetStatus = () => {
+    if (typeof window !== 'undefined' && window.history.state?.modal === 'set-status') {
+      window.history.back();
+    } else {
+      setShowSetStatusModal(false);
+    }
+  };
+
+  const handleSaveStatus = async (newStatus: string) => {
+    if (!currentUser) return;
+    setStatusSaving(true);
+    try {
+      const cleanStatus = newStatus.trim().slice(0, 100);
+      const userRef = doc(db, 'users', currentUser.uid);
+      await updateDoc(userRef, {
+        bubleText: cleanStatus,
+        updatedAt: serverTimestamp(),
+      });
+      setUserData((prev) => (prev ? { ...prev, bubleText: cleanStatus } : prev));
+      setEditForm((prev) => ({ ...prev, bubleText: cleanStatus }));
+      setCachedProfile(currentUser.uid, {
+        ...(userData || {}),
+        bubleText: cleanStatus,
+      });
+      handleCloseSetStatus();
+    } catch (err) {
+      console.error('Error saving status:', err);
+    } finally {
+      setStatusSaving(false);
+    }
+  };
 
   const [isBrowserOnline, setIsBrowserOnline] = useState<boolean>(() => {
     return typeof navigator !== 'undefined' ? navigator.onLine : true;
@@ -1040,40 +1088,45 @@ useEffect(() => {
               )}
             </div>
 
-            {isEditing ? (
-              <div className="sh-profile-bubble sh-bubble-editing">
-                {!editForm.bubleText && <Plus size={16} aria-hidden="true" />}
-                <input
-                  className="sh-bubble-input"
-                  aria-label="Thought"
-                  placeholder="Add thought"
-                  maxLength={100}
-                  value={editForm.bubleText}
-                  onChange={(e) =>
-                    setEditForm((v) => ({
-                      ...v,
-                      bubleText: e.target.value.replace(/^\+\s*/, ''),
-                    }))
-                  }
-                />
-              </div>
-            ) : userData.bubleText ? (
-              <div className="sh-profile-bubble">
-                {String(userData.bubleText).replace(/^\+\s*/, '')}
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="sh-profile-bubble sh-bubble-add"
-                onClick={() => {
-                  setError('');
-                  setIsEditing(true);
-                }}
-              >
-                <Plus size={16} aria-hidden="true" />
-                <span>Add thought</span>
-              </button>
-            )}
+            {/* Discord Status Thought Bubble (IMG-20261112-WA0009, IMG-20261112-WA0010) */}
+            {(() => {
+              const currentStatus = String(
+                (isEditing ? editForm.bubleText : userData?.bubleText) ||
+                userData?.bubleText ||
+                editForm.bubleText ||
+                ''
+              ).replace(/^\+\s*/, '').trim();
+
+              return (
+                <div
+                  className="sh-status-bubble-wrap"
+                  onClick={() => {
+                    setStatusInput(currentStatus);
+                    setShowSetStatusModal(true);
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={currentStatus ? `Status: ${currentStatus}` : 'Add Status'}
+                  title={currentStatus ? 'Change Status' : 'Add Status'}
+                >
+                  <div className="sh-status-bubble-dot" aria-hidden="true" />
+                  <div className="sh-status-bubble">
+                    {currentStatus ? (
+                      <span className="sh-status-bubble-text">
+                        {renderStyledContent(currentStatus)}
+                      </span>
+                    ) : (
+                      <>
+                        <span className="sh-status-plus-circle" aria-hidden="true">
+                          <Plus size={12} strokeWidth={3} />
+                        </span>
+                        <span>Add Status</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           <div className="sh-identity-copy">
@@ -1390,6 +1443,89 @@ useEffect(() => {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Set a status Modal (Screenshot_20261104-175239_Root) */}
+      {showSetStatusModal && (
+        <div className="sh-set-status-page" role="dialog" aria-modal="true" aria-label="Set a status">
+          <header className="sh-set-status-topbar">
+            <button
+              type="button"
+              className="sh-set-status-back-btn"
+              onClick={handleCloseSetStatus}
+              aria-label="Go back"
+            >
+              <ArrowLeft size={22} />
+            </button>
+            <h1 className="sh-set-status-title">Set a status</h1>
+          </header>
+
+          <div className="sh-set-status-card">
+            <div
+              className="sh-set-status-banner"
+              style={
+                bannerImageUri && !isMediaVideo(bannerImageUri)
+                  ? { backgroundImage: `url("${bannerImageUri}")` }
+                  : userData?.bannerColor
+                  ? { backgroundColor: userData.bannerColor }
+                  : { background: 'linear-gradient(135deg, #eb459e, #b83377)' }
+              }
+            />
+            <div className="sh-set-status-card-body">
+              <div className="sh-set-status-avatar-wrap">
+                {profileImageUri && !isMediaVideo(profileImageUri) ? (
+                  <img src={profileImageUri} alt="Avatar" className="sh-set-status-avatar-img" />
+                ) : (
+                  <div className="sh-set-status-avatar-fallback">
+                    {(userData?.displayName || currentUser?.displayName || 'U').charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div className={`sh-status-badge sh-status-${effectiveStatus}`}>
+                  {effectiveStatus === 'dnd' && <div className="sh-status-dnd-bar" />}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="sh-set-status-form">
+            <label className="sh-set-status-label" htmlFor="sh-status-input">
+              Status
+            </label>
+            <div className="sh-set-status-input-box">
+              <input
+                id="sh-status-input"
+                type="text"
+                className="sh-set-status-input"
+                placeholder="What's on your mind?"
+                maxLength={100}
+                value={statusInput}
+                onChange={(e) => setStatusInput(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="sh-set-status-counter">
+              {statusInput.length}/100
+            </div>
+          </div>
+
+          <div className="sh-set-status-bottom">
+            <button
+              type="button"
+              className={`sh-set-status-save-btn ${
+                statusInput.trim() !== String(userData?.bubleText ?? editForm.bubleText ?? '').replace(/^\+\s*/, '').trim()
+                  ? 'sh-set-status-save-active'
+                  : ''
+              }`}
+              disabled={
+                statusSaving ||
+                statusInput.trim() === String(userData?.bubleText ?? editForm.bubleText ?? '').replace(/^\+\s*/, '').trim()
+              }
+              onClick={() => void handleSaveStatus(statusInput)}
+            >
+              {statusSaving ? 'Saving…' : 'Save'}
+            </button>
           </div>
         </div>
       )}

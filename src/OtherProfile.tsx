@@ -654,8 +654,13 @@ export default function OtherProfile({
             </div>
 
             {userData.bubleText && (
-              <div className="sh-profile-bubble">
-                {String(userData.bubleText).replace(/^\+\s*/, '')}
+              <div className="sh-status-bubble-wrap" style={{ cursor: 'default' }}>
+                <div className="sh-status-bubble-dot" aria-hidden="true" />
+                <div className="sh-status-bubble">
+                  <span className="sh-status-bubble-text">
+                    {renderStyledContent(String(userData.bubleText).replace(/^\+\s*/, ''))}
+                  </span>
+                </div>
               </div>
             )}
           </div>
