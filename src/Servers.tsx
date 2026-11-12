@@ -428,6 +428,17 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
   const channelRecordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
+  const [localChannelError, setLocalChannelError] = useState<{ id: string; text: string } | null>(null);
+  const localChannelErrorTimer = useRef<number | null>(null);
+
+  const showLocalChannelError = (errText: string) => {
+    if (localChannelErrorTimer.current) window.clearTimeout(localChannelErrorTimer.current);
+    setLocalChannelError({ id: String(Date.now()), text: errText });
+    localChannelErrorTimer.current = window.setTimeout(() => {
+      setLocalChannelError(null);
+    }, 12000);
+  };
+
   // Channel Activity / Typing Indicators (matches Chat.tsx)
   const [channelActivity, setChannelActivity] = useState<Record<string, any>>({});
   const [activityNow, setActivityNow] = useState(Date.now());
@@ -1033,19 +1044,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     // Check syntax for (ts ...) and {ts ...} tags
     const syntaxValidation = validateTextStyleSyntax(textToSend);
     if (!syntaxValidation.isValid) {
-      const errId = `err-${Date.now()}`;
-      const errMsg: ServerChannelMessage = {
-        id: errId,
-        senderId: 'system',
-        senderName: 'System',
-        text: syntaxValidation.error || 'Unsupported syntax. Please enter a space, e.g. (ts ashetic)',
-        isError: true,
-        createdAt: Date.now(),
-      } as any;
-      setChannelMessages((prev) => [...prev, errMsg]);
-      setTimeout(() => {
-        setChannelMessages((prev) => prev.filter((m) => m.id !== errId));
-      }, 10000);
+      showLocalChannelError(syntaxValidation.error || 'Unsupported syntax. Please enter a space, e.g. (ts ashetic)');
       return;
     }
 
@@ -2136,6 +2135,44 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                 <>Tons of people are typing...</>
               )}
             </span>
+          </div>
+        )}
+
+        {localChannelError && (
+          <div
+            role="alert"
+            style={{
+              margin: '0 12px 8px',
+              padding: '8px 14px',
+              borderRadius: 8,
+              background: 'rgba(255, 75, 75, 0.14)',
+              border: '1px solid rgba(255, 75, 75, 0.35)',
+              color: '#ff4b4b',
+              fontSize: 13,
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              animation: 'fadeIn 0.2s ease',
+            }}
+          >
+            <span>{localChannelError.text}</span>
+            <button
+              type="button"
+              onClick={() => setLocalChannelError(null)}
+              style={{
+                background: 'transparent',
+                border: 0,
+                color: '#ff4b4b',
+                fontSize: 18,
+                cursor: 'pointer',
+                lineHeight: 1,
+                padding: '0 4px',
+              }}
+              aria-label="Dismiss error"
+            >
+              ×
+            </button>
           </div>
         )}
 

@@ -169,14 +169,21 @@ const KNOWN_FONTS: Record<string, string> = {
 
 const STORAGE_KEY = 'shinzi_custom_text_styles';
 
-// Auto-cleanup any broken 'ofl' style imported by mistake from OFL.txt license file
+// Auto-cleanup any corrupted, test, or auto-generated fake styles
 if (typeof window !== 'undefined') {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed.ofl && (!parsed.ofl.type || parsed.ofl.type !== 'font')) {
-        delete parsed.ofl;
+      const bogus = ['ashetic', 'asetic', 'ashe', 'ofl'];
+      let changed = false;
+      for (const b of bogus) {
+        if (parsed[b]) {
+          delete parsed[b];
+          changed = true;
+        }
+      }
+      if (changed) {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
       }
     }
@@ -288,13 +295,13 @@ export function registerFontFace(fontFamily: string, srcUrl?: string): void {
 }
 
 /**
- * Auto-resolves unknown style keys across devices and caches them locally.
+ * Auto-resolves recognized font names across devices without cluttering the user's custom styles list.
  */
 export function autoResolveAndCacheStyle(styleKey: string, styleData?: TextStyleDefinition): TextStyleDefinition | null {
   const cleanKey = styleKey.toLowerCase().replace(/[^a-z0-9_-]/g, '');
   if (!cleanKey) return null;
 
-  // 1. If explicit styleData provided from message, save and register it immediately!
+  // 1. If explicit styleData provided from incoming message, register and cache it
   if (styleData && (styleData.fontFamily || styleData.map)) {
     const current = getCustomStyles();
     current[cleanKey] = {
@@ -322,23 +329,17 @@ export function autoResolveAndCacheStyle(styleKey: string, styleData?: TextStyle
     return allStyles[cleanKey];
   }
 
-  // 3. Fallback: Check known Google font or title-cased name
-  const guessedFamily = KNOWN_FONTS[cleanKey] || cleanKey.charAt(0).toUpperCase() + cleanKey.slice(1);
-  if (guessedFamily && typeof window !== 'undefined') {
-    registerFontFace(guessedFamily);
-    const newDef: TextStyleDefinition = {
+  // 3. Only resolve if explicitly recognized in KNOWN_FONTS; do NOT invent or persist unknown names!
+  const knownFamily = KNOWN_FONTS[cleanKey];
+  if (knownFamily && typeof window !== 'undefined') {
+    registerFontFace(knownFamily);
+    return {
       id: cleanKey,
-      name: guessedFamily,
+      name: knownFamily,
       isCustom: true,
       type: 'font',
-      fontFamily: guessedFamily,
+      fontFamily: knownFamily,
     };
-    const current = getCustomStyles();
-    current[cleanKey] = newDef;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
-    } catch {}
-    return newDef;
   }
 
   return null;
@@ -377,6 +378,7 @@ export function importIncomingStyleData(styleDataMap?: Record<string, TextStyleD
 
 /**
  * Inspects a message text and returns style definitions for any custom styles used.
+ * Guarantees no 'undefined' fields so Firestore never rejects addDoc!
  */
 export function getUsedStylesData(text: string): Record<string, any> | undefined {
   if (!text) return undefined;
@@ -387,16 +389,19 @@ export function getUsedStylesData(text: string): Record<string, any> | undefined
 
   while ((match = tagRegex.exec(text)) !== null) {
     const cleanKey = match[1].trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
-    const style = allStyles[cleanKey] || autoResolveAndCacheStyle(cleanKey);
+    const style = allStyles[cleanKey];
     if (style && style.isCustom) {
-      result[cleanKey] = {
+      const entry: Record<string, any> = {
         id: style.id,
         name: style.name,
-        type: style.type,
-        fontFamily: style.fontFamily,
-        fontDataUrl: (style.fontDataUrl && style.fontDataUrl.length < 200000) ? style.fontDataUrl : undefined,
-        map: style.map,
+        type: style.type || 'font',
       };
+      if (style.fontFamily) entry.fontFamily = style.fontFamily;
+      if (style.fontDataUrl && style.fontDataUrl.length < 200000) {
+        entry.fontDataUrl = style.fontDataUrl;
+      }
+      if (style.map) entry.map = style.map;
+      result[cleanKey] = entry;
     }
   }
 
@@ -435,12 +440,10 @@ export function extractFontFamilyFromTTF(buffer: ArrayBuffer): string | null {
       const strStart = stringOffset + offset;
       let str = '';
       if (platformId === 0 || platformId === 3) {
-        // UTF-16BE
         for (let j = 0; j < length; j += 2) {
           str += String.fromCharCode(view.getUint16(strStart + j, false));
         }
       } else {
-        // ASCII / UTF-8
         for (let j = 0; j < length; j++) {
           str += String.fromCharCode(view.getUint8(strStart + j));
         }
@@ -477,14 +480,17 @@ if (typeof window !== 'undefined') {
 
 /**
  * Validates text style syntax.
- * If user writes (tsashetic) or {tsashetic} without a space,
- * returns error describing the issue.
+ * Checks for:
+ * 1. Missing space: e.g. (tsashetic) or {tsashetic} -> must enter a space.
+ * 2. Unknown style: e.g. (ts ashe) where 'ashe' is not in text styles list -> shows error.
  */
 export function validateTextStyleSyntax(text: string): { isValid: boolean; error?: string } {
   if (!text) return { isValid: true };
-  const invalidMatch = text.match(/[({]ts(?!\s)[a-zA-Z0-9_-]+[)}]/i);
-  if (invalidMatch) {
-    const raw = invalidMatch[0];
+
+  // 1. Missing space check e.g. (tsashe) or {tsashetic}
+  const missingSpaceMatch = text.match(/[({]ts(?!\s)[a-zA-Z0-9_-]+[)}]/i);
+  if (missingSpaceMatch) {
+    const raw = missingSpaceMatch[0];
     const stylePart = raw.slice(3, -1);
     const bracketOpen = raw[0];
     const bracketClose = raw[raw.length - 1];
@@ -493,6 +499,23 @@ export function validateTextStyleSyntax(text: string): { isValid: boolean; error
       error: `Unsupported syntax. Please enter a space: it should be ${bracketOpen}ts ${stylePart}${bracketClose}`,
     };
   }
+
+  // 2. Unknown style name check e.g. (ts ashe)
+  const tagRegex = /[({]ts\s+([a-zA-Z0-9_\s-]+?)[)}]/gi;
+  const allStyles = getAllTextStyles();
+  let match: RegExpExecArray | null;
+
+  while ((match = tagRegex.exec(text)) !== null) {
+    const styleName = match[1].trim();
+    const cleanKey = styleName.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    if (!allStyles[cleanKey] && !KNOWN_FONTS[cleanKey]) {
+      return {
+        isValid: false,
+        error: `"${styleName}" does not exist in text styles list`,
+      };
+    }
+  }
+
   return { isValid: true };
 }
 

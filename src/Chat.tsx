@@ -439,7 +439,8 @@ const getReplyExcerpt = (msg: Rec | null | undefined): string => {
   if (isGifMessage(msg)) return msg.text || 'GIF';
   if (msg.type === 'video' || msg.mediaItems?.[0]?.type === 'video') return msg.text || 'Video';
   if (msg.type === 'image' || msg.type === 'media' || msg.driveFileId || msg.mediaUrl) return msg.text || 'Photo';
-  return String(msg.text || '').slice(0, 100);
+  const raw = String(msg.text || '').slice(0, 100);
+  return raw.replace(/[({]ts\s+[a-zA-Z0-9_\s-]+?[)}]\s?/gi, '');
 };
 
 const renderReplyContent = (msg: Rec | null | undefined, textFallback?: string) => {
@@ -490,7 +491,7 @@ const renderReplyContent = (msg: Rec | null | undefined, textFallback?: string) 
   if (msg.type === 'voice') return '🎤 Voice message';
   if (msg.type === 'poll') return `Poll: ${msg.question || ''}`;
   if (msg.type === 'event') return `Event: ${msg.name || ''}`;
-  return textFallback || String(msg.text || '').slice(0, 100);
+  return renderStyledContent(textFallback || String(msg.text || '').slice(0, 100));
 };
 
 const renderReplyFromReplyTo = (replyTo: any, fallbackText: string) => {
@@ -535,7 +536,7 @@ const renderReplyFromReplyTo = (replyTo: any, fallbackText: string) => {
       </span>
     );
   }
-  return fallbackText;
+  return renderStyledContent(fallbackText);
 };
 
 const buildReplyToPayload = (targetReply: Rec): Rec => {
@@ -1352,6 +1353,17 @@ export default function Chat({ onNavigate }: ChatProps) {
   } | null>(null);
   const [viewingProfileUid, setViewingProfileUid] = useState<string | null>(null);
   const [stagedMedia, setStagedMedia] = useState<StagedAttachment[]>([]);
+  const [localChatError, setLocalChatError] = useState<{ id: string; text: string } | null>(null);
+  const localChatErrorTimer = useRef<number | null>(null);
+
+  const showLocalChatError = (errText: string) => {
+    if (localChatErrorTimer.current) window.clearTimeout(localChatErrorTimer.current);
+    setLocalChatError({ id: String(Date.now()), text: errText });
+    localChatErrorTimer.current = window.setTimeout(() => {
+      setLocalChatError(null);
+    }, 12000);
+  };
+
   const pendingCaretRef = useRef<number | null>(null);
 
   const removeStagedMedia = (id: string) => {
@@ -2742,19 +2754,7 @@ const handleSearchMessage = async (target: Rec) => {
       if (rawEdit) {
         const syntaxValidation = validateTextStyleSyntax(rawEdit);
         if (!syntaxValidation.isValid) {
-          const errId = `err-${Date.now()}`;
-          const errMsg: Rec = {
-            id: errId,
-            text: syntaxValidation.error || 'Unsupported syntax. Please enter a space, e.g. (ts ashetic)',
-            senderId: 'system',
-            senderName: 'System',
-            createdAt: Date.now(),
-            isError: true,
-          };
-          setMessages((prev) => [...prev, errMsg]);
-          setTimeout(() => {
-            setMessages((prev) => prev.filter((m) => m.id !== errId));
-          }, 10000);
+          showLocalChatError(syntaxValidation.error || 'Unsupported syntax.');
           return;
         }
         const newText = applyTextStyles(rawEdit);
@@ -2781,19 +2781,7 @@ const handleSearchMessage = async (target: Rec) => {
     if (rawText) {
       const syntaxValidation = validateTextStyleSyntax(rawText);
       if (!syntaxValidation.isValid) {
-        const errId = `err-${Date.now()}`;
-        const errMsg: Rec = {
-          id: errId,
-          text: syntaxValidation.error || 'Unsupported syntax. Please enter a space, e.g. (ts ashetic)',
-          senderId: 'system',
-          senderName: 'System',
-          createdAt: Date.now(),
-          isError: true,
-        };
-        setMessages((prev) => [...prev, errMsg]);
-        setTimeout(() => {
-          setMessages((prev) => prev.filter((m) => m.id !== errId));
-        }, 10000);
+        showLocalChatError(syntaxValidation.error || 'Unsupported syntax.');
         return;
       }
     }
@@ -5866,6 +5854,44 @@ const handleSearchMessage = async (target: Rec) => {
           >
             <ChevronDown size={20} />
           </button>
+        )}
+
+        {localChatError && (
+          <div
+            role="alert"
+            style={{
+              margin: '0 12px 8px',
+              padding: '8px 14px',
+              borderRadius: 8,
+              background: 'rgba(255, 75, 75, 0.14)',
+              border: '1px solid rgba(255, 75, 75, 0.35)',
+              color: '#ff4b4b',
+              fontSize: 13,
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              animation: 'fadeIn 0.2s ease',
+            }}
+          >
+            <span>{localChatError.text}</span>
+            <button
+              type="button"
+              onClick={() => setLocalChatError(null)}
+              style={{
+                background: 'transparent',
+                border: 0,
+                color: '#ff4b4b',
+                fontSize: 18,
+                cursor: 'pointer',
+                lineHeight: 1,
+                padding: '0 4px',
+              }}
+              aria-label="Dismiss error"
+            >
+              ×
+            </button>
+          </div>
         )}
 
         <div className="shc-composer-wrap">

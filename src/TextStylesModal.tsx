@@ -224,7 +224,7 @@ export default function TextStylesModal({ onBack, showToast }: TextStylesModalPr
           onClick={() => fileInputRef.current?.click()}
         >
           <Plus size={18} />
-          <span>{uploading ? 'Uploading to Drive...' : '+ Add new text style'}</span>
+          <span>{uploading ? 'Uploading to Drive...' : 'Add new text style'}</span>
         </button>
 
         {/* Section title */}
