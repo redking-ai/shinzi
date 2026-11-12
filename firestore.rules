@@ -337,6 +337,10 @@ match /servers/{serverId} {
   match /channels/{channelId}/messages/{messageId} {
     allow read, write: if request.auth != null;
   }
+
+  match /channels/{channelId}/activity/{activityUid} {
+    allow read, write: if request.auth != null;
+  }
 }  
 
 // ==============================  

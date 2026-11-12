@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
 import './Servers.css';
 import './Chat.css';
 import type { CategoryButtonRenderProps } from 'emoji-picker-react';
@@ -189,15 +189,63 @@ async function processServerImage(file: File, isBanner: boolean | 'chat'): Promi
   });
 }
 
-function formatMessageTime(createdAt: any): string {
-  if (!createdAt) return '';
-  try {
-    const date = createdAt.toDate ? createdAt.toDate() : new Date(createdAt);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  } catch {
-    return '';
+const millis = (value: any): number => {
+  if (!value) return 0;
+  if (typeof value === 'number') return value;
+  if (typeof value?.toMillis === 'function') return value.toMillis();
+  if (typeof value?.toDate === 'function') return value.toDate().getTime();
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    if (!isNaN(parsed)) return parsed;
   }
-}
+  return 0;
+};
+
+const dayKey = (value: any) => {
+  if (!millis(value)) return '';
+  const d = new Date(millis(value));
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+};
+
+const dateLabel = (value: any) => {
+  if (!millis(value)) return '';
+  const d = new Date(millis(value));
+  const now = new Date();
+  const y = new Date();
+  y.setDate(y.getDate() - 1);
+
+  if (dayKey(d) === dayKey(now)) return 'Today';
+  if (dayKey(d) === dayKey(y)) return 'Yesterday';
+
+  return d.toLocaleDateString([], {
+    day: 'numeric',
+    month: 'short',
+    year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric',
+  });
+};
+
+const formatDiscordTimestamp = (value: any) => {
+  const ms = millis(value);
+  const d = ms > 0 ? new Date(ms) : new Date();
+  const now = new Date();
+  const y = new Date();
+  y.setDate(y.getDate() - 1);
+
+  const timeStr = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+  if (dayKey(d) === dayKey(now)) {
+    return `Today at ${timeStr}`;
+  }
+  if (dayKey(d) === dayKey(y)) {
+    return `Yesterday at ${timeStr}`;
+  }
+
+  const month = (d.getMonth() + 1).toString().padStart(2, '0');
+  const day = d.getDate().toString().padStart(2, '0');
+  const year = d.getFullYear();
+  return `${month}/${day}/${year} ${timeStr}`;
+};
 
 /**
  * Resolves attachment URLs (assetId / providerFileId / imageUrl / mediaUrl)
@@ -372,6 +420,23 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
   const channelAudioChunksRef = useRef<Blob[]>([]);
   const channelRecordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  // Channel Activity / Typing Indicators (matches Chat.tsx)
+  const [channelActivity, setChannelActivity] = useState<Record<string, any>>({});
+  const [activityNow, setActivityNow] = useState(Date.now());
+  const channelTypingTimer = useRef<number | null>(null);
+  const lastChannelTypingPingRef = useRef<number>(0);
+
+  const channelTypingNames = useMemo(
+    () =>
+      Object.entries(channelActivity)
+        .filter(
+          ([id, data]) =>
+            id !== currentUser?.uid && data.typing === true && millis(data.expiresAt) > activityNow
+        )
+        .map(([, data]) => String(data.displayName || data.username || 'Someone')),
+    [channelActivity, activityNow, currentUser?.uid]
+  );
 
   // Memory Booter: Remember last visited channel per server (IMG-20261111-WA0001)
   const [lastChannelByServer, setLastChannelByServer] = useState<Record<string, string>>(() => {
@@ -675,6 +740,55 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     }
   }, [activeServer?.id, selectedChannel?.id, selectedChannel?.type, currentUser?.uid]);
 
+  // Real-time typing activity listener for active channel (matches Chat.tsx)
+  useEffect(() => {
+    if (!activeServer?.id || !selectedChannel?.id || !currentUser?.uid) {
+      setChannelActivity({});
+      return undefined;
+    }
+
+    try {
+      const activityRef = collection(
+        db,
+        'servers',
+        activeServer.id,
+        'channels',
+        selectedChannel.id,
+        'activity'
+      );
+      return onSnapshot(
+        activityRef,
+        (snap) => {
+          const next: Record<string, any> = {};
+          snap.docs.forEach((item) => {
+            next[item.id] = item.data();
+          });
+          setChannelActivity(next);
+        },
+        (error) => {
+          console.warn('Channel typing listener warning:', error);
+        }
+      );
+    } catch (err) {
+      console.warn('Channel activity setup error:', err);
+      return undefined;
+    }
+  }, [activeServer?.id, selectedChannel?.id, currentUser?.uid]);
+
+  // Periodic ticker to purge expired typing indicators every 2s
+  useEffect(() => {
+    if (!selectedChannel) return undefined;
+    const timer = window.setInterval(() => setActivityNow(Date.now()), 2000);
+    return () => window.clearInterval(timer);
+  }, [selectedChannel]);
+
+  // Cleanup typing timers on unmount
+  useEffect(() => {
+    return () => {
+      if (channelTypingTimer.current) window.clearTimeout(channelTypingTimer.current);
+    };
+  }, []);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [channelMessages]);
@@ -807,6 +921,68 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     };
   }, [showChannelGifSheet, channelGifMode, channelGifSearch]);
 
+  // Publish typing status to Firestore channel activity subcollection
+  const publishChannelTyping = async (typing: boolean) => {
+    if (!currentUser?.uid || !activeServer?.id || !selectedChannel?.id) return;
+    try {
+      const userUid = currentUser.uid;
+      const profile = senderProfiles[userUid];
+      const displayName =
+        profile?.displayName ||
+        currentUser.displayName ||
+        (currentUser as any).username ||
+        'Someone';
+
+      await setDoc(
+        doc(
+          db,
+          'servers',
+          activeServer.id,
+          'channels',
+          selectedChannel.id,
+          'activity',
+          userUid
+        ),
+        {
+          uid: userUid,
+          typing,
+          displayName,
+          username: (currentUser as any).username || '',
+          updatedAt: serverTimestamp(),
+          expiresAt: new Date(Date.now() + (typing ? 6000 : 1000)),
+        },
+        { merge: true }
+      );
+    } catch (error) {
+      console.warn('Channel typing state error:', error);
+    }
+  };
+
+  // Debounced & throttled typing input handler
+  const handleChannelInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const text = e.target.value;
+    setChannelInputText(text);
+
+    if (!text.trim()) {
+      if (channelTypingTimer.current) window.clearTimeout(channelTypingTimer.current);
+      lastChannelTypingPingRef.current = 0;
+      void publishChannelTyping(false);
+      return;
+    }
+
+    const nowMs = Date.now();
+    if (nowMs - lastChannelTypingPingRef.current > 3500) {
+      lastChannelTypingPingRef.current = nowMs;
+      void publishChannelTyping(true);
+    }
+
+    if (channelTypingTimer.current) window.clearTimeout(channelTypingTimer.current);
+    channelTypingTimer.current = window.setTimeout(() => {
+      void publishChannelTyping(false);
+      lastChannelTypingPingRef.current = 0;
+    }, 3500);
+  };
+
   // Send channel message with instant optimistic save & Firestore persistence
   const handleSendChannelMessage = async (
     imageUrl?: string,
@@ -815,6 +991,11 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     if (!activeServer || !selectedChannel) return;
     const textToSend = channelInputText.trim();
     if (!textToSend && !imageUrl && !extra?.audioUrl && !extra?.text && !extra?.fileName) return;
+
+    // Immediately stop typing indicator upon sending
+    void publishChannelTyping(false);
+    if (channelTypingTimer.current) window.clearTimeout(channelTypingTimer.current);
+    lastChannelTypingPingRef.current = 0;
 
     setChannelSendBusy(true);
     const userUid = currentUser?.uid || auth.currentUser?.uid || 'anon';
@@ -1712,82 +1893,130 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
               <p>This is the start of the #{selectedChannel.name} channel.</p>
             </div>
           ) : (
-            channelMessages.map((msg: any) => {
+            channelMessages.map((msg: any, index: number) => {
               const profile = senderProfiles[msg.senderId];
               const authorName = profile?.displayName || msg.senderName || 'User';
               const avatar = profile?.avatarUrl || msg.senderAvatar;
               const resolvedImgUrl = resolveChannelAttachmentUrl(msg, assetFileMap);
 
+              const previous = channelMessages[index - 1];
+              const showDay =
+                millis(msg.createdAt) > 0 &&
+                (!previous || dayKey(previous.createdAt) !== dayKey(msg.createdAt));
+
+              const timeGap =
+                previous && msg.createdAt && previous.createdAt
+                  ? Math.abs(millis(msg.createdAt) - millis(previous.createdAt)) > 5 * 60 * 1000
+                  : true;
+
+              const isFirstInGroup =
+                !previous ||
+                showDay ||
+                previous.senderId !== msg.senderId ||
+                timeGap ||
+                Boolean(msg.type === 'voice' || msg.type === 'file' || resolvedImgUrl);
+
               return (
-                <div key={msg.id} className="sh-channel-msg-row">
-                  <div className="sh-channel-msg-avatar shc-avatar-fallback">
-                    {avatar ? (
-                      <img src={avatar} alt={authorName} />
-                    ) : (
-                      authorName.charAt(0).toUpperCase()
-                    )}
-                  </div>
-                  <div className="sh-channel-msg-content">
-                    <div className="sh-channel-msg-header">
-                      <span className="sh-channel-msg-author">{authorName}</span>
-                      <span className="sh-channel-msg-time">{formatMessageTime(msg.createdAt)}</span>
+                <React.Fragment key={msg.id || index}>
+                  {showDay && (
+                    <div className="sh-channel-date-divider">
+                      <span>{dateLabel(msg.createdAt)}</span>
                     </div>
-                    {msg.text && (
-                      <div className="sh-channel-msg-text">
-                        {isEmojiOnly(msg.text) ? (
-                          <span className="shc-dc-jumbo-emoji">{msg.text.trim()}</span>
+                  )}
+                  <div
+                    className={`sh-channel-msg-row ${
+                      !isFirstInGroup ? 'sh-channel-msg-row-compact' : ''
+                    }`}
+                  >
+                    {isFirstInGroup ? (
+                      <div
+                        className="sh-channel-msg-avatar shc-avatar-fallback"
+                        onClick={() => {
+                          if (onOpenProfile) onOpenProfile();
+                        }}
+                      >
+                        {avatar ? (
+                          <img src={avatar} alt={authorName} />
                         ) : (
-                          msg.text
+                          authorName.charAt(0).toUpperCase()
                         )}
                       </div>
+                    ) : (
+                      <div className="sh-channel-msg-gutter" aria-hidden="true" />
                     )}
-                    {resolvedImgUrl && (
-                      <img
-                        src={resolvedImgUrl}
-                        alt="attachment"
-                        className="sh-channel-msg-img"
-                        onClick={() => window.open(resolvedImgUrl, '_blank')}
-                      />
-                    )}
-                    {msg.type === 'voice' && msg.audioUrl && (
-                      <div
-                        style={{
-                          marginTop: 6,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 8,
-                          background: '#1e1f22',
-                          padding: '8px 12px',
-                          borderRadius: 12,
-                          maxWidth: 320,
-                        }}
-                      >
-                        <audio controls src={msg.audioUrl} style={{ height: 32, maxWidth: 260 }} />
-                      </div>
-                    )}
-                    {msg.type === 'file' && (
-                      <a
-                        href={msg.fileUrl || '#'}
-                        download={msg.fileName || 'file'}
-                        className="shc-file-msg"
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 10,
-                          padding: '8px 14px',
-                          background: '#1e1f22',
-                          borderRadius: 10,
-                          marginTop: 6,
-                          textDecoration: 'none',
-                          border: '1px solid rgba(255,255,255,0.08)',
-                        }}
-                      >
-                        <FileText size={20} color="#5865F2" />
-                        <span style={{ fontSize: 13, color: '#00a8fc', fontWeight: 600 }}>{msg.fileName || 'Attachment'}</span>
-                      </a>
-                    )}
+                    <div className="sh-channel-msg-content">
+                      {isFirstInGroup && (
+                        <div className="sh-channel-msg-header">
+                          <span
+                            className="sh-channel-msg-author"
+                            onClick={() => {
+                              if (onOpenProfile) onOpenProfile();
+                            }}
+                          >
+                            {authorName}
+                          </span>
+                          <span className="sh-channel-msg-time">
+                            {formatDiscordTimestamp(msg.createdAt)}
+                          </span>
+                        </div>
+                      )}
+                      {msg.text && (
+                        <div className="sh-channel-msg-text">
+                          {isEmojiOnly(msg.text) ? (
+                            <span className="shc-dc-jumbo-emoji">{msg.text.trim()}</span>
+                          ) : (
+                            msg.text
+                          )}
+                        </div>
+                      )}
+                      {resolvedImgUrl && (
+                        <img
+                          src={resolvedImgUrl}
+                          alt="attachment"
+                          className="sh-channel-msg-img"
+                          onClick={() => window.open(resolvedImgUrl, '_blank')}
+                        />
+                      )}
+                      {msg.type === 'voice' && msg.audioUrl && (
+                        <div
+                          style={{
+                            marginTop: 6,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            background: '#1e1f22',
+                            padding: '8px 12px',
+                            borderRadius: 12,
+                            maxWidth: 320,
+                          }}
+                        >
+                          <audio controls src={msg.audioUrl} style={{ height: 32, maxWidth: 260 }} />
+                        </div>
+                      )}
+                      {msg.type === 'file' && (
+                        <a
+                          href={msg.fileUrl || '#'}
+                          download={msg.fileName || 'file'}
+                          className="shc-file-msg"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 10,
+                            padding: '8px 14px',
+                            background: '#1e1f22',
+                            borderRadius: 10,
+                            marginTop: 6,
+                            textDecoration: 'none',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                          }}
+                        >
+                          <FileText size={20} color="#5865F2" />
+                          <span style={{ fontSize: 13, color: '#00a8fc', fontWeight: 600 }}>{msg.fileName || 'Attachment'}</span>
+                        </a>
+                      )}
+                    </div>
                   </div>
-                </div>
+                </React.Fragment>
               );
             })
           )}
@@ -1824,6 +2053,28 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
           }}
         />
 
+        {/* Real-time typing indicator (matches Chat.tsx) */}
+        {channelTypingNames.length > 0 && (
+          <div className="shc-typing">
+            <span className="shc-typing-dots">
+              <i />
+              <i />
+              <i />
+            </span>
+            <span className="sh-channel-typing-text">
+              {channelTypingNames.length === 1 && (
+                <><strong>{channelTypingNames[0]}</strong> is typing...</>
+              )}
+              {channelTypingNames.length === 2 && (
+                <><strong>{channelTypingNames[0]}</strong> and <strong>{channelTypingNames[1]}</strong> are typing...</>
+              )}
+              {channelTypingNames.length > 2 && (
+                <>Tons of people are typing...</>
+              )}
+            </span>
+          </div>
+        )}
+
         {/* Full Working Chat Composer Bar (Item 6) */}
         <div className="shc-composer-wrap">
           <div className="shc-composer">
@@ -1849,7 +2100,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                     className="shc-composer-textarea"
                     placeholder={`Message #${selectedChannel.name}`}
                     value={channelInputText}
-                    onChange={(e) => setChannelInputText(e.target.value)}
+                    onChange={handleChannelInputChange}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();

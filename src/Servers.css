@@ -2121,11 +2121,47 @@
 /* ==========================================================
    SERVER TEXT CHANNEL CHAT & MORE ATTACHMENT MENU (Items 5 & 6)
    ========================================================== */
+.sh-channel-date-divider {
+  display: flex;
+  align-items: center;
+  margin: 18px 0 10px;
+  text-align: center;
+  user-select: none;
+}
+
+.sh-channel-date-divider::before,
+.sh-channel-date-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.sh-channel-date-divider span {
+  padding: 2px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #949ba4;
+  letter-spacing: 0.2px;
+}
+
 .sh-channel-msg-row {
   display: flex;
   align-items: flex-start;
   gap: 12px;
   padding: 4px 0;
+}
+
+.sh-channel-msg-row-compact {
+  padding: 1px 0 !important;
+  margin-top: -2px;
+}
+
+.sh-channel-msg-gutter {
+  width: 38px;
+  height: 14px;
+  flex-shrink: 0;
+  user-select: none;
 }
 
 .sh-channel-msg-avatar,
@@ -2145,6 +2181,7 @@
   flex-shrink: 0;
   overflow: hidden;
   user-select: none;
+  cursor: pointer;
 }
 
 .sh-channel-msg-avatar img {
@@ -2173,11 +2210,26 @@
   font-size: 14.5px;
   font-weight: 700;
   color: #ffffff;
+  cursor: pointer;
+}
+
+.sh-channel-msg-author:hover {
+  text-decoration: underline;
 }
 
 .sh-channel-msg-time {
   font-size: 11px;
   color: #949ba4;
+}
+
+.sh-channel-typing-text {
+  color: #949ba4;
+  font-size: 12px;
+}
+
+.sh-channel-typing-text strong {
+  font-weight: 700;
+  color: #ffffff;
 }
 
 .sh-channel-msg-text {
