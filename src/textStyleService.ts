@@ -7,6 +7,7 @@ import React from 'react';
  *  1. Built-in styles (Ashetic, Arabic, New Ashetic, Super Bold White/Black, Bold, Latte, Weird)
  *  2. Custom uploaded .txt mapping files (Unicode replacements)
  *  3. Custom uploaded font files (.ttf, .otf, .woff, .woff2) such as Google Fonts
+ *  4. Automated cross-device font cache & Google Fonts auto-download
  */
 
 export interface TextStyleDefinition {
@@ -112,7 +113,7 @@ const BUILT_IN_STYLES: Record<string, TextStyleDefinition> = {
       k: '𝓀', l: '𝓁', m: '𝓂', n: '𝓃', o: 'ℴ', p: '𝓅', q: '𝓆', r: '𝓇', s: '𝓈', t: '𝓉',
       u: '𝓊', v: '𝓋', w: '𝓌', x: '𝓍', y: '𝓎', z: '𝓏',
       A: '𝒜', B: 'ℬ', C: '𝒞', D: '𝒟', E: 'ℰ', F: 'ℱ', G: '𝒢', H: 'ℋ', I: 'ℐ', J: '𝒥',
-      K: '𝒦', L: 'ℒ', M: 'ℳ', N: '𝒩', O: '𝒪', P: '𝒫', Q: '𝒬', R: 'ℛ', S: '𝒮', T: '𝒯',
+      K: '𝦱', L: 'ℒ', M: 'ℳ', N: '𝒩', O: '𝒪', P: '𝒫', Q: '𝒬', R: 'ℛ', S: '𝒮', T: '𝒯',
       U: '𝒰', V: '𝒱', W: '𝒲', X: '𝒳', Y: '𝒴', Z: '𝒵',
       '0': '𝟢', '1': '𝟣', '2': '𝟤', '3': '𝟥', '4': '𝟦', '5': '𝟧', '6': '𝟨', '7': '𝟩', '8': '𝟪', '9': '𝟫',
     },
@@ -130,6 +131,40 @@ const BUILT_IN_STYLES: Record<string, TextStyleDefinition> = {
       U: '𝔘', V: '𝔙', W: '𝔚', X: '𝔛', Y: '𝔜', Z: 'ℨ',
     },
   },
+};
+
+// Recognized Google Fonts dictionary for instant cross-device mapping
+const KNOWN_FONTS: Record<string, string> = {
+  bbhbogle: 'BBH Bogle',
+  bogle: 'BBH Bogle',
+  fredoka: 'Fredoka',
+  lilitaone: 'Lilita One',
+  lilita: 'Lilita One',
+  pacifico: 'Pacifico',
+  caveat: 'Caveat',
+  comfortaa: 'Comfortaa',
+  lobster: 'Lobster',
+  cinzel: 'Cinzel',
+  playfair: 'Playfair Display',
+  oswald: 'Oswald',
+  montserrat: 'Montserrat',
+  poppins: 'Poppins',
+  inter: 'Inter',
+  quicksand: 'Quicksand',
+  dancing: 'Dancing Script',
+  dancingscript: 'Dancing Script',
+  righteous: 'Righteous',
+  bangers: 'Bangers',
+  creepster: 'Creepster',
+  monoton: 'Monoton',
+  shrikhand: 'Shrikhand',
+  abril: 'Abril Fatface',
+  amatic: 'Amatic SC',
+  bebas: 'Bebas Neue',
+  pressstart: 'Press Start 2P',
+  orbitron: 'Orbitron',
+  notosans: 'Noto Sans',
+  roboto: 'Roboto',
 };
 
 const STORAGE_KEY = 'shinzi_custom_text_styles';
@@ -211,44 +246,161 @@ export function deleteCustomStyle(id: string): void {
 /**
  * Registers a dynamic @font-face in the document so it is immediately rendered by the browser.
  */
-export function registerFontFace(fontFamily: string, srcUrl: string): void {
+export function registerFontFace(fontFamily: string, srcUrl?: string): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
 
-  // 1. Modern FontFace API
-  try {
-    const font = new FontFace(fontFamily, `url("${srcUrl}")`);
-    font.load().then((loadedFont) => {
-      document.fonts.add(loadedFont);
-    }).catch((e) => console.warn('FontFace load warning:', e));
-  } catch (err) {
-    console.warn('FontFace API warning:', err);
+  // 1. If base64 dataUrl or binary source provided, register via modern FontFace API
+  if (srcUrl && srcUrl.startsWith('data:')) {
+    try {
+      const font = new FontFace(fontFamily, `url("${srcUrl}")`);
+      font.load().then((loadedFont) => {
+        document.fonts.add(loadedFont);
+      }).catch((e) => console.warn('FontFace load warning:', e));
+    } catch (err) {
+      console.warn('FontFace API warning:', err);
+    }
+
+    const styleId = `sh-font-${fontFamily.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+    if (!document.getElementById(styleId)) {
+      const styleEl = document.createElement('style');
+      styleEl.id = styleId;
+      styleEl.textContent = `
+        @font-face {
+          font-family: "${fontFamily}";
+          src: url("${srcUrl}") format("truetype");
+          font-display: swap;
+        }
+      `;
+      document.head.appendChild(styleEl);
+    }
   }
 
-  // 2. Inject <style> @font-face fallback
-  const styleId = `sh-font-${fontFamily.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
-  if (!document.getElementById(styleId)) {
-    const styleEl = document.createElement('style');
-    styleEl.id = styleId;
-    styleEl.textContent = `
-      @font-face {
-        font-family: "${fontFamily}";
-        src: url("${srcUrl}") format("truetype");
-        font-display: swap;
-      }
-    `;
-    document.head.appendChild(styleEl);
-  }
-
-  // 3. Fallback to Google Fonts CDN if family name matches Google Fonts
+  // 2. Also inject Google Fonts stylesheet for instant cross-device delivery
   const cleanGoogleFamily = fontFamily.replace(/\s+/g, '+');
-  const gfId = `sh-gf-${cleanGoogleFamily.toLowerCase()}`;
+  const gfId = `sh-gf-${cleanGoogleFamily.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
   if (!document.getElementById(gfId)) {
     const link = document.createElement('link');
     link.id = gfId;
     link.rel = 'stylesheet';
-    link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(cleanGoogleFamily)}&display=swap`;
+    link.href = `https://fonts.googleapis.com/css2?family=${cleanGoogleFamily}&display=swap`;
     document.head.appendChild(link);
   }
+}
+
+/**
+ * Auto-resolves unknown style keys across devices and caches them locally.
+ */
+export function autoResolveAndCacheStyle(styleKey: string, styleData?: TextStyleDefinition): TextStyleDefinition | null {
+  const cleanKey = styleKey.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  if (!cleanKey) return null;
+
+  // 1. If explicit styleData provided from message, save and register it immediately!
+  if (styleData && (styleData.fontFamily || styleData.map)) {
+    const current = getCustomStyles();
+    current[cleanKey] = {
+      ...styleData,
+      id: cleanKey,
+      isCustom: true,
+    };
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+      } catch {}
+      if (styleData.fontFamily) {
+        registerFontFace(styleData.fontFamily, styleData.fontDataUrl);
+      }
+    }
+    return current[cleanKey];
+  }
+
+  // 2. Check if already exists in styles
+  const allStyles = getAllTextStyles();
+  if (allStyles[cleanKey]) {
+    if (allStyles[cleanKey].type === 'font' && allStyles[cleanKey].fontFamily) {
+      registerFontFace(allStyles[cleanKey].fontFamily!, allStyles[cleanKey].fontDataUrl);
+    }
+    return allStyles[cleanKey];
+  }
+
+  // 3. Fallback: Check known Google font or title-cased name
+  const guessedFamily = KNOWN_FONTS[cleanKey] || cleanKey.charAt(0).toUpperCase() + cleanKey.slice(1);
+  if (guessedFamily && typeof window !== 'undefined') {
+    registerFontFace(guessedFamily);
+    const newDef: TextStyleDefinition = {
+      id: cleanKey,
+      name: guessedFamily,
+      isCustom: true,
+      type: 'font',
+      fontFamily: guessedFamily,
+    };
+    const current = getCustomStyles();
+    current[cleanKey] = newDef;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+    } catch {}
+    return newDef;
+  }
+
+  return null;
+}
+
+/**
+ * Imports style data payloads attached to incoming messages from other users.
+ */
+export function importIncomingStyleData(styleDataMap?: Record<string, TextStyleDefinition>): void {
+  if (!styleDataMap || typeof window === 'undefined') return;
+  let changed = false;
+  const custom = getCustomStyles();
+
+  for (const [key, def] of Object.entries(styleDataMap)) {
+    if (!def) continue;
+    const cleanKey = key.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    if (!custom[cleanKey]) {
+      custom[cleanKey] = {
+        ...def,
+        id: cleanKey,
+        isCustom: true,
+      };
+      changed = true;
+    }
+    if (def.type === 'font' && def.fontFamily) {
+      registerFontFace(def.fontFamily, def.fontDataUrl);
+    }
+  }
+
+  if (changed) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(custom));
+    } catch {}
+  }
+}
+
+/**
+ * Inspects a message text and returns style definitions for any custom styles used.
+ */
+export function getUsedStylesData(text: string): Record<string, any> | undefined {
+  if (!text) return undefined;
+  const tagRegex = /[({]ts\s+([a-zA-Z0-9_\s-]+?)[)}]/gi;
+  const allStyles = getAllTextStyles();
+  const result: Record<string, any> = {};
+  let match: RegExpExecArray | null;
+
+  while ((match = tagRegex.exec(text)) !== null) {
+    const cleanKey = match[1].trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    const style = allStyles[cleanKey] || autoResolveAndCacheStyle(cleanKey);
+    if (style && style.isCustom) {
+      result[cleanKey] = {
+        id: style.id,
+        name: style.name,
+        type: style.type,
+        fontFamily: style.fontFamily,
+        fontDataUrl: (style.fontDataUrl && style.fontDataUrl.length < 200000) ? style.fontDataUrl : undefined,
+        map: style.map,
+      };
+    }
+  }
+
+  return Object.keys(result).length > 0 ? result : undefined;
 }
 
 /**
@@ -312,7 +464,7 @@ export function initRegisteredFonts(): void {
   if (typeof window === 'undefined') return;
   const styles = getAllTextStyles();
   for (const style of Object.values(styles)) {
-    if (style.type === 'font' && style.fontFamily && style.fontDataUrl) {
+    if (style.type === 'font' && style.fontFamily) {
       registerFontFace(style.fontFamily, style.fontDataUrl);
     }
   }
@@ -412,7 +564,7 @@ export function parseTextStyleFile(content: string): Record<string, string> {
 function transformString(text: string, styleKey: string | null, allStyles: Record<string, TextStyleDefinition>): string {
   if (!styleKey) return text;
   const cleanKey = styleKey.toLowerCase().replace(/[^a-z0-9_-]/g, '');
-  const style = allStyles[cleanKey];
+  const style = allStyles[cleanKey] || autoResolveAndCacheStyle(cleanKey);
   if (!style || !style.map) return text;
   return Array.from(text).map((ch) => style.map?.[ch] || ch).join('');
 }
@@ -436,7 +588,7 @@ export function applyTextStyles(input: string): string {
     const textBefore = input.slice(lastIndex, match.index);
     if (textBefore) {
       const cleanKey = currentStyleKey?.toLowerCase().replace(/[^a-z0-9_-]/g, '');
-      const style = cleanKey ? allStyles[cleanKey] : undefined;
+      const style = cleanKey ? (allStyles[cleanKey] || autoResolveAndCacheStyle(cleanKey)) : undefined;
       if (style?.type === 'font') {
         result += `(ts ${cleanKey}) ${textBefore}`;
       } else {
@@ -450,7 +602,7 @@ export function applyTextStyles(input: string): string {
   const remaining = input.slice(lastIndex);
   if (remaining) {
     const cleanKey = currentStyleKey?.toLowerCase().replace(/[^a-z0-9_-]/g, '');
-    const style = cleanKey ? allStyles[cleanKey] : undefined;
+    const style = cleanKey ? (allStyles[cleanKey] || autoResolveAndCacheStyle(cleanKey)) : undefined;
     if (style?.type === 'font') {
       result += `(ts ${cleanKey}) ${remaining}`;
     } else {
@@ -482,7 +634,7 @@ export function parseStyledTextParts(input: string): StyledTextPart[] {
     const textBefore = input.slice(lastIndex, match.index);
     if (textBefore) {
       const cleanKey = currentStyleKey?.toLowerCase().replace(/[^a-z0-9_-]/g, '');
-      const style = cleanKey ? allStyles[cleanKey] : undefined;
+      const style = cleanKey ? (allStyles[cleanKey] || autoResolveAndCacheStyle(cleanKey)) : undefined;
       if (style?.type === 'font' && style.fontFamily) {
         parts.push({ text: textBefore, fontFamily: style.fontFamily });
       } else if (style?.map) {
@@ -498,7 +650,7 @@ export function parseStyledTextParts(input: string): StyledTextPart[] {
   const remaining = input.slice(lastIndex);
   if (remaining) {
     const cleanKey = currentStyleKey?.toLowerCase().replace(/[^a-z0-9_-]/g, '');
-    const style = cleanKey ? allStyles[cleanKey] : undefined;
+    const style = cleanKey ? (allStyles[cleanKey] || autoResolveAndCacheStyle(cleanKey)) : undefined;
     if (style?.type === 'font' && style.fontFamily) {
       parts.push({ text: remaining, fontFamily: style.fontFamily });
     } else if (style?.map) {

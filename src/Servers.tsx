@@ -55,7 +55,13 @@ import {
 } from 'firebase/firestore';
 import { useDriveStore } from './driveStore';
 import { getUserEffectiveStatus } from './presenceService';
-import { applyTextStyles, validateTextStyleSyntax, renderStyledContent } from './textStyleService';
+import {
+  applyTextStyles,
+  validateTextStyleSyntax,
+  renderStyledContent,
+  getUsedStylesData,
+  importIncomingStyleData,
+} from './textStyleService';
 
 export interface ServerChannel {
   id: string;
@@ -742,6 +748,13 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
               ...(docSnap.data() as any),
             }));
 
+            // Auto-cache any custom text styles and fonts attached to channel messages
+            msgs.forEach((m) => {
+              if ((m as any).styleData) {
+                importIncomingStyleData((m as any).styleData);
+              }
+            });
+
             // Sort ascending by creation time
             msgs.sort((a, b) => {
               const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt || 0);
@@ -1048,6 +1061,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     const userAvatar = profile?.avatarUrl || currentUser?.photoURL || '';
 
     const processedText = extra?.text !== undefined ? extra.text : applyTextStyles(textToSend);
+    const usedStyles = getUsedStylesData(textToSend);
 
     const newMsg: Record<string, any> = {
       senderId: userUid,
@@ -1055,6 +1069,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
       senderAvatar: userAvatar,
       text: processedText,
       ...(imageUrl ? { imageUrl } : {}),
+      ...(usedStyles ? { styleData: usedStyles } : {}),
       ...(extra || {}),
       createdAt: serverTimestamp(),
     };

@@ -98,7 +98,13 @@ import { searchKlipy, getCachedKlipy, type KlipyItem } from './klipyService';
 import { cacheAudioBlob } from './voiceCache';
 import { getUserEffectiveStatus, type EffectiveStatus } from './presenceService';
 import MuiAvatar from '@mui/material/Avatar';
-import { applyTextStyles, validateTextStyleSyntax, renderStyledContent } from './textStyleService';
+import {
+  applyTextStyles,
+  validateTextStyleSyntax,
+  renderStyledContent,
+  getUsedStylesData,
+  importIncomingStyleData,
+} from './textStyleService';
 import './Chat.css';
 
 interface StagedAttachment {
@@ -1660,6 +1666,13 @@ export default function Chat({ onNavigate }: ChatProps) {
           (snap) => {
             const rawDocs: Rec[] = snap.docs.map((item) => ({ id: item.id, ...item.data() }));
 
+            // Auto-cache any custom text styles and fonts attached to messages
+            rawDocs.forEach((docItem) => {
+              if ((docItem as any).styleData) {
+                importIncomingStyleData((docItem as any).styleData);
+              }
+            });
+
             // Auto-heal any messages with corrupted or map-based createdAt in Firestore
             rawDocs.forEach((docItem) => {
               if (!selected?.id || !docItem.id) return;
@@ -2907,6 +2920,8 @@ const handleSearchMessage = async (target: Rec) => {
           ? replyTarget
           : null;
 
+      const usedStyles = getUsedStylesData(rawText);
+
       const messageData: Rec = {
         type: 'text',
         text,
@@ -2915,6 +2930,7 @@ const handleSearchMessage = async (target: Rec) => {
         senderUsername: profile?.username || '',
         senderPhotoURL: profile?.photoURL || '',
         senderProfileAssetId: profile?.profileAssetId || '',
+        ...(usedStyles ? { styleData: usedStyles } : {}),
         createdAt: serverTimestamp(),
         editedAt: null,
         deleted: false,
