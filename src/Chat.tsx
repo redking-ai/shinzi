@@ -98,7 +98,7 @@ import { searchKlipy, getCachedKlipy, type KlipyItem } from './klipyService';
 import { cacheAudioBlob } from './voiceCache';
 import { getUserEffectiveStatus, type EffectiveStatus } from './presenceService';
 import MuiAvatar from '@mui/material/Avatar';
-import { applyTextStyles, validateTextStyleSyntax } from './textStyleService';
+import { applyTextStyles, validateTextStyleSyntax, renderStyledContent } from './textStyleService';
 import './Chat.css';
 
 interface StagedAttachment {
@@ -4878,7 +4878,7 @@ const handleSearchMessage = async (target: Rec) => {
       contentNode = (
         <MediaGrid
           items={item.mediaItems || []}
-          caption={item.text ? renderFormattedText(applyTextStyles(item.text), handleMentionClick) : undefined}
+          caption={item.text ? renderStyledContent(item.text, handleMentionClick, renderFormattedText) : undefined}
           own={item.senderId === uid}
           messageId={item.id}
           createdAt={item.createdAt}
@@ -4929,7 +4929,7 @@ const handleSearchMessage = async (target: Rec) => {
       contentNode = (
         <MediaGrid
           items={[singleItem]}
-          caption={item.text && !isStandaloneUrl ? renderFormattedText(applyTextStyles(item.text), handleMentionClick) : undefined}
+          caption={item.text && !isStandaloneUrl ? renderStyledContent(item.text, handleMentionClick, renderFormattedText) : undefined}
           own={item.senderId === uid}
           messageId={item.id}
           createdAt={item.createdAt}
@@ -4978,7 +4978,7 @@ const handleSearchMessage = async (target: Rec) => {
         contentNode = emojiOnly ? (
           <span className="shc-dc-jumbo-emoji">{styledText.trim()}</span>
         ) : (
-          <span className="shc-dc-text">{renderFormattedText(styledText, handleMentionClick)}</span>
+          <span className="shc-dc-text">{renderStyledContent(item.text, handleMentionClick, renderFormattedText)}</span>
         );
       }
     }
@@ -5089,7 +5089,7 @@ const handleSearchMessage = async (target: Rec) => {
                   onDoubleClick={(event) => event.stopPropagation()}
                   aria-label={`Open ${authorName}'s profile`}
                 >
-                  {applyTextStyles(authorName)}
+                  {renderStyledContent(authorName)}
                 </button>
                 <span className="shc-dc-timestamp">
                   {formatDiscordTimestamp(item.createdAt)}

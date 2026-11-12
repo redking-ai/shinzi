@@ -4,8 +4,11 @@ import { useDriveStore } from './driveStore';
 import {
   getAllTextStyles,
   saveCustomStyle,
+  saveCustomFontStyle,
   deleteCustomStyle,
   parseTextStyleFile,
+  extractFontFamilyFromTTF,
+  registerFontFace,
   type TextStyleDefinition,
 } from './textStyleService';
 
@@ -29,14 +32,100 @@ export default function TextStylesModal({ onBack, showToast }: TextStylesModalPr
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.name.toLowerCase().endsWith('.txt')) {
-      if (showToast) showToast('Only .txt files are supported.');
-      else alert('Only .txt files are supported.');
+    const lowerName = file.name.toLowerCase();
+
+    // Check for OFL.txt or license files
+    const isLicenseFile =
+      lowerName === 'ofl.txt' ||
+      lowerName === 'license.txt' ||
+      lowerName.startsWith('ofl') ||
+      lowerName.includes('license');
+
+    if (isLicenseFile) {
+      const msg =
+        'OFL.txt is the Open Font License text file, not a font. In that folder, please select the font file (e.g. BBHBogle-Regular.ttf) to import the actual font!';
+      if (showToast) showToast(msg);
+      else alert(msg);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    const isFont = /\.(ttf|otf|woff|woff2)$/i.test(file.name);
+    const isTxt = lowerName.endsWith('.txt');
+
+    if (!isFont && !isTxt) {
+      const msg = 'Please choose a font file (.ttf, .otf, .woff) or a text mapping (.txt).';
+      if (showToast) showToast(msg);
+      else alert(msg);
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
     setUploading(true);
 
+    // 1. Handle Font File (.ttf, .otf, .woff, .woff2)
+    if (isFont) {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const arrayBuffer = event.target?.result as ArrayBuffer;
+          let fontFamily = extractFontFamilyFromTTF(arrayBuffer);
+          if (!fontFamily) {
+            fontFamily = file.name
+              .replace(/\.(ttf|otf|woff|woff2)$/i, '')
+              .replace(/[-_]?(regular|bold|italic|variablefont.*)$/i, '')
+              .replace(/([a-z])([A-Z])/g, '$1 $2')
+              .trim();
+          }
+
+          // Build Data URL for dynamic registration
+          const bytes = new Uint8Array(arrayBuffer);
+          let binary = '';
+          const len = bytes.byteLength;
+          for (let i = 0; i < len; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          const base64 = btoa(binary);
+          const mime = file.type || 'font/ttf';
+          const dataUrl = `data:${mime};base64,${base64}`;
+
+          // Register in document
+          registerFontFace(fontFamily, dataUrl);
+
+          // Save custom font style
+          const saved = saveCustomFontStyle(fontFamily, dataUrl);
+          refreshStyles();
+
+          // Upload to user's Google Drive Shinzi/Text Styles folder
+          try {
+            if (!drive.hasActiveSession) {
+              await drive.connectDrive(true);
+            }
+            await drive.uploadFile({
+              file,
+              fileName: file.name,
+              mimeType: mime,
+              folderType: 'textStyles',
+            });
+          } catch (err) {
+            console.warn('Drive upload to Shinzi/Text Styles failed or skipped:', err);
+          }
+
+          const msg = `Added "${fontFamily}" font style! Use (ts ${saved.id})`;
+          if (showToast) showToast(msg);
+        } catch (err) {
+          console.error('Font import error:', err);
+          if (showToast) showToast('Failed to load font file.');
+        } finally {
+          setUploading(false);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    // 2. Handle Text Mapping File (.txt)
     const reader = new FileReader();
     reader.onload = async (event) => {
       const content = event.target?.result as string;
@@ -104,29 +193,27 @@ export default function TextStylesModal({ onBack, showToast }: TextStylesModalPr
   const styleList = Object.values(styles);
 
   return (
-    <div className="sh-fullscreen-modal" style={{ background: '#0a0a0c', zIndex: 10000 }}>
-      {/* Header matching notebook drawing 20261112_175229.jpg */}
-      <div className="sh-fullscreen-modal-header" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+    <div className="sh-settings-overlay">
+      <div className="sh-settings-header">
         <button
           type="button"
-          className="sh-servers-icon-btn"
+          className="sh-settings-back-btn"
           onClick={onBack}
-          aria-label="Back"
+          aria-label="Back to Settings"
         >
           <ArrowLeft size={20} />
         </button>
-        <h2 style={{ fontSize: 17, fontWeight: 700, margin: 0, color: '#ffffff' }}>Text Styles</h2>
-        <div style={{ width: 40 }} />
+        <h1 className="sh-settings-title">Text styles</h1>
       </div>
 
-      <div className="sh-fullscreen-modal-body" style={{ padding: '16px 14px 40px' }}>
-        {/* Hidden input for .txt file uploads only */}
+      <div className="sh-settings-content" style={{ paddingBottom: 40 }}>
+        {/* Hidden File Input supporting .txt and font files */}
         <input
           type="file"
           ref={fileInputRef}
-          accept=".txt,text/plain"
-          style={{ display: 'none' }}
           onChange={handleFileUpload}
+          accept=".txt,.ttf,.otf,.woff,.woff2"
+          style={{ display: 'none' }}
         />
 
         {/* Top "+ Add new text style" button */}
@@ -149,9 +236,11 @@ export default function TextStylesModal({ onBack, showToast }: TextStylesModalPr
         <div className="sh-ts-list">
           {styleList.map((item) => {
             const previewChars = 'Aa Bb Cc 1 2 3';
-            const sampleText = Array.from(previewChars)
-              .map((c) => item.map[c] || c)
-              .join('');
+            const sampleText = item.type === 'font'
+              ? previewChars
+              : Array.from(previewChars)
+                  .map((c) => item.map?.[c] || c)
+                  .join('');
 
             return (
               <div
@@ -165,9 +254,14 @@ export default function TextStylesModal({ onBack, showToast }: TextStylesModalPr
                 <div className="sh-ts-info">
                   <div className="sh-ts-name-row">
                     <span className="sh-ts-name">{item.name}</span>
-                    {item.isCustom && <span className="sh-ts-badge">Custom</span>}
+                    {item.isCustom && <span className="sh-ts-badge">{item.type === 'font' ? 'Font' : 'Custom'}</span>}
                   </div>
-                  <div className="sh-ts-preview">{sampleText}</div>
+                  <div
+                    className="sh-ts-preview"
+                    style={item.fontFamily ? { fontFamily: `"${item.fontFamily}", sans-serif` } : undefined}
+                  >
+                    {sampleText}
+                  </div>
                   <div className="sh-ts-syntax">Tag: (ts {item.id}) or {'{'}ts {item.id}{'}'}</div>
                 </div>
 

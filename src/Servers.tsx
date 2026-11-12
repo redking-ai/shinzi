@@ -55,7 +55,7 @@ import {
 } from 'firebase/firestore';
 import { useDriveStore } from './driveStore';
 import { getUserEffectiveStatus } from './presenceService';
-import { applyTextStyles, validateTextStyleSyntax } from './textStyleService';
+import { applyTextStyles, validateTextStyleSyntax, renderStyledContent } from './textStyleService';
 
 export interface ServerChannel {
   id: string;
@@ -1999,7 +1999,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                               if (onOpenProfile) onOpenProfile();
                             }}
                           >
-                            {applyTextStyles(authorName)}
+                            {renderStyledContent(authorName)}
                           </span>
                           <span className="sh-channel-msg-time">
                             {formatDiscordTimestamp(msg.createdAt)}
@@ -2014,7 +2014,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                           {isEmojiOnly(msg.text) ? (
                             <span className="shc-dc-jumbo-emoji">{msg.text.trim()}</span>
                           ) : (
-                            applyTextStyles(msg.text)
+                            renderStyledContent(msg.text)
                           )}
                         </div>
                       )}

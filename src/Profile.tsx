@@ -28,7 +28,7 @@ import {
   navigateTo,
 } from './profileCache';
 import { updateUserPresence, type OnlineStatusMode } from './presenceService';
-import { applyTextStyles, validateTextStyleSyntax } from './textStyleService';
+import { applyTextStyles, validateTextStyleSyntax, renderStyledContent } from './textStyleService';
 import './Profile.css';
 
 type AnyRecord = Record<string, any>;
@@ -1077,7 +1077,7 @@ useEffect(() => {
           </div>
 
           <div className="sh-identity-copy">
-            <h2>{applyTextStyles(userData.displayName || 'Shinzi User')}</h2>
+            <h2>{renderStyledContent(userData.displayName || 'Shinzi User')}</h2>
             <p className="sh-username">
               {userData.username || 'username'}
             </p>

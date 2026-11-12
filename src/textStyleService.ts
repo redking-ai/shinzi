@@ -1,14 +1,22 @@
+import React from 'react';
+
 /**
  * Shinzi Text Style Engine (ts)
  * Allows styling text dynamically using (ts <style>) and {ts <style>} tags.
- * Supports built-in styles and custom uploaded .txt mapping files.
+ * Supports:
+ *  1. Built-in styles (Ashetic, Arabic, New Ashetic, Super Bold White/Black, Bold, Latte, Weird)
+ *  2. Custom uploaded .txt mapping files (Unicode replacements)
+ *  3. Custom uploaded font files (.ttf, .otf, .woff, .woff2) such as Google Fonts
  */
 
 export interface TextStyleDefinition {
   id: string;
   name: string;
   isCustom?: boolean;
-  map: Record<string, string>;
+  type?: 'unicode' | 'font';
+  map?: Record<string, string>;
+  fontFamily?: string;
+  fontDataUrl?: string;
 }
 
 // Built-in standard styles
@@ -16,6 +24,7 @@ const BUILT_IN_STYLES: Record<string, TextStyleDefinition> = {
   ashetic: {
     id: 'ashetic',
     name: 'Ashetic',
+    type: 'unicode',
     map: {
       a: 'ａ', b: 'ｂ', c: 'ｃ', d: 'ｄ', e: 'ｅ', f: 'ｆ', g: 'ｇ', h: 'ｈ', i: 'ｉ', j: 'ｊ',
       k: 'ｋ', l: 'ｌ', m: 'ｍ', n: 'ｎ', o: 'ｏ', p: 'ｐ', q: 'ｑ', r: 'ｒ', s: 'ｓ', t: 'ｔ',
@@ -29,6 +38,7 @@ const BUILT_IN_STYLES: Record<string, TextStyleDefinition> = {
   arabic: {
     id: 'arabic',
     name: 'Arabic',
+    type: 'unicode',
     map: {
       a: 'α', b: 'в', c: 'ƈ', d: 'ԃ', e: 'є', f: 'ғ', g: 'ց', h: 'ɦ', i: 'ι', j: 'ʝ',
       k: 'к', l: 'ℓ', m: 'ɱ', n: 'η', o: 'σ', p: 'ρ', q: 'φ', r: 'я', s: 'ѕ', t: 'т',
@@ -41,6 +51,7 @@ const BUILT_IN_STYLES: Record<string, TextStyleDefinition> = {
   newashetic: {
     id: 'newashetic',
     name: 'New Ashetic',
+    type: 'unicode',
     map: {
       a: '𝒶', b: '𝒷', c: '𝒸', d: '𝒹', e: 'ℯ', f: '𝒻', g: 'ℊ', h: '𝒽', i: '𝒾', j: '𝒿',
       k: '𝓀', l: '𝓁', m: '𝓂', n: '𝓃', o: 'ℴ', p: '𝓅', q: '𝓆', r: '𝓇', s: '𝓈', t: '𝓉',
@@ -53,6 +64,7 @@ const BUILT_IN_STYLES: Record<string, TextStyleDefinition> = {
   superboldwhite: {
     id: 'superboldwhite',
     name: 'Super Bold White',
+    type: 'unicode',
     map: {
       a: '𝕒', b: '𝕓', c: '𝕔', d: '𝕕', e: '𝕖', f: '𝕗', g: '𝕘', h: '𝕙', i: '𝕚', j: '𝕛',
       k: '𝕜', l: '𝕝', m: '𝕞', n: '𝕟', o: '𝕠', p: '𝕡', q: '𝕢', r: '𝕣', s: '𝕤', t: '𝕥',
@@ -66,6 +78,7 @@ const BUILT_IN_STYLES: Record<string, TextStyleDefinition> = {
   superboldblack: {
     id: 'superboldblack',
     name: 'Super Bold Black',
+    type: 'unicode',
     map: {
       a: '𝗮', b: '𝗯', c: '𝗰', d: '𝗱', e: '𝗲', f: '𝗳', g: '𝗴', h: '𝗵', i: '𝗶', j: '𝗷',
       k: '𝗸', l: '𝗹', m: '𝗺', n: '𝗻', o: '𝗼', p: '𝗽', q: '𝗾', r: '𝗿', s: '𝘀', t: '𝘁',
@@ -79,6 +92,7 @@ const BUILT_IN_STYLES: Record<string, TextStyleDefinition> = {
   bold: {
     id: 'bold',
     name: 'Bold',
+    type: 'unicode',
     map: {
       a: '𝐚', b: '𝐛', c: '𝐜', d: '𝐝', e: '𝐞', f: '𝐟', g: '𝐠', h: '𝐡', i: '𝐢', j: '𝐣',
       k: '𝐤', l: '𝐥', m: '𝐦', n: '𝐧', o: '𝐨', p: '𝐩', q: '𝐪', r: '𝐫', s: '𝐬', t: '𝐭',
@@ -92,6 +106,7 @@ const BUILT_IN_STYLES: Record<string, TextStyleDefinition> = {
   latte: {
     id: 'latte',
     name: 'Latte',
+    type: 'unicode',
     map: {
       a: '𝒶', b: '𝒷', c: '𝒸', d: '𝒹', e: 'ℯ', f: '𝒻', g: 'ℊ', h: '𝒽', i: '𝒾', j: '𝒿',
       k: '𝓀', l: '𝓁', m: '𝓂', n: '𝓃', o: 'ℴ', p: '𝓅', q: '𝓆', r: '𝓇', s: '𝓈', t: '𝓉',
@@ -99,15 +114,17 @@ const BUILT_IN_STYLES: Record<string, TextStyleDefinition> = {
       A: '𝒜', B: 'ℬ', C: '𝒞', D: '𝒟', E: 'ℰ', F: 'ℱ', G: '𝒢', H: 'ℋ', I: 'ℐ', J: '𝒥',
       K: '𝒦', L: 'ℒ', M: 'ℳ', N: '𝒩', O: '𝒪', P: '𝒫', Q: '𝒬', R: 'ℛ', S: '𝒮', T: '𝒯',
       U: '𝒰', V: '𝒱', W: '𝒲', X: '𝒳', Y: '𝒴', Z: '𝒵',
+      '0': '𝟢', '1': '𝟣', '2': '𝟤', '3': '𝟥', '4': '𝟦', '5': '𝟧', '6': '𝟨', '7': '𝟩', '8': '𝟪', '9': '𝟫',
     },
   },
   weird: {
     id: 'weird',
     name: 'Weird',
+    type: 'unicode',
     map: {
-      a: '𝔞', b: '𝔟', c: '𝔠', d: '𝔡', e: '𝔢', f: '𝔣', g: '𝔤', h: '𝔥', i: '𝔦', j: '𝔧',
-      k: '𝔨', l: '𝔩', m: '𝔪', n: '𝔫', o: '𝔬', p: '𝔭', q: '𝔮', r: '𝔯', s: '𝔰', t: '𝔱',
-      u: '𝔲', v: '𝔳', w: '𝔴', x: '𝔵', y: '𝔶', z: '𝔷',
+      a: '𝔄', b: '𝔅', c: 'ℭ', d: '𝔇', e: '𝔈', f: '𝔉', g: '𝔊', h: 'ℌ', i: 'ℑ', j: '𝔍',
+      k: '𝔎', l: '𝔏', m: '𝔐', n: '𝔑', o: '𝔒', p: '𝔓', q: '𝔔', r: 'ℜ', s: '𝔖', t: '𝔗',
+      u: '𝔘', v: '𝔙', w: '𝔚', x: '𝔛', y: '𝔜', z: 'ℨ',
       A: '𝔄', B: '𝔅', C: 'ℭ', D: '𝔇', E: '𝔈', F: '𝔉', G: '𝔊', H: 'ℌ', I: 'ℑ', J: '𝔍',
       K: '𝔎', L: '𝔏', M: '𝔐', N: '𝔑', O: '𝔒', P: '𝔓', Q: '𝔔', R: 'ℜ', S: '𝔖', T: '𝔗',
       U: '𝔘', V: '𝔙', W: '𝔚', X: '𝔛', Y: '𝔜', Z: 'ℨ',
@@ -116,6 +133,20 @@ const BUILT_IN_STYLES: Record<string, TextStyleDefinition> = {
 };
 
 const STORAGE_KEY = 'shinzi_custom_text_styles';
+
+// Auto-cleanup any broken 'ofl' style imported by mistake from OFL.txt license file
+if (typeof window !== 'undefined') {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed.ofl && (!parsed.ofl.type || parsed.ofl.type !== 'font')) {
+        delete parsed.ofl;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+      }
+    }
+  } catch {}
+}
 
 export function getCustomStyles(): Record<string, TextStyleDefinition> {
   if (typeof window === 'undefined') return {};
@@ -139,7 +170,27 @@ export function saveCustomStyle(name: string, map: Record<string, string>): Text
     id: cleanId,
     name: name.trim(),
     isCustom: true,
+    type: 'unicode',
     map,
+  };
+  const current = getCustomStyles();
+  current[cleanId] = styleDef;
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+  }
+  return styleDef;
+}
+
+export function saveCustomFontStyle(name: string, dataUrl: string, fontFamilyOverride?: string): TextStyleDefinition {
+  const family = (fontFamilyOverride || name).trim();
+  const cleanId = family.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  const styleDef: TextStyleDefinition = {
+    id: cleanId,
+    name: family,
+    isCustom: true,
+    type: 'font',
+    fontFamily: family,
+    fontDataUrl: dataUrl,
   };
   const current = getCustomStyles();
   current[cleanId] = styleDef;
@@ -155,6 +206,121 @@ export function deleteCustomStyle(id: string): void {
   if (typeof window !== 'undefined') {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
   }
+}
+
+/**
+ * Registers a dynamic @font-face in the document so it is immediately rendered by the browser.
+ */
+export function registerFontFace(fontFamily: string, srcUrl: string): void {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+
+  // 1. Modern FontFace API
+  try {
+    const font = new FontFace(fontFamily, `url("${srcUrl}")`);
+    font.load().then((loadedFont) => {
+      document.fonts.add(loadedFont);
+    }).catch((e) => console.warn('FontFace load warning:', e));
+  } catch (err) {
+    console.warn('FontFace API warning:', err);
+  }
+
+  // 2. Inject <style> @font-face fallback
+  const styleId = `sh-font-${fontFamily.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+  if (!document.getElementById(styleId)) {
+    const styleEl = document.createElement('style');
+    styleEl.id = styleId;
+    styleEl.textContent = `
+      @font-face {
+        font-family: "${fontFamily}";
+        src: url("${srcUrl}") format("truetype");
+        font-display: swap;
+      }
+    `;
+    document.head.appendChild(styleEl);
+  }
+
+  // 3. Fallback to Google Fonts CDN if family name matches Google Fonts
+  const cleanGoogleFamily = fontFamily.replace(/\s+/g, '+');
+  const gfId = `sh-gf-${cleanGoogleFamily.toLowerCase()}`;
+  if (!document.getElementById(gfId)) {
+    const link = document.createElement('link');
+    link.id = gfId;
+    link.rel = 'stylesheet';
+    link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(cleanGoogleFamily)}&display=swap`;
+    document.head.appendChild(link);
+  }
+}
+
+/**
+ * Parses Font Family Name from TTF/OTF ArrayBuffer 'name' table.
+ */
+export function extractFontFamilyFromTTF(buffer: ArrayBuffer): string | null {
+  try {
+    const view = new DataView(buffer);
+    const numTables = view.getUint16(4, false);
+    let nameTableOffset = 0;
+    for (let i = 0; i < numTables; i++) {
+      const offset = 12 + i * 16;
+      let tag = '';
+      for (let j = 0; j < 4; j++) {
+        tag += String.fromCharCode(view.getUint8(offset + j));
+      }
+      if (tag === 'name') {
+        nameTableOffset = view.getUint32(offset + 8, false);
+        break;
+      }
+    }
+    if (!nameTableOffset) return null;
+    const count = view.getUint16(nameTableOffset + 2, false);
+    const stringOffset = nameTableOffset + view.getUint16(nameTableOffset + 4, false);
+    const names: Record<number, string> = {};
+    for (let i = 0; i < count; i++) {
+      const recOffset = nameTableOffset + 6 + i * 12;
+      const platformId = view.getUint16(recOffset, false);
+      const nameId = view.getUint16(recOffset + 6, false);
+      const length = view.getUint16(recOffset + 8, false);
+      const offset = view.getUint16(recOffset + 10, false);
+      const strStart = stringOffset + offset;
+      let str = '';
+      if (platformId === 0 || platformId === 3) {
+        // UTF-16BE
+        for (let j = 0; j < length; j += 2) {
+          str += String.fromCharCode(view.getUint16(strStart + j, false));
+        }
+      } else {
+        // ASCII / UTF-8
+        for (let j = 0; j < length; j++) {
+          str += String.fromCharCode(view.getUint8(strStart + j));
+        }
+      }
+      str = str.replace(/\0/g, '').trim();
+      if (str && !names[nameId]) {
+        names[nameId] = str;
+      }
+    }
+    return names[1] || names[4] || names[6] || null;
+  } catch (err) {
+    console.warn('Failed to parse TTF name table:', err);
+    return null;
+  }
+}
+
+/**
+ * Initializes all registered custom fonts in the browser.
+ */
+export function initRegisteredFonts(): void {
+  if (typeof window === 'undefined') return;
+  const styles = getAllTextStyles();
+  for (const style of Object.values(styles)) {
+    if (style.type === 'font' && style.fontFamily && style.fontDataUrl) {
+      registerFontFace(style.fontFamily, style.fontDataUrl);
+    }
+  }
+}
+
+// Auto-run font initialization
+if (typeof window !== 'undefined') {
+  initRegisteredFonts();
 }
 
 /**
@@ -248,12 +414,13 @@ function transformString(text: string, styleKey: string | null, allStyles: Recor
   const cleanKey = styleKey.toLowerCase().replace(/[^a-z0-9_-]/g, '');
   const style = allStyles[cleanKey];
   if (!style || !style.map) return text;
-  return Array.from(text).map((ch) => style.map[ch] || ch).join('');
+  return Array.from(text).map((ch) => style.map?.[ch] || ch).join('');
 }
 
 /**
  * Applies text styles to a string by finding (ts <style>) and {ts <style>} tags.
- * Normalizes leading space immediately after tag, removes the tag, and transforms text.
+ * For Unicode styles: replaces characters directly with Unicode characters.
+ * For Font styles: preserves font tag for renderStyledContent to style with CSS font-family.
  */
 export function applyTextStyles(input: string): string {
   if (!input || (!input.includes('(ts') && !input.includes('{ts'))) return input;
@@ -262,22 +429,111 @@ export function applyTextStyles(input: string): string {
   const tagRegex = /[({]ts\s+([a-zA-Z0-9_\s-]+?)[)}]\s?/gi;
   let result = '';
   let lastIndex = 0;
-  let currentStyle: string | null = null;
+  let currentStyleKey: string | null = null;
 
   let match: RegExpExecArray | null;
   while ((match = tagRegex.exec(input)) !== null) {
     const textBefore = input.slice(lastIndex, match.index);
     if (textBefore) {
-      result += transformString(textBefore, currentStyle, allStyles);
+      const cleanKey = currentStyleKey?.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      const style = cleanKey ? allStyles[cleanKey] : undefined;
+      if (style?.type === 'font') {
+        result += `(ts ${cleanKey}) ${textBefore}`;
+      } else {
+        result += transformString(textBefore, currentStyleKey, allStyles);
+      }
     }
-    currentStyle = match[1].trim();
+    currentStyleKey = match[1].trim();
     lastIndex = match.index + match[0].length;
   }
 
   const remaining = input.slice(lastIndex);
   if (remaining) {
-    result += transformString(remaining, currentStyle, allStyles);
+    const cleanKey = currentStyleKey?.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    const style = cleanKey ? allStyles[cleanKey] : undefined;
+    if (style?.type === 'font') {
+      result += `(ts ${cleanKey}) ${remaining}`;
+    } else {
+      result += transformString(remaining, currentStyleKey, allStyles);
+    }
   }
 
   return result;
+}
+
+export interface StyledTextPart {
+  text: string;
+  fontFamily?: string;
+}
+
+/**
+ * Splits text into segments with associated font family styles.
+ */
+export function parseStyledTextParts(input: string): StyledTextPart[] {
+  if (!input) return [];
+  const allStyles = getAllTextStyles();
+  const tagRegex = /[({]ts\s+([a-zA-Z0-9_\s-]+?)[)}]\s?/gi;
+  const parts: StyledTextPart[] = [];
+  let lastIndex = 0;
+  let currentStyleKey: string | null = null;
+
+  let match: RegExpExecArray | null;
+  while ((match = tagRegex.exec(input)) !== null) {
+    const textBefore = input.slice(lastIndex, match.index);
+    if (textBefore) {
+      const cleanKey = currentStyleKey?.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      const style = cleanKey ? allStyles[cleanKey] : undefined;
+      if (style?.type === 'font' && style.fontFamily) {
+        parts.push({ text: textBefore, fontFamily: style.fontFamily });
+      } else if (style?.map) {
+        parts.push({ text: transformString(textBefore, currentStyleKey, allStyles) });
+      } else {
+        parts.push({ text: textBefore });
+      }
+    }
+    currentStyleKey = match[1].trim();
+    lastIndex = match.index + match[0].length;
+  }
+
+  const remaining = input.slice(lastIndex);
+  if (remaining) {
+    const cleanKey = currentStyleKey?.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    const style = cleanKey ? allStyles[cleanKey] : undefined;
+    if (style?.type === 'font' && style.fontFamily) {
+      parts.push({ text: remaining, fontFamily: style.fontFamily });
+    } else if (style?.map) {
+      parts.push({ text: transformString(remaining, currentStyleKey, allStyles) });
+    } else {
+      parts.push({ text: remaining });
+    }
+  }
+
+  return parts;
+}
+
+/**
+ * Renders text containing style tags into React nodes with appropriate font-family and unicode transformations.
+ */
+export function renderStyledContent(
+  input: string,
+  onMentionClick?: (mention: string) => void,
+  renderMentionFn?: (text: string, onMentionClick?: (m: string) => void) => React.ReactNode
+): React.ReactNode {
+  if (!input) return null;
+  const parts = parseStyledTextParts(input);
+  if (parts.length === 0) return null;
+  if (parts.length === 1 && !parts[0].fontFamily) {
+    return renderMentionFn ? renderMentionFn(parts[0].text, onMentionClick) : parts[0].text;
+  }
+  return parts.map((part, idx) => {
+    const content = renderMentionFn ? renderMentionFn(part.text, onMentionClick) : part.text;
+    if (part.fontFamily) {
+      return React.createElement(
+        'span',
+        { key: idx, style: { fontFamily: `"${part.fontFamily}", sans-serif` } },
+        content
+      );
+    }
+    return React.createElement(React.Fragment, { key: idx }, content);
+  });
 }

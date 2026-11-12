@@ -21,7 +21,7 @@ import {
   navigateTo,
 } from './profileCache';
 import { getUserEffectiveStatus } from './presenceService';
-import { applyTextStyles } from './textStyleService';
+import { renderStyledContent } from './textStyleService';
 import './Profile.css';
 
 type AnyRecord = Record<string, any>;
@@ -654,7 +654,7 @@ export default function OtherProfile({
 
           <div className="sh-identity-copy">
             <h2>
-              {applyTextStyles(userData.displayName || 'Shinzi User')}{' '}
+              {renderStyledContent(userData.displayName || 'Shinzi User')}{' '}
               <span className="sh-beta-badge">
                 BETA
               </span>
