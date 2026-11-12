@@ -27,6 +27,8 @@ import {
   ASSET_TYPES,
   ASSET_VISIBILITY,
 } from './assetService';
+import { Pencil } from 'lucide-react';
+import { DateTimePickerModal } from './DateTimePickerModal';
 
 interface SignUpProps {
   onBack: () => void;
@@ -65,55 +67,6 @@ function openSignupImageDB(): Promise<IDBDatabase> {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
-}
-
-async function saveSignupImage(file: File): Promise<void> {
-  const db = await openSignupImageDB();
-
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const transaction = db.transaction(
-        SIGNUP_IMAGE_STORE,
-        'readwrite'
-      );
-
-      transaction.objectStore(SIGNUP_IMAGE_STORE).put(
-        file,
-        SIGNUP_IMAGE_KEY
-      );
-
-      transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error);
-      transaction.onabort = () => reject(transaction.error);
-    });
-  } finally {
-    db.close();
-  }
-}
-
-async function restoreSignupImage(): Promise<File | null> {
-  const db = await openSignupImageDB();
-
-  try {
-    return await new Promise<File | null>((resolve, reject) => {
-      const transaction = db.transaction(
-        SIGNUP_IMAGE_STORE,
-        'readonly'
-      );
-
-      const request = transaction
-        .objectStore(SIGNUP_IMAGE_STORE)
-        .get(SIGNUP_IMAGE_KEY);
-
-      request.onsuccess = () => {
-        resolve(request.result instanceof File ? request.result : null);
-      };
-
-      request.onerror = () => reject(request.error);
-    });
-  } finally {
-    db.close();
-  }
 }
 
 async function clearSignupImage(): Promise<void> {
@@ -190,6 +143,7 @@ const [draftRestored, setDraftRestored] = useState(false);
   const [day, setDay] = useState('');
   const [month, setMonth] = useState('');
   const [year, setYear] = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   const [profileImage, setProfileImage] =
     useState<ProfileImage | null>(null);
@@ -339,22 +293,13 @@ const [draftRestored, setDraftRestored] = useState(false);
 
     setFormError(null);
 
-    void saveSignupImage(file).catch((error) => {
-  console.error('[SIGNUP] Could not save photo draft:', error);
-
-  setFormError({
-    message:
-      'Could not preserve your photo for Google sign-in. Please try a smaller image or select it again.',
-  });
-});
-
-setProfileImage({
-  file,
-  uri: URL.createObjectURL(file),
-  mimeType: file.type || 'image/jpeg',
-  name: file.name,
-  size: file.size,
-});
+    setProfileImage({
+      file,
+      uri: URL.createObjectURL(file),
+      mimeType: file.type || 'image/jpeg',
+      name: file.name,
+      size: file.size,
+    });
       
      
 
@@ -842,20 +787,10 @@ useEffect(() => {
         setYear(d.year ?? '');
       }
 
-      const savedFile = await restoreSignupImage();
-
-      if (cancelled) return;
-
-      if (savedFile) {
-        setProfileImage({
-          file: savedFile,
-          uri: URL.createObjectURL(savedFile),
-          mimeType: savedFile.type || 'image/jpeg',
-          name: savedFile.name,
-          size: savedFile.size,
-        });
-      }
- setDraftRestored(true);
+      // Do NOT restore profile photo draft from IndexedDB across page reloads/refreshes.
+      // Every time user comes to step 2 or refreshes, start with no photo so user uploads fresh.
+      void clearSignupImage();
+      setDraftRestored(true);
 
     
     } catch (error) {
@@ -1158,7 +1093,7 @@ useEffect(() => {
                 )}
 
                 <span className="signup-pencil-badge">
-                  ✎
+                  <Pencil size={15} color="#000000" strokeWidth={2.5} />
                 </span>
               </button>
 
@@ -1250,31 +1185,23 @@ useEffect(() => {
               Date of birth
             </div>
 
-            <div className="signup-date-row">
-
+            <div
+              className="signup-date-row"
+              onClick={() => setShowDatePicker(true)}
+              style={{ cursor: 'pointer' }}
+              role="button"
+              tabIndex={0}
+              aria-label="Open date of birth picker"
+            >
               <div className="signup-input-box signup-flex-1">
                 <input
                   className="signup-input"
                   type="text"
-                  inputMode="numeric"
+                  readOnly
                   placeholder="DD"
                   aria-label="Day of birth"
                   value={day}
-                  onChange={(event) =>
-                    setDay(
-                      event.target.value
-                        .replace(
-                          /\D/g,
-                          ''
-                        )
-                        .slice(
-                          0,
-                          2
-                        )
-                    )
-                  }
-                  maxLength={2}
-                  disabled={isSubmitting}
+                  style={{ cursor: 'pointer' }}
                 />
               </div>
 
@@ -1282,25 +1209,11 @@ useEffect(() => {
                 <input
                   className="signup-input"
                   type="text"
-                  inputMode="numeric"
+                  readOnly
                   placeholder="MM"
                   aria-label="Month of birth"
                   value={month}
-                  onChange={(event) =>
-                    setMonth(
-                      event.target.value
-                        .replace(
-                          /\D/g,
-                          ''
-                        )
-                        .slice(
-                          0,
-                          2
-                        )
-                    )
-                  }
-                  maxLength={2}
-                  disabled={isSubmitting}
+                  style={{ cursor: 'pointer' }}
                 />
               </div>
 
@@ -1308,28 +1221,13 @@ useEffect(() => {
                 <input
                   className="signup-input"
                   type="text"
-                  inputMode="numeric"
+                  readOnly
                   placeholder="YYYY"
                   aria-label="Year of birth"
                   value={year}
-                  onChange={(event) =>
-                    setYear(
-                      event.target.value
-                        .replace(
-                          /\D/g,
-                          ''
-                        )
-                        .slice(
-                          0,
-                          4
-                        )
-                    )
-                  }
-                  maxLength={4}
-                  disabled={isSubmitting}
+                  style={{ cursor: 'pointer' }}
                 />
               </div>
-
             </div>
 
             {hasEnteredDate &&
@@ -1469,6 +1367,30 @@ useEffect(() => {
 
             </div>
           </div>
+        )}
+
+        {/* ================================================== */}
+        {/* DATE OF BIRTH PICKER MODAL */}
+        {/* ================================================== */}
+
+        {showDatePicker && (
+          <DateTimePickerModal
+            title="Date of birth"
+            showTime={false}
+            initialValue={
+              year && month && day
+                ? `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+                : '2005-01-01'
+            }
+            onConfirm={() => {}}
+            onConfirmDate={(d, m, y) => {
+              setDay(String(d).padStart(2, '0'));
+              setMonth(String(m).padStart(2, '0'));
+              setYear(String(y));
+              setShowDatePicker(false);
+            }}
+            onClose={() => setShowDatePicker(false)}
+          />
         )}
 
         {/* ================================================== */}
@@ -1924,8 +1846,7 @@ useEffect(() => {
 
           border-radius: 50%;
 
-          background:
-            var(--su-violet);
+          background: #FFFFFF !important;
 
           border:
             2px solid
@@ -1935,10 +1856,9 @@ useEffect(() => {
           align-items: center;
           justify-content: center;
 
-          color: #FFFFFF;
+          color: #000000 !important;
 
-          font-size: 15px;
-          line-height: 1;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
         }
 
         /* ==============================================

@@ -5,7 +5,9 @@ import './DateTimePickerModal.css';
 interface DateTimePickerModalProps {
   title: string;
   initialValue?: string;
+  showTime?: boolean;
   onConfirm: (formattedValue: string) => void;
+  onConfirmDate?: (day: number, month: number, year: number) => void;
   onClose: () => void;
 }
 
@@ -22,7 +24,9 @@ const SHORT_MONTHS = [
 export const DateTimePickerModal: React.FC<DateTimePickerModalProps> = ({
   title,
   initialValue,
+  showTime = true,
   onConfirm,
+  onConfirmDate,
   onClose,
 }) => {
   // Parse initial date or default to now
@@ -76,8 +80,13 @@ export const DateTimePickerModal: React.FC<DateTimePickerModalProps> = ({
   };
 
   const handleConfirm = () => {
+    if (onConfirmDate) {
+      onConfirmDate(selectedDay, currentMonth + 1, currentYear);
+    }
     const formattedMinute = String(minute).padStart(2, '0');
-    const formatted = `${SHORT_MONTHS[currentMonth]} ${selectedDay}, ${currentYear} at ${hour}:${formattedMinute} ${ampm}`;
+    const formatted = showTime
+      ? `${SHORT_MONTHS[currentMonth]} ${selectedDay}, ${currentYear} at ${hour}:${formattedMinute} ${ampm}`
+      : `${SHORT_MONTHS[currentMonth]} ${selectedDay}, ${currentYear}`;
     onConfirm(formatted);
   };
 
@@ -102,9 +111,47 @@ export const DateTimePickerModal: React.FC<DateTimePickerModalProps> = ({
             <button type="button" className="shc-dtp-nav-btn" onClick={prevMonth} aria-label="Previous month">
               <ChevronLeft size={20} />
             </button>
-            <span className="shc-dtp-month-label">
-              {MONTH_NAMES[currentMonth]} {currentYear}
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <select
+                value={currentMonth}
+                onChange={(e) => setCurrentMonth(Number(e.target.value))}
+                style={{
+                  background: '#18191c',
+                  color: '#ffffff',
+                  border: '1px solid #35363c',
+                  borderRadius: 6,
+                  padding: '4px 6px',
+                  fontWeight: 600,
+                  fontSize: 13,
+                  outline: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                {MONTH_NAMES.map((m, idx) => (
+                  <option key={m} value={idx}>{m}</option>
+                ))}
+              </select>
+              <select
+                value={currentYear}
+                onChange={(e) => setCurrentYear(Number(e.target.value))}
+                style={{
+                  background: '#18191c',
+                  color: '#ffffff',
+                  border: '1px solid #35363c',
+                  borderRadius: 6,
+                  padding: '4px 6px',
+                  fontWeight: 600,
+                  fontSize: 13,
+                  outline: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                {Array.from({ length: 100 }).map((_, idx) => {
+                  const yr = now.getFullYear() - idx;
+                  return <option key={yr} value={yr}>{yr}</option>;
+                })}
+              </select>
+            </div>
             <button type="button" className="shc-dtp-nav-btn" onClick={nextMonth} aria-label="Next month">
               <ChevronRight size={20} />
             </button>
@@ -146,76 +193,78 @@ export const DateTimePickerModal: React.FC<DateTimePickerModalProps> = ({
         </div>
 
         {/* Time / Clock Selector Section */}
-        <div className="shc-dtp-time-card">
-          <div className="shc-dtp-time-header">
-            <Clock size={16} />
-            <span>Time</span>
+        {showTime && (
+          <div className="shc-dtp-time-card">
+            <div className="shc-dtp-time-header">
+              <Clock size={16} />
+              <span>Time</span>
+            </div>
+
+            <div className="shc-dtp-time-controls">
+              {/* Hours */}
+              <div className="shc-dtp-select-wrap">
+                <label className="shc-dtp-label">Hour</label>
+                <select
+                  className="shc-dtp-select"
+                  value={hour}
+                  onChange={(e) => setHour(Number(e.target.value))}
+                >
+                  {Array.from({ length: 12 }).map((_, i) => {
+                    const h = i + 1;
+                    return (
+                      <option key={`h-${h}`} value={h}>
+                        {String(h).padStart(2, '0')}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              <span className="shc-dtp-colon">:</span>
+
+              {/* Minutes */}
+              <div className="shc-dtp-select-wrap">
+                <label className="shc-dtp-label">Minute</label>
+                <select
+                  className="shc-dtp-select"
+                  value={minute}
+                  onChange={(e) => setMinute(Number(e.target.value))}
+                >
+                  {Array.from({ length: 12 }).map((_, i) => {
+                    const m = i * 5;
+                    return (
+                      <option key={`m-${m}`} value={m}>
+                        {String(m).padStart(2, '0')}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {/* AM / PM Toggle */}
+              <div className="shc-dtp-ampm-wrap">
+                <button
+                  type="button"
+                  className={`shc-dtp-ampm-btn ${ampm === 'AM' ? 'shc-dtp-ampm-active' : ''}`}
+                  onClick={() => setAmpm('AM')}
+                >
+                  AM
+                </button>
+                <button
+                  type="button"
+                  className={`shc-dtp-ampm-btn ${ampm === 'PM' ? 'shc-dtp-ampm-active' : ''}`}
+                  onClick={() => setAmpm('PM')}
+                >
+                  PM
+                </button>
+              </div>
+            </div>
           </div>
-
-          <div className="shc-dtp-time-controls">
-            {/* Hours */}
-            <div className="shc-dtp-select-wrap">
-              <label className="shc-dtp-label">Hour</label>
-              <select
-                className="shc-dtp-select"
-                value={hour}
-                onChange={(e) => setHour(Number(e.target.value))}
-              >
-                {Array.from({ length: 12 }).map((_, i) => {
-                  const h = i + 1;
-                  return (
-                    <option key={`h-${h}`} value={h}>
-                      {String(h).padStart(2, '0')}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-
-            <span className="shc-dtp-colon">:</span>
-
-            {/* Minutes */}
-            <div className="shc-dtp-select-wrap">
-              <label className="shc-dtp-label">Minute</label>
-              <select
-                className="shc-dtp-select"
-                value={minute}
-                onChange={(e) => setMinute(Number(e.target.value))}
-              >
-                {Array.from({ length: 12 }).map((_, i) => {
-                  const m = i * 5;
-                  return (
-                    <option key={`m-${m}`} value={m}>
-                      {String(m).padStart(2, '0')}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-
-            {/* AM / PM Toggle */}
-            <div className="shc-dtp-ampm-wrap">
-              <button
-                type="button"
-                className={`shc-dtp-ampm-btn ${ampm === 'AM' ? 'shc-dtp-ampm-active' : ''}`}
-                onClick={() => setAmpm('AM')}
-              >
-                AM
-              </button>
-              <button
-                type="button"
-                className={`shc-dtp-ampm-btn ${ampm === 'PM' ? 'shc-dtp-ampm-active' : ''}`}
-                onClick={() => setAmpm('PM')}
-              >
-                PM
-              </button>
-            </div>
-          </div>
-        </div>
+        )}
 
         {/* Confirm Footer Button (White with Black Text) */}
         <button type="button" className="shc-dtp-confirm-btn" onClick={handleConfirm}>
-          Set Date & Time
+          {showTime ? 'Set Date & Time' : 'Set Date'}
         </button>
       </div>
     </div>

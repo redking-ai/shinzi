@@ -27,7 +27,7 @@ import Servers from './Servers';
 import { getCachedProfile, setCachedProfile, navigateTo } from './profileCache';
 import { updateUserPresence } from './presenceService';
 
-import logo from './assets/logo.png';
+import logo from './assets/hero.png';
 
 type Screen = 'welcome' | 'signup' | 'login' | 'terms' | 'privacy';
 
