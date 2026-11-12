@@ -27,7 +27,7 @@ import {
   ASSET_TYPES,
   ASSET_VISIBILITY,
 } from './assetService';
-import { Pencil } from 'lucide-react';
+import { ArrowLeft, Pencil } from 'lucide-react';
 import { DateTimePickerModal } from './DateTimePickerModal';
 
 interface SignUpProps {
@@ -903,7 +903,7 @@ useEffect(() => {
             disabled={isSubmitting}
             aria-label="Back"
           >
-            ←
+            <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2} />
           </button>
         </div>
 
@@ -1498,9 +1498,9 @@ useEffect(() => {
           border: 0;
           background: transparent;
 
-          color: var(--su-accent);
+          color: #FFFFFF;
 
-          font-size: 30px;
+          font-size: 24px;
           font-weight: 400;
           line-height: 1;
 
@@ -1514,6 +1514,15 @@ useEffect(() => {
           display: flex;
           align-items: center;
           justify-content: flex-start;
+          transition: opacity 0.15s ease;
+        }
+
+        .signup-back-button:hover {
+          opacity: 0.85;
+        }
+
+        .signup-back-button:active {
+          opacity: 0.65;
         }
 
         .signup-back-button:disabled {
