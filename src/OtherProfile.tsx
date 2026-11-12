@@ -581,7 +581,15 @@ export default function OtherProfile({
           <button
             type="button"
             className="sh-banner-back-button"
-            onClick={() => window.history.back()}
+            onClick={() => {
+              if (onClose) {
+                onClose();
+              } else if (window.history.length > 1) {
+                window.history.back();
+              } else {
+                navigateTo('/chat');
+              }
+            }}
             title="Go back"
             aria-label="Go back"
           >

@@ -62,6 +62,8 @@ import {
   getUsedStylesData,
   importIncomingStyleData,
 } from './textStyleService';
+import OtherProfile from './OtherProfile';
+import { navigateTo } from './profileCache';
 
 export interface ServerChannel {
   id: string;
@@ -358,8 +360,44 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
   const [discoverableServers, setDiscoverableServers] = useState<ServerData[]>([]);
 
   // Navigation / Modal States
-  const [activeServer, setActiveServer] = useState<ServerData | null>(null);
-  const [selectedChannel, setSelectedChannel] = useState<ServerChannel | null>(null);
+  const [activeServer, setActiveServer] = useState<ServerData | null>(() => {
+    try {
+      const saved = sessionStorage.getItem('shinzi_active_server');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [selectedChannel, setSelectedChannel] = useState<ServerChannel | null>(() => {
+    try {
+      const saved = sessionStorage.getItem('shinzi_selected_channel');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    if (activeServer) {
+      try {
+        sessionStorage.setItem('shinzi_active_server', JSON.stringify(activeServer));
+      } catch {}
+    } else {
+      sessionStorage.removeItem('shinzi_active_server');
+    }
+  }, [activeServer]);
+
+  useEffect(() => {
+    if (selectedChannel) {
+      try {
+        sessionStorage.setItem('shinzi_selected_channel', JSON.stringify(selectedChannel));
+      } catch {}
+    } else {
+      sessionStorage.removeItem('shinzi_selected_channel');
+    }
+  }, [selectedChannel]);
+
+  const [viewingProfileUid, setViewingProfileUid] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [showInviteSheet, setShowInviteSheet] = useState(false);
@@ -421,6 +459,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
   const [channelKlipyLoading, setChannelKlipyLoading] = useState(false);
   const channelFileInputRef = useRef<HTMLInputElement | null>(null);
   const channelDocInputRef = useRef<HTMLInputElement | null>(null);
+  const channelInputRef = useRef<HTMLTextAreaElement | null>(null);
   const [channelRecording, setChannelRecording] = useState(false);
   const [channelRecordSeconds, setChannelRecordSeconds] = useState(0);
   const channelMediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -582,8 +621,30 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const bannerInputRef = useRef<HTMLInputElement | null>(null);
 
+  useEffect(() => {
+    if (!viewingProfileUid) return;
+    const handlePopState = () => {
+      setViewingProfileUid(null);
+    };
+    window.history.pushState({ modal: 'other-profile' }, '');
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [viewingProfileUid]);
+
+  const handleCloseProfile = () => {
+    if (typeof window !== 'undefined' && window.history.state?.modal === 'other-profile') {
+      window.history.back();
+    } else {
+      setViewingProfileUid(null);
+    }
+  };
+
   const handleBack = () => {
-    if (selectedChannel) {
+    if (viewingProfileUid) {
+      handleCloseProfile();
+    } else if (selectedChannel) {
       setSelectedChannel(null);
     } else if (activeServer) {
       setActiveServer(null);
@@ -1012,6 +1073,11 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     const text = e.target.value;
     setChannelInputText(text);
 
+    if (channelInputRef.current) {
+      channelInputRef.current.style.height = 'auto';
+      channelInputRef.current.style.height = `${Math.min(channelInputRef.current.scrollHeight, 140)}px`;
+    }
+
     if (!text.trim()) {
       if (channelTypingTimer.current) window.clearTimeout(channelTypingTimer.current);
       lastChannelTypingPingRef.current = 0;
@@ -1100,6 +1166,13 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
       return updated;
     });
     setChannelInputText('');
+    if (channelInputRef.current) {
+      channelInputRef.current.style.height = 'auto';
+      channelInputRef.current.focus({ preventScroll: true });
+    }
+    window.requestAnimationFrame(() => {
+      channelInputRef.current?.focus({ preventScroll: true });
+    });
 
     // 2. Persist to Firestore subcollection
     try {
@@ -1992,7 +2065,11 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                       <div
                         className="sh-channel-msg-avatar shc-avatar-fallback"
                         onClick={() => {
-                          if (onOpenProfile) onOpenProfile();
+                          if (msg.senderId) {
+                            setViewingProfileUid(msg.senderId);
+                          } else if (onOpenProfile) {
+                            onOpenProfile();
+                          }
                         }}
                       >
                         {avatar ? (
@@ -2010,7 +2087,11 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                           <span
                             className="sh-channel-msg-author"
                             onClick={() => {
-                              if (onOpenProfile) onOpenProfile();
+                              if (msg.senderId) {
+                                setViewingProfileUid(msg.senderId);
+                              } else if (onOpenProfile) {
+                                onOpenProfile();
+                              }
                             }}
                           >
                             {renderStyledContent(authorName)}
@@ -2198,6 +2279,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                   </div>
                 ) : (
                   <textarea
+                    ref={channelInputRef}
                     className="shc-composer-textarea"
                     placeholder={`Message #${selectedChannel.name}`}
                     value={channelInputText}
@@ -2239,18 +2321,31 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
 
               <button
                 type="button"
-                className={`shc-composer-icon-btn shc-composer-send-btn ${(channelInputText.trim() || channelRecording) ? 'shc-send-active' : ''}`}
-                disabled={!channelInputText.trim() && !channelRecording && !channelSendBusy}
+                className={`shc-composer-icon-btn shc-composer-send-btn ${(channelInputText.trim() || channelRecording || channelSendBusy) ? 'shc-send-active' : ''}`}
+                onPointerDown={(e) => {
+                  // Crucial for mobile virtual keyboards:
+                  // Calling preventDefault on pointerdown stops the button tap from blurring the textarea,
+                  // keeping the mobile keyboard open.
+                  e.preventDefault();
+                }}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                }}
                 onClick={() => {
+                  if (channelSendBusy) return;
                   if (channelRecording) {
                     void stopAndSendChannelVoice();
-                  } else {
+                  } else if (channelInputText.trim()) {
                     void handleSendChannelMessage();
                   }
                 }}
                 aria-label="Send message"
               >
-                <Send size={18} />
+                {channelSendBusy ? (
+                  <span className="shc-spinner shc-spinner-sm" />
+                ) : (
+                  <Send size={18} />
+                )}
               </button>
             </div>
           </div>
@@ -2479,6 +2574,18 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
               </Suspense>
             </div>
           </div>
+        )}
+
+        {viewingProfileUid && (
+          <OtherProfile
+            targetUid={viewingProfileUid}
+            onClose={handleCloseProfile}
+            onOpenChat={(targetUid) => {
+              handleCloseProfile();
+              if (onOpenChat) onOpenChat();
+              else navigateTo(`/chat?user=${encodeURIComponent(targetUid)}`);
+            }}
+          />
         )}
       </div>
     );
@@ -3322,6 +3429,18 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
             </div>
           </div>
         )}
+
+        {viewingProfileUid && (
+          <OtherProfile
+            targetUid={viewingProfileUid}
+            onClose={handleCloseProfile}
+            onOpenChat={(targetUid) => {
+              handleCloseProfile();
+              if (onOpenChat) onOpenChat();
+              else navigateTo(`/chat?user=${encodeURIComponent(targetUid)}`);
+            }}
+          />
+        )}
       </div>
     );
   }
@@ -3706,6 +3825,18 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
           )}
         </button>
       </nav>
+
+      {viewingProfileUid && (
+        <OtherProfile
+          targetUid={viewingProfileUid}
+          onClose={handleCloseProfile}
+          onOpenChat={(targetUid) => {
+            handleCloseProfile();
+            if (onOpenChat) onOpenChat();
+            else navigateTo(`/chat?user=${encodeURIComponent(targetUid)}`);
+          }}
+        />
+      )}
     </div>
   );
 }
