@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './Settings.css';
 import { auth } from './firebaseConfig';
 import { signOut } from 'firebase/auth';
+import TextStylesModal from './TextStylesModal';
 
 interface SettingsProps {
   onBack: () => void;
@@ -73,6 +74,7 @@ const MaterialIcon: React.FC<{
 
 export default function Settings({ onBack }: SettingsProps) {
   const [devEnabled, setDevEnabled] = useState(false);
+  const [showTextStyles, setShowTextStyles] = useState(false);
   const [toastText, setToastText] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
   const [deviceName, setDeviceName] = useState('Samsung A20');
@@ -479,7 +481,7 @@ export default function Settings({ onBack }: SettingsProps) {
             <button
               type="button"
               className="sh-settings-item"
-              onClick={() => showToast('Text styles settings')}
+              onClick={() => setShowTextStyles(true)}
             >
               <div className="sh-settings-item-left">
                 <span className="sh-settings-item-icon">
@@ -611,7 +613,7 @@ export default function Settings({ onBack }: SettingsProps) {
             </button>
           </div>
 
-          <div className="sh-settings-card">
+          <div className={`sh-settings-card ${!devEnabled ? 'sh-settings-card-disabled' : ''}`}>
             {/* 22. App Version */}
             <div className="sh-settings-item">
               <div className="sh-settings-item-left">
@@ -650,7 +652,8 @@ export default function Settings({ onBack }: SettingsProps) {
                 <button
                   type="button"
                   className={`sh-settings-copy-btn ${copiedCode ? 'sh-settings-copy-btn-copied' : ''}`}
-                  onClick={handleCopyCode}
+                  onClick={devEnabled ? handleCopyCode : undefined}
+                  disabled={!devEnabled}
                   title="Copy Developer Code"
                   aria-label="Copy Developer Code"
                 >
@@ -688,6 +691,14 @@ export default function Settings({ onBack }: SettingsProps) {
 
       {/* Toast Alert */}
       {toastText && <div className="sh-settings-toast">{toastText}</div>}
+
+      {/* Text Styles Modal (20261112_175229.jpg) */}
+      {showTextStyles && (
+        <TextStylesModal
+          onBack={() => setShowTextStyles(false)}
+          showToast={showToast}
+        />
+      )}
     </div>
   );
 }

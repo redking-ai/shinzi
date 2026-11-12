@@ -348,3 +348,159 @@
     transform: translate(-50%, 0) scale(1);
   }
 }
+
+/* Developer Settings Disabled State */
+.sh-settings-card-disabled {
+  opacity: 0.38 !important;
+  pointer-events: none !important;
+}
+
+.sh-settings-card-disabled .sh-settings-copy-btn {
+  pointer-events: none !important;
+  cursor: not-allowed !important;
+  background: #1c1d22 !important;
+  color: #666666 !important;
+  border-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* ==========================================================
+   TEXT STYLES MODAL (from notebook 20261112_175229.jpg)
+   ========================================================== */
+.sh-ts-add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 14px;
+  background: #14151a;
+  border: 1px dashed rgba(255, 255, 255, 0.22);
+  border-radius: 12px;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sh-ts-add-btn:active {
+  background: #1a1b22;
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: scale(0.99);
+}
+
+.sh-ts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sh-ts-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #14151a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sh-ts-card:hover {
+  background: #181920;
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.sh-ts-icon-wrap {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: #1f2029;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sh-ts-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sh-ts-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sh-ts-name {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.sh-ts-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(87, 242, 135, 0.15);
+  color: #57f287;
+}
+
+.sh-ts-preview {
+  font-size: 14px;
+  color: #dbdee1;
+  letter-spacing: 0.5px;
+}
+
+.sh-ts-syntax {
+  font-size: 11px;
+  color: #949ba4;
+}
+
+.sh-ts-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.sh-ts-copy-pill {
+  padding: 5px 9px;
+  background: #1f2029;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: #949ba4;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sh-ts-copy-pill:hover {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.sh-ts-delete-btn {
+  background: transparent;
+  border: 0;
+  padding: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sh-ts-delete-btn:hover {
+  background: rgba(255, 75, 75, 0.12);
+}

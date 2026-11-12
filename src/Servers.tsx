@@ -55,6 +55,7 @@ import {
 } from 'firebase/firestore';
 import { useDriveStore } from './driveStore';
 import { getUserEffectiveStatus } from './presenceService';
+import { applyTextStyles, validateTextStyleSyntax } from './textStyleService';
 
 export interface ServerChannel {
   id: string;
@@ -437,6 +438,30 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
         .map(([, data]) => String(data.displayName || data.username || 'Someone')),
     [channelActivity, activityNow, currentUser?.uid]
   );
+
+  // Real-time Current User Profile for bottom nav avatar
+  const [currentUserProfile, setCurrentUserProfile] = useState<{
+    displayName?: string;
+    photoURL?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!currentUser?.uid) return undefined;
+    return onSnapshot(doc(db, 'users', currentUser.uid), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        const avatarUrl =
+          data.photoURL ||
+          (data.profileAssetId
+            ? `https://lh3.googleusercontent.com/d/${data.profileAssetId}=s400`
+            : undefined);
+        setCurrentUserProfile({
+          displayName: data.displayName,
+          photoURL: avatarUrl,
+        });
+      }
+    });
+  }, [currentUser?.uid]);
 
   // Memory Booter: Remember last visited channel per server (IMG-20261111-WA0001)
   const [lastChannelByServer, setLastChannelByServer] = useState<Record<string, string>>(() => {
@@ -992,6 +1017,25 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     const textToSend = channelInputText.trim();
     if (!textToSend && !imageUrl && !extra?.audioUrl && !extra?.text && !extra?.fileName) return;
 
+    // Check syntax for (ts ...) and {ts ...} tags
+    const syntaxValidation = validateTextStyleSyntax(textToSend);
+    if (!syntaxValidation.isValid) {
+      const errId = `err-${Date.now()}`;
+      const errMsg: ServerChannelMessage = {
+        id: errId,
+        senderId: 'system',
+        senderName: 'System',
+        text: syntaxValidation.error || 'Unsupported syntax. Please enter a space, e.g. (ts ashetic)',
+        isError: true,
+        createdAt: Date.now(),
+      } as any;
+      setChannelMessages((prev) => [...prev, errMsg]);
+      setTimeout(() => {
+        setChannelMessages((prev) => prev.filter((m) => m.id !== errId));
+      }, 10000);
+      return;
+    }
+
     // Immediately stop typing indicator upon sending
     void publishChannelTyping(false);
     if (channelTypingTimer.current) window.clearTimeout(channelTypingTimer.current);
@@ -1003,11 +1047,13 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
     const userName = profile?.displayName || currentUser?.displayName || 'User';
     const userAvatar = profile?.avatarUrl || currentUser?.photoURL || '';
 
+    const processedText = extra?.text !== undefined ? extra.text : applyTextStyles(textToSend);
+
     const newMsg: Record<string, any> = {
       senderId: userUid,
       senderName: userName,
       senderAvatar: userAvatar,
-      text: extra?.text !== undefined ? extra.text : textToSend,
+      text: processedText,
       ...(imageUrl ? { imageUrl } : {}),
       ...(extra || {}),
       createdAt: serverTimestamp(),
@@ -1026,7 +1072,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
       senderId: userUid,
       senderName: userName,
       senderAvatar: userAvatar,
-      text: extra?.text !== undefined ? extra.text : textToSend,
+      text: processedText,
       imageUrl,
       ...(extra || {}),
       createdAt: Date.now(),
@@ -1953,7 +1999,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                               if (onOpenProfile) onOpenProfile();
                             }}
                           >
-                            {authorName}
+                            {applyTextStyles(authorName)}
                           </span>
                           <span className="sh-channel-msg-time">
                             {formatDiscordTimestamp(msg.createdAt)}
@@ -1961,11 +2007,14 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
                         </div>
                       )}
                       {msg.text && (
-                        <div className="sh-channel-msg-text">
+                        <div
+                          className="sh-channel-msg-text"
+                          style={(msg as any).isError ? { color: '#ff4b4b', fontWeight: 600 } : undefined}
+                        >
                           {isEmojiOnly(msg.text) ? (
                             <span className="shc-dc-jumbo-emoji">{msg.text.trim()}</span>
                           ) : (
-                            msg.text
+                            applyTextStyles(msg.text)
                           )}
                         </div>
                       )}
@@ -3543,7 +3592,7 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
 
         <button
           type="button"
-          className="sh-nav-active"
+          className="shc-bottom-active"
           onClick={() => {
             setActiveServer(null);
             setShowSearchModal(false);
@@ -3579,8 +3628,38 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
             else window.location.href = '/profile';
           }}
           aria-label="Profile"
+          className="shc-bottom-profile-btn"
         >
-          <User size={22} />
+          {currentUserProfile?.photoURL || currentUser?.photoURL ? (
+            <img
+              src={currentUserProfile?.photoURL || currentUser?.photoURL || ''}
+              alt="Profile"
+              style={{
+                width: 26,
+                height: 26,
+                borderRadius: '50%',
+                objectFit: 'cover',
+                border: '1.5px solid rgba(255,255,255,0.4)',
+              }}
+            />
+          ) : (
+            <div
+              style={{
+                width: 26,
+                height: 26,
+                borderRadius: '50%',
+                backgroundColor: '#5865f2',
+                color: '#fff',
+                fontSize: 12,
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {(currentUserProfile?.displayName || currentUser?.displayName || 'U').charAt(0).toUpperCase()}
+            </div>
+          )}
         </button>
       </nav>
     </div>

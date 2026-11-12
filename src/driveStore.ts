@@ -20,6 +20,7 @@ export type DriveFolderType =
   | 'files'
   | 'voice'
   | 'server'
+  | 'textStyles'
   | 'others';
 
 interface GoogleTokenResponse {
@@ -180,6 +181,7 @@ const SHINZI_SUBFOLDERS: Record<
   files: 'Files',
   voice: 'Voice',
   server: 'server',
+  textStyles: 'Text Styles',
   others: 'Others',
 };
 

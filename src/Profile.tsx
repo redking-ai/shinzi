@@ -28,6 +28,7 @@ import {
   navigateTo,
 } from './profileCache';
 import { updateUserPresence, type OnlineStatusMode } from './presenceService';
+import { applyTextStyles, validateTextStyleSyntax } from './textStyleService';
 import './Profile.css';
 
 type AnyRecord = Record<string, any>;
@@ -531,6 +532,12 @@ useEffect(() => {
       return;
     }
 
+    const syntaxCheck = validateTextStyleSyntax(displayName);
+    if (!syntaxCheck.isValid) {
+      setError(syntaxCheck.error || 'Name is unsupported. Please enter a space, e.g. (ts ashetic)');
+      return;
+    }
+
     if (displayName.length > 50) {
       setError('Display name cannot exceed 50 characters.');
       return;
@@ -552,8 +559,10 @@ useEffect(() => {
       const usernameChanged = username !== oldUsername;
       const batch = writeBatch(db);
 
+      const finalDisplayName = applyTextStyles(displayName);
+
       const updates: AnyRecord = {
-        displayName,
+        displayName: finalDisplayName,
         bio: editForm.bio.trim().slice(0, 300),
         bubleText: editForm.bubleText.trim().replace(/^\+\s*/, '').slice(0, 100),
         pronouns: editForm.pronouns.trim().slice(0, 20),
@@ -1068,7 +1077,7 @@ useEffect(() => {
           </div>
 
           <div className="sh-identity-copy">
-            <h2>{userData.displayName || 'Shinzi User'}</h2>
+            <h2>{applyTextStyles(userData.displayName || 'Shinzi User')}</h2>
             <p className="sh-username">
               {userData.username || 'username'}
             </p>

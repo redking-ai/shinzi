@@ -98,6 +98,7 @@ import { searchKlipy, getCachedKlipy, type KlipyItem } from './klipyService';
 import { cacheAudioBlob } from './voiceCache';
 import { getUserEffectiveStatus, type EffectiveStatus } from './presenceService';
 import MuiAvatar from '@mui/material/Avatar';
+import { applyTextStyles, validateTextStyleSyntax } from './textStyleService';
 import './Chat.css';
 
 interface StagedAttachment {
@@ -2724,8 +2725,26 @@ const handleSearchMessage = async (target: Rec) => {
 
     if (editingMessage) {
       const msgId = editingMessage.id;
-      const newText = messageText.trim();
-      if (newText) {
+      const rawEdit = messageText.trim();
+      if (rawEdit) {
+        const syntaxValidation = validateTextStyleSyntax(rawEdit);
+        if (!syntaxValidation.isValid) {
+          const errId = `err-${Date.now()}`;
+          const errMsg: Rec = {
+            id: errId,
+            text: syntaxValidation.error || 'Unsupported syntax. Please enter a space, e.g. (ts ashetic)',
+            senderId: 'system',
+            senderName: 'System',
+            createdAt: Date.now(),
+            isError: true,
+          };
+          setMessages((prev) => [...prev, errMsg]);
+          setTimeout(() => {
+            setMessages((prev) => prev.filter((m) => m.id !== errId));
+          }, 10000);
+          return;
+        }
+        const newText = applyTextStyles(rawEdit);
         try {
           await updateDoc(
             doc(db, 'conversations', selected.id, 'messages', msgId),
@@ -2743,7 +2762,30 @@ const handleSearchMessage = async (target: Rec) => {
       return;
     }
 
-    const text = messageText.trim();
+    const rawText = messageText.trim();
+    if (!rawText && stagedMedia.length === 0) return;
+
+    if (rawText) {
+      const syntaxValidation = validateTextStyleSyntax(rawText);
+      if (!syntaxValidation.isValid) {
+        const errId = `err-${Date.now()}`;
+        const errMsg: Rec = {
+          id: errId,
+          text: syntaxValidation.error || 'Unsupported syntax. Please enter a space, e.g. (ts ashetic)',
+          senderId: 'system',
+          senderName: 'System',
+          createdAt: Date.now(),
+          isError: true,
+        };
+        setMessages((prev) => [...prev, errMsg]);
+        setTimeout(() => {
+          setMessages((prev) => prev.filter((m) => m.id !== errId));
+        }, 10000);
+        return;
+      }
+    }
+
+    const text = applyTextStyles(rawText);
     if (!text && stagedMedia.length === 0) return;
 
     if (stagedMedia.length > 0) {
@@ -4836,7 +4878,7 @@ const handleSearchMessage = async (target: Rec) => {
       contentNode = (
         <MediaGrid
           items={item.mediaItems || []}
-          caption={item.text ? renderFormattedText(item.text, handleMentionClick) : undefined}
+          caption={item.text ? renderFormattedText(applyTextStyles(item.text), handleMentionClick) : undefined}
           own={item.senderId === uid}
           messageId={item.id}
           createdAt={item.createdAt}
@@ -4887,7 +4929,7 @@ const handleSearchMessage = async (target: Rec) => {
       contentNode = (
         <MediaGrid
           items={[singleItem]}
-          caption={item.text && !isStandaloneUrl ? renderFormattedText(item.text, handleMentionClick) : undefined}
+          caption={item.text && !isStandaloneUrl ? renderFormattedText(applyTextStyles(item.text), handleMentionClick) : undefined}
           own={item.senderId === uid}
           messageId={item.id}
           createdAt={item.createdAt}
@@ -4924,12 +4966,21 @@ const handleSearchMessage = async (target: Rec) => {
         />
       );
     } else {
-      const emojiOnly = isEmojiOnly(item.text);
-      contentNode = emojiOnly ? (
-        <span className="shc-dc-jumbo-emoji">{item.text.trim()}</span>
-      ) : (
-        <span className="shc-dc-text">{renderFormattedText(item.text, handleMentionClick)}</span>
-      );
+      if (item.isError) {
+        contentNode = (
+          <span className="shc-dc-text" style={{ color: '#ff4b4b', fontWeight: 600 }}>
+            {item.text}
+          </span>
+        );
+      } else {
+        const styledText = applyTextStyles(item.text);
+        const emojiOnly = isEmojiOnly(styledText);
+        contentNode = emojiOnly ? (
+          <span className="shc-dc-jumbo-emoji">{styledText.trim()}</span>
+        ) : (
+          <span className="shc-dc-text">{renderFormattedText(styledText, handleMentionClick)}</span>
+        );
+      }
     }
 
     const messageContent = (
@@ -5038,7 +5089,7 @@ const handleSearchMessage = async (target: Rec) => {
                   onDoubleClick={(event) => event.stopPropagation()}
                   aria-label={`Open ${authorName}'s profile`}
                 >
-                  {authorName}
+                  {applyTextStyles(authorName)}
                 </button>
                 <span className="shc-dc-timestamp">
                   {formatDiscordTimestamp(item.createdAt)}
