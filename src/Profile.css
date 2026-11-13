@@ -1646,10 +1646,10 @@ body {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #000000;
+  background: #2b2d31;
   margin-right: 4px;
   flex-shrink: 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* Medium dot 2 */
@@ -1658,16 +1658,16 @@ body {
   width: 11px;
   height: 11px;
   border-radius: 50%;
-  background: #000000;
+  background: #2b2d31;
   margin-right: 6px;
   flex-shrink: 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* Main thought bubble body */
 .sh-status-bubble {
   position: relative;
-  background: #000000;
+  background: #2b2d31;
   border-radius: 20px;
   padding: 6px 14px;
   color: #ffffff;
@@ -1679,7 +1679,7 @@ body {
   max-width: calc(100vw - 165px);
   word-break: break-word;
   white-space: pre-wrap;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
 }
 
@@ -1692,9 +1692,9 @@ body {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #000000;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  background: #2b2d31;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .sh-status-plus-circle {
