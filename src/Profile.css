@@ -1628,9 +1628,9 @@ body {
   display: inline-flex;
   align-items: center;
   position: relative;
-  align-self: center;
-  margin-bottom: 8px;
-  margin-left: 6px;
+  align-self: flex-end;
+  margin-bottom: 4px;
+  margin-left: 4px;
   cursor: pointer;
   user-select: none;
   z-index: 10;
@@ -1642,13 +1642,26 @@ body {
 }
 
 /* Small dot 1 beside avatar edge */
-.sh-status-bubble-dot {
-  width: 12px;
-  height: 12px;
+.sh-status-bubble-dot-sm {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #000000;
+  margin-right: 4px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Medium dot 2 */
+.sh-status-bubble-dot,
+.sh-status-bubble-dot-md {
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
   background: #000000;
   margin-right: 6px;
   flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 /* Main thought bubble body */
@@ -1656,7 +1669,7 @@ body {
   position: relative;
   background: #000000;
   border-radius: 20px;
-  padding: 7px 16px;
+  padding: 6px 14px;
   color: #ffffff;
   font-size: 13.5px;
   font-weight: 600;
@@ -1666,6 +1679,7 @@ body {
   max-width: calc(100vw - 165px);
   word-break: break-word;
   white-space: pre-wrap;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
 }
 
@@ -1673,12 +1687,14 @@ body {
 .sh-status-bubble::before {
   content: "";
   position: absolute;
-  left: 14px;
-  top: -6px;
-  width: 16px;
-  height: 16px;
+  left: 12px;
+  top: -5px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   background: #000000;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .sh-status-plus-circle {

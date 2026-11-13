@@ -1109,7 +1109,8 @@ useEffect(() => {
                   aria-label={currentStatus ? `Status: ${currentStatus}` : 'Add Status'}
                   title={currentStatus ? 'Change Status' : 'Add Status'}
                 >
-                  <div className="sh-status-bubble-dot" aria-hidden="true" />
+                  <div className="sh-status-bubble-dot-sm" aria-hidden="true" />
+                  <div className="sh-status-bubble-dot-md" aria-hidden="true" />
                   <div className="sh-status-bubble">
                     {currentStatus ? (
                       <span className="sh-status-bubble-text">

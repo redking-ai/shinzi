@@ -5405,9 +5405,16 @@ const handleSearchMessage = async (target: Rec) => {
     loading: boolean,
     empty: ReactNode,
     renderRow: (item: Rec) => ReactNode,
+    showBack: boolean = true,
   ) => (
     <>
-      {renderBackHeader(title)}
+      {showBack ? (
+        renderBackHeader(title)
+      ) : (
+        <header className="shc-header">
+          <h1>{title}</h1>
+        </header>
+      )}
       <div className="shc-list shc-padded">
         {loading ? (
           <div className="shc-loading">
@@ -5547,6 +5554,7 @@ const handleSearchMessage = async (target: Rec) => {
         const accept = kind === 'friendRequests' ? acceptFriendRequest : acceptDMRequest;
         return renderRequestRow(kind, accept)(item);
       },
+      false,
     );
   };
 
@@ -6968,7 +6976,7 @@ return (
                 : renderMain()}
     </div>
 
-    {screen !== 'conversation' && renderBottomNav()}
+    {screen !== 'conversation' && screen !== 'search' && renderBottomNav()}
 
     {renderOverlays()}
 

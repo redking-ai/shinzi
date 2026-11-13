@@ -1266,6 +1266,35 @@
   color: #ffffff;
 }
 
+.shc-bottom-profile-btn,
+.shc-bottom button.shc-bottom-profile-btn {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  background: transparent !important;
+}
+
+.shc-bottom .shc-avatar-nav,
+.shc-avatar-nav {
+  width: 38px !important;
+  height: 38px !important;
+  border-radius: 50% !important;
+  object-fit: cover !important;
+  display: block !important;
+  flex-shrink: 0 !important;
+  overflow: hidden !important;
+}
+
+.shc-bottom .shc-avatar-img,
+.shc-avatar-img {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 50% !important;
+  object-fit: cover !important;
+  display: block !important;
+}
+
 /* ==========================================================
    STATUS DOTS FOR SERVERS (Green Online & Gray Members)
    ========================================================== */
