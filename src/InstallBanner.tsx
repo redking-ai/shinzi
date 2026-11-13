@@ -2,23 +2,19 @@ import React, { useState, useEffect } from 'react';
 
 export default function InstallBanner() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [isInstalled, setIsInstalled] = useState<boolean>(() => {
+  const [isStandalone, setIsStandalone] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return (
       window.matchMedia('(display-mode: standalone)').matches ||
       (window.navigator as any).standalone === true ||
-      document.referrer.includes('android-app://') ||
-      localStorage.getItem('shinzi_pwa_installed') === 'true'
+      document.referrer.includes('android-app://')
     );
   });
-  const [isDismissed, setIsDismissed] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    return sessionStorage.getItem('shinzi_install_banner_dismissed') === 'true';
-  });
+  const [isDismissed, setIsDismissed] = useState<boolean>(false);
   const [showGuide, setShowGuide] = useState<boolean>(false);
 
   useEffect(() => {
-    if (!isInstalled && !isDismissed) {
+    if (!isStandalone && !isDismissed) {
       document.documentElement.style.setProperty('--shinzi-banner-h', '52px');
     } else {
       document.documentElement.style.setProperty('--shinzi-banner-h', '0px');
@@ -26,7 +22,7 @@ export default function InstallBanner() {
     return () => {
       document.documentElement.style.setProperty('--shinzi-banner-h', '0px');
     };
-  }, [isInstalled, isDismissed]);
+  }, [isStandalone, isDismissed]);
 
   useEffect(() => {
     // Check standalone mode dynamically
@@ -36,10 +32,7 @@ export default function InstallBanner() {
         (window.navigator as any).standalone === true ||
         document.referrer.includes('android-app://');
 
-      if (standalone) {
-        setIsInstalled(true);
-        localStorage.setItem('shinzi_pwa_installed', 'true');
-      }
+      setIsStandalone(standalone);
     };
 
     checkStandalone();
@@ -53,8 +46,7 @@ export default function InstallBanner() {
     };
 
     const handleAppInstalled = () => {
-      setIsInstalled(true);
-      localStorage.setItem('shinzi_pwa_installed', 'true');
+      setIsStandalone(true);
       setDeferredPrompt(null);
     };
 
@@ -68,7 +60,7 @@ export default function InstallBanner() {
     };
   }, []);
 
-  if (isInstalled || isDismissed) {
+  if (isStandalone || isDismissed) {
     return null;
   }
 
@@ -78,12 +70,12 @@ export default function InstallBanner() {
         await deferredPrompt.prompt();
         const choiceResult = await deferredPrompt.userChoice;
         if (choiceResult?.outcome === 'accepted') {
-          setIsInstalled(true);
-          localStorage.setItem('shinzi_pwa_installed', 'true');
+          setIsStandalone(true);
         }
         setDeferredPrompt(null);
       } catch (err) {
         console.warn('Install prompt error:', err);
+        setShowGuide(true);
       }
     } else {
       setShowGuide(true);
@@ -92,7 +84,6 @@ export default function InstallBanner() {
 
   const handleDismiss = () => {
     setIsDismissed(true);
-    sessionStorage.setItem('shinzi_install_banner_dismissed', 'true');
   };
 
   return (
