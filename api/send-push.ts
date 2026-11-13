@@ -1,5 +1,7 @@
-import webpush from 'web-push';
+import * as webpushModule from 'web-push';
 import { adminDb } from './_lib/firebaseAdmin.js';
+
+const webpush = (webpushModule as any).default || webpushModule;
 
 export const VAPID_PUBLIC_KEY = 'BNWehV8Z7f44UDrA2a8A1b3y7F61JvEkveZJOSGljWPp6EiyNnFubo3BlH00pl3jtfqsh8geehCXkaocKcqaiy8';
 export const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'uWcBHce8dCYW6A-s3tdIWhtya_uE7LzepN8q_lVuuFU';
@@ -16,6 +18,14 @@ try {
 
 export default {
   async fetch(request: Request): Promise<Response> {
+    if (request.method === 'GET') {
+      return Response.json({
+        ok: true,
+        service: 'shinzi-web-push',
+        vapidConfigured: Boolean(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY),
+      });
+    }
+
     if (request.method !== 'POST') {
       return Response.json({ error: 'Method not allowed' }, { status: 405 });
     }

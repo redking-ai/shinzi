@@ -7,7 +7,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 import { navigateTo } from './profileCache';
-import { subscribeToWebPush } from './pushService';
+import { subscribeToWebPush, sendWebPushToUser } from './pushService';
 
 interface InAppToast {
   id: string;
@@ -96,9 +96,19 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
       if (result === 'granted') {
         setShowPermissionBanner(false);
         if (currentUid) {
-          void subscribeToWebPush(currentUid);
+          void subscribeToWebPush(currentUid).then((ok) => {
+            if (ok) {
+              void sendWebPushToUser({
+                recipientUid: currentUid,
+                title: 'Shinzi Notifications',
+                text: 'Push notifications active! You will receive alerts even when Shinzi is closed.',
+                icon: '/icon-192.png',
+                tag: 'shinzi-welcome-push',
+              });
+            }
+          });
         }
-        // Send immediate test / confirmation notification to register Android notification channel
+        // Send immediate confirmation notification via ServiceWorker
         void dispatchOSNotification('Shinzi Notifications', {
           body: 'Notifications enabled! You will now receive alerts for new messages.',
           icon: '/icon-192.png',
