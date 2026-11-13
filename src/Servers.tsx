@@ -117,6 +117,7 @@ interface ServersProps {
   onBack?: () => void;
   onOpenChat?: () => void;
   onOpenProfile?: () => void;
+  onOpenNotifications?: () => void;
 }
 
 // Legacy mock server IDs to clean out from localStorage
@@ -335,7 +336,12 @@ function EmojiCategoryButton({
   );
 }
 
-export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersProps) {
+export default function Servers({
+  onBack,
+  onOpenChat,
+  onOpenProfile,
+  onOpenNotifications,
+}: ServersProps) {
   const drive = useDriveStore();
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(() => auth.currentUser);
 
@@ -3786,10 +3792,13 @@ export default function Servers({ onBack, onOpenChat, onOpenProfile }: ServersPr
 
         <button
           type="button"
-          onClick={() => setShowSearchModal(true)}
-          aria-label="Search"
+          onClick={() => {
+            if (onOpenNotifications) onOpenNotifications();
+            else navigateTo('/chat?screen=notifications');
+          }}
+          aria-label="Notifications"
         >
-          <Search size={22} />
+          <Bell size={22} />
         </button>
 
         <button

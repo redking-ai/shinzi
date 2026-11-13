@@ -3766,11 +3766,11 @@ button {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 14px 4px 14px;
+  padding: 8px 12px 0 12px;
   overflow-x: auto;
   scrollbar-width: none;
   background: var(--bg);
-  border-top: 1px solid var(--line);
+  border: none;
 }
 
 .shc-composer-staged-tray::-webkit-scrollbar {

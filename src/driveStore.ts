@@ -1028,9 +1028,18 @@ export const useDriveStore = (): DriveStore => {
             try {
               buffer = await file.arrayBuffer();
             } catch (readErr) {
-              throw new Error(
-                `[File Read] Unable to read selected file into memory: ${readErr instanceof Error ? readErr.message : 'aborted'}`
-              );
+              try {
+                buffer = await new Promise<ArrayBuffer>((res, rej) => {
+                  const reader = new FileReader();
+                  reader.onload = () => res(reader.result as ArrayBuffer);
+                  reader.onerror = () => rej(new Error('FileReader fallback failed'));
+                  reader.readAsArrayBuffer(file);
+                });
+              } catch {
+                throw new Error(
+                  `[File Read] Unable to read selected file into memory: ${readErr instanceof Error ? readErr.message : 'aborted'}`
+                );
+              }
             }
           } else {
             const localResponse =

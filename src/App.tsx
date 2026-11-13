@@ -256,6 +256,7 @@ if (currentPath === '/servers') {
       }}
       onOpenChat={() => navigateTo('/chat')}
       onOpenProfile={() => navigateTo('/profile')}
+      onOpenNotifications={() => navigateTo('/chat?screen=notifications')}
     />
   );
 }

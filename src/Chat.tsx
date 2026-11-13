@@ -1324,9 +1324,24 @@ export default function Chat({ onNavigate }: ChatProps) {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       if (params.get('screen') === 'search') return 'search';
+      if (params.get('screen') === 'notifications') return 'notifications';
     }
     return 'main';
   });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      if (screen === 'notifications') {
+        url.searchParams.set('screen', 'notifications');
+      } else if (screen === 'search') {
+        url.searchParams.set('screen', 'search');
+      } else {
+        url.searchParams.delete('screen');
+      }
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, [screen]);
   const [selected, setSelected] = useState<Rec | null>(null);
   const [visualHeight, setVisualHeight] = useState<number | null>(null);
   const [visualTop, setVisualTop] = useState<number>(0);
@@ -3843,19 +3858,21 @@ const handleSearchMessage = async (target: Rec) => {
     }
   };
 
-  const onPickGallery = (e: ChangeEvent<HTMLInputElement>) => {
-    const fileList = Array.from(e.target.files || []);
-    e.target.value = '';
+  const onPickGallery = async (e: ChangeEvent<HTMLInputElement>) => {
+    const inputEl = e.target;
+    const fileList = Array.from(inputEl.files || []);
     if (!fileList.length) return;
 
     if (!selected?.id) {
       notify('No chat open', 'Please open a conversation to attach media.');
+      try { inputEl.value = ''; } catch {}
       return;
     }
 
     const availableSlots = Math.max(0, 10 - stagedMedia.length);
     if (availableSlots <= 0) {
       notify('Limit reached', 'Maximum 10 attachments allowed at a time.');
+      try { inputEl.value = ''; } catch {}
       return;
     }
 
@@ -3870,17 +3887,61 @@ const handleSearchMessage = async (target: Rec) => {
 
     if (!validFiles.length) {
       notify('Invalid file', 'Please select valid image or video files.');
+      try { inputEl.value = ''; } catch {}
       return;
     }
 
-    const newStaged: StagedAttachment[] = validFiles.map((file, idx) => ({
-      id: `${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`,
-      file,
-      previewUrl: URL.createObjectURL(file),
-      type: file.type.startsWith('video/') ? 'video' : 'image',
-    }));
+    // Immediately buffer file bytes into memory to prevent Android/iOS mobile file-descriptor detachment
+    const newStaged: StagedAttachment[] = [];
+    for (let idx = 0; idx < validFiles.length; idx++) {
+      const origFile = validFiles[idx];
+      try {
+        let arrayBuf: ArrayBuffer | null = null;
+        try {
+          arrayBuf = await origFile.arrayBuffer();
+        } catch {
+          arrayBuf = await new Promise<ArrayBuffer>((res, rej) => {
+            const reader = new FileReader();
+            reader.onload = () => res(reader.result as ArrayBuffer);
+            reader.onerror = () => rej(new Error('FileReader failed'));
+            reader.readAsArrayBuffer(origFile);
+          });
+        }
 
-    setStagedMedia((prev) => [...prev, ...newStaged]);
+        const mime = origFile.type || 'image/jpeg';
+        const inMemoryBlob = new Blob([arrayBuf], { type: mime });
+        const inMemoryFile = new File([inMemoryBlob], origFile.name, {
+          type: mime,
+          lastModified: origFile.lastModified || Date.now(),
+        });
+        const previewUrl = URL.createObjectURL(inMemoryBlob);
+
+        newStaged.push({
+          id: `${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`,
+          file: inMemoryFile,
+          previewUrl,
+          type: mime.startsWith('video/') ? 'video' : 'image',
+        });
+      } catch (readErr) {
+        console.warn('Failed to buffer file into memory, fallback to raw file handle:', readErr);
+        try {
+          newStaged.push({
+            id: `${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`,
+            file: origFile,
+            previewUrl: URL.createObjectURL(origFile),
+            type: origFile.type.startsWith('video/') ? 'video' : 'image',
+          });
+        } catch {}
+      }
+    }
+
+    try {
+      inputEl.value = '';
+    } catch {}
+
+    if (newStaged.length > 0) {
+      setStagedMedia((prev) => [...prev, ...newStaged]);
+    }
   };
 
   async function uploadAndSendStagedMedia(items: StagedAttachment[], caption: string) {
@@ -5165,11 +5226,17 @@ const handleSearchMessage = async (target: Rec) => {
 
       <button
         type="button"
-        className={screen === 'search' ? 'shc-bottom-active' : ''}
-        onClick={() => setScreen('search')}
-        aria-label="Search"
+        className={screen === 'notifications' ? 'shc-bottom-active' : ''}
+        onClick={() => {
+          setSelected(null);
+          setScreen('notifications');
+        }}
+        aria-label="Notifications"
       >
-        <Search size={22} />
+        <Bell size={22} />
+        {friendRequests.length + dmRequests.length > 0 && (
+          <Badge count={friendRequests.length + dmRequests.length} />
+        )}
       </button>
 
       <button
@@ -5203,13 +5270,10 @@ const handleSearchMessage = async (target: Rec) => {
           <button
             type="button"
             className="shc-icon-btn"
-            onClick={() => setScreen('notifications')}
-            aria-label="Notifications"
+            onClick={() => setScreen('search')}
+            aria-label="Search"
           >
-            <Bell size={21} />
-            {friendRequests.length + dmRequests.length > 0 && (
-              <Badge count={friendRequests.length + dmRequests.length} />
-            )}
+            <Search size={22} />
           </button>
 
           <button
@@ -5489,7 +5553,15 @@ const handleSearchMessage = async (target: Rec) => {
   const renderSearch = () => (
     <>
       <header className="shc-header">
-        <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button
+            type="button"
+            className="shc-icon-btn"
+            onClick={() => setScreen('main')}
+            aria-label="Back to chats"
+          >
+            <ArrowLeft size={23} />
+          </button>
           <h1>Search</h1>
         </div>
       </header>
@@ -5946,8 +6018,11 @@ const handleSearchMessage = async (target: Rec) => {
                   ) : (
                     <img
                       src={item.previewUrl}
-                      alt="Staged attachment"
+                      alt=""
                       className="shc-composer-staged-thumb"
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = 'none';
+                      }}
                     />
                   )}
                   <button
