@@ -24,7 +24,8 @@
     "react-dom": "^18.3.1",
     "react-easy-crop": "^6.2.4",
     "react-speech-recognition": "^4.0.1",
-    "regenerator-runtime": "^0.14.1"
+    "regenerator-runtime": "^0.14.1",
+    "web-push": "^4.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",

@@ -1,5 +1,5 @@
 // Shinzi Service Worker
-const CACHE_NAME = 'shinzi-v2';
+const CACHE_NAME = 'shinzi-v3';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -29,6 +29,33 @@ self.addEventListener('message', (event) => {
     const { title, options } = event.data;
     self.registration.showNotification(title, options);
   }
+});
+
+// REAL WEB PUSH (Fires even when app is closed, killed, or screen locked)
+self.addEventListener('push', (event) => {
+  let data = {};
+  if (event.data) {
+    try {
+      data = event.data.json();
+    } catch {
+      data = { text: event.data.text() };
+    }
+  }
+
+  const title = data.title || 'Shinzi';
+  const options = {
+    body: data.body || data.text || 'You received a new message',
+    icon: data.icon || '/icon-192.png',
+    badge: '/icon-192.png',
+    tag: data.tag || `shinzi-${Date.now()}`,
+    renotify: true,
+    vibrate: [200, 100, 200],
+    data: {
+      url: data.url || '/',
+    },
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
 });
 
 self.addEventListener('notificationclick', (event) => {

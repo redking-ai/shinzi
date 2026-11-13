@@ -7,6 +7,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 import { navigateTo } from './profileCache';
+import { subscribeToWebPush } from './pushService';
 
 interface InAppToast {
   id: string;
@@ -79,7 +80,11 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
     };
 
     checkPermissionState();
-  }, []);
+
+    if (Notification.permission === 'granted' && currentUid) {
+      void subscribeToWebPush(currentUid);
+    }
+  }, [currentUid]);
 
   const handleRequestPermission = async () => {
     if (typeof window === 'undefined' || !('Notification' in window)) {
@@ -90,6 +95,9 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
       const result = await Notification.requestPermission();
       if (result === 'granted') {
         setShowPermissionBanner(false);
+        if (currentUid) {
+          void subscribeToWebPush(currentUid);
+        }
         // Send immediate test / confirmation notification to register Android notification channel
         void dispatchOSNotification('Shinzi Notifications', {
           body: 'Notifications enabled! You will now receive alerts for new messages.',

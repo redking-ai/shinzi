@@ -96,6 +96,7 @@ import { compressImageToWebP } from './imageCompressor';
 import { DateTimePickerModal } from './DateTimePickerModal';
 import { searchKlipy, getCachedKlipy, type KlipyItem } from './klipyService';
 import { cacheAudioBlob } from './voiceCache';
+import { sendWebPushToUser } from './pushService';
 import { getUserEffectiveStatus, type EffectiveStatus } from './presenceService';
 import MuiAvatar from '@mui/material/Avatar';
 import {
@@ -2802,6 +2803,20 @@ const handleSearchMessage = async (target: Rec) => {
     }
   };
 
+  const triggerPushForDirectMessage = (messageId: string, previewText: string) => {
+    if (!selected?.id || selected?.type === 'group' || selected?.type === 'channel') return;
+    const recipientUid = (selected?.memberIds || []).find((m: string) => m !== uid);
+    if (!recipientUid) return;
+    void sendWebPushToUser({
+      recipientUid,
+      title: profile?.displayName || profile?.username || 'New Message',
+      text: previewText,
+      icon: profile?.photoURL || '/icon-192.png',
+      url: `/chat?user=${encodeURIComponent(uid || '')}&msg=${encodeURIComponent(messageId)}`,
+      tag: `shinzi-${selected.id}-${messageId}`,
+    });
+  };
+
   const sendMessage = async () => {
     if (!uid || !selected?.id || sendingRef.current) return;
 
@@ -3015,6 +3030,7 @@ const handleSearchMessage = async (target: Rec) => {
       });
 
       await updateDoc(doc(db, 'conversations', selected.id), updates);
+      triggerPushForDirectMessage(messageRef.id, text);
 
       if (draftTimer.current) window.clearTimeout(draftTimer.current);
       if (selected?.id) {
@@ -3890,6 +3906,7 @@ const handleSearchMessage = async (target: Rec) => {
       });
 
       await updateDoc(doc(db, 'conversations', selected.id), updates);
+      triggerPushForDirectMessage(messageRef.id, summaryText);
       setReplyTarget(null);
     } catch (error) {
       console.error('Send media error:', error);
@@ -4255,6 +4272,7 @@ const handleSearchMessage = async (target: Rec) => {
       };
 
       await updateDoc(doc(db, 'conversations', selected.id), updates);
+      triggerPushForDirectMessage(messageRef.id, `📄 ${params.fileName}`);
       setReplyTarget(null);
     } catch (error) {
       console.error('Send file error:', error);
@@ -4486,8 +4504,9 @@ const handleSearchMessage = async (target: Rec) => {
       };
 
       await updateDoc(doc(db, 'conversations', selected.id), updates);
+      triggerPushForDirectMessage(messageRef.id, '🎤 Voice message');
       setReplyTarget(null);
-
+ 
       // Upload to Google Drive folder 'Shinzi' -> 'Voice' in the background
       if (drive.hasActiveSession) {
         void (async () => {
