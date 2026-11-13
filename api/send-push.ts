@@ -1,41 +1,61 @@
-import * as webpushModule from 'web-push';
 import { adminDb } from './_lib/firebaseAdmin.js';
 
-const webpush = (webpushModule as any).default || webpushModule;
+const VAPID_PUBLIC_KEY = 'BNWehV8Z7f44UDrA2a8A1b3y7F61JvEkveZJOSGljWPp6EiyNnFubo3BlH00pl3jtfqsh8geehCXkaocKcqaiy8';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'uWcBHce8dCYW6A-s3tdIWhtya_uE7LzepN8q_lVuuFU';
 
-export const VAPID_PUBLIC_KEY = 'BNWehV8Z7f44UDrA2a8A1b3y7F61JvEkveZJOSGljWPp6EiyNnFubo3BlH00pl3jtfqsh8geehCXkaocKcqaiy8';
-export const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'uWcBHce8dCYW6A-s3tdIWhtya_uE7LzepN8q_lVuuFU';
+let webpushInstance: any = null;
 
-try {
-  webpush.setVapidDetails(
-    'mailto:support@shinzi.vercel.app',
-    VAPID_PUBLIC_KEY,
-    VAPID_PRIVATE_KEY
-  );
-} catch (e) {
-  console.warn('[send-push] setVapidDetails error:', e);
+async function getWebPush() {
+  if (!webpushInstance) {
+    const wp = await import('web-push');
+    webpushInstance = (wp as any).default || wp;
+    try {
+      webpushInstance.setVapidDetails(
+        'mailto:support@shinzi.vercel.app',
+        VAPID_PUBLIC_KEY,
+        VAPID_PRIVATE_KEY
+      );
+    } catch (e) {
+      console.warn('[send-push] setVapidDetails error:', e);
+    }
+  }
+  return webpushInstance;
 }
 
 export default {
   async fetch(request: Request): Promise<Response> {
+    const CORS_HEADERS = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    };
+
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: CORS_HEADERS });
+    }
+
     if (request.method === 'GET') {
-      return Response.json({
-        ok: true,
-        service: 'shinzi-web-push',
-        vapidConfigured: Boolean(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY),
-      });
+      return Response.json(
+        {
+          ok: true,
+          service: 'shinzi-web-push',
+          timestamp: Date.now(),
+        },
+        { headers: CORS_HEADERS }
+      );
     }
 
     if (request.method !== 'POST') {
-      return Response.json({ error: 'Method not allowed' }, { status: 405 });
+      return Response.json({ error: 'Method not allowed' }, { status: 405, headers: CORS_HEADERS });
     }
 
     try {
+      const wp = await getWebPush();
       const body = await request.json();
       const { recipientUid, title, text, icon, url, tag } = body;
 
       if (!recipientUid) {
-        return Response.json({ error: 'Missing recipientUid' }, { status: 400 });
+        return Response.json({ error: 'Missing recipientUid' }, { status: 400, headers: CORS_HEADERS });
       }
 
       // Query recipient's push subscriptions from Firestore
@@ -46,7 +66,10 @@ export default {
         .get();
 
       if (subsSnapshot.empty) {
-        return Response.json({ ok: true, sent: 0, reason: 'No subscriptions found' });
+        return Response.json(
+          { ok: true, sent: 0, reason: 'No subscriptions found' },
+          { headers: CORS_HEADERS }
+        );
       }
 
       const payload = JSON.stringify({
@@ -66,7 +89,7 @@ export default {
         };
 
         try {
-          await webpush.sendNotification(pushSubscription as any, payload, {
+          await wp.sendNotification(pushSubscription as any, payload, {
             TTL: 86400, // 24 hours
             urgency: 'high',
           });
@@ -80,12 +103,16 @@ export default {
 
       await Promise.allSettled(promises);
 
-      return Response.json({ ok: true, sent: subsSnapshot.size });
+      return Response.json({ ok: true, sent: subsSnapshot.size }, { headers: CORS_HEADERS });
     } catch (error: any) {
-      console.error('Send push error:', error);
+      console.error('[send-push] Execution error:', error);
       return Response.json(
-        { ok: false, error: error?.message || 'Failed to send push' },
-        { status: 500 }
+        {
+          ok: false,
+          error: error?.message || 'Failed to send push',
+          stack: error?.stack,
+        },
+        { status: 500, headers: CORS_HEADERS }
       );
     }
   },
