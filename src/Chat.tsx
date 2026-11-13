@@ -1482,7 +1482,19 @@ export default function Chat({ onNavigate }: ChatProps) {
   const backdropRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const docRef = useRef<HTMLInputElement | null>(null);
-  const autoOpenedUserRef = useRef('');
+  const [targetHighlightMessageId, setTargetHighlightMessageId] = useState<string | null>(null);
+
+  // Expose active conversation ID to window so NotificationManager knows if user is actively in this chat
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).__activeConversationId = selected?.id || null;
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        (window as any).__activeConversationId = null;
+      }
+    };
+  }, [selected?.id]);
 
   const syncBackdropScroll = () => {
     if (inputRef.current && backdropRef.current) {
@@ -2501,27 +2513,57 @@ export default function Chat({ onNavigate }: ChatProps) {
   };
 
   useEffect(() => {
-    if (!uid || loadingChats || loadingFriends) return;
-    const params = new URLSearchParams(window.location.search);
-    const targetUid = params.get('user') || '';
-    if (!targetUid || targetUid === uid || autoOpenedUserRef.current === targetUid) return;
-    autoOpenedUserRef.current = targetUid;
+    const handleUrlChatOpen = () => {
+      if (!uid || loadingChats || loadingFriends) return;
+      const params = new URLSearchParams(window.location.search);
+      const targetUid = params.get('user') || '';
+      const targetMsg = params.get('msg') || '';
+      if (!targetUid || targetUid === uid) return;
 
-    void (async () => {
-      try {
-        const userSnap = await getDoc(doc(db, 'users', targetUid));
-        if (!userSnap.exists()) {
-          notify('Profile unavailable', 'That user could not be found.');
-          return;
+      void (async () => {
+        try {
+          const userSnap = await getDoc(doc(db, 'users', targetUid));
+          if (!userSnap.exists()) {
+            notify('Profile unavailable', 'That user could not be found.');
+            return;
+          }
+          await openMessageEntry({ id: userSnap.id, ...userSnap.data() });
+          if (targetMsg) {
+            setTargetHighlightMessageId(targetMsg);
+          }
+        } finally {
+          const nextUrl = new URL(window.location.href);
+          nextUrl.searchParams.delete('user');
+          nextUrl.searchParams.delete('msg');
+          window.history.replaceState({}, '', `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
         }
-        await openMessageEntry({ id: userSnap.id, ...userSnap.data() });
-      } finally {
-        const nextUrl = new URL(window.location.href);
-        nextUrl.searchParams.delete('user');
-        window.history.replaceState({}, '', `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
-      }
-    })();
+      })();
+    };
+
+    handleUrlChatOpen();
+    window.addEventListener('popstate', handleUrlChatOpen);
+    return () => window.removeEventListener('popstate', handleUrlChatOpen);
   }, [uid, loadingChats, loadingFriends]);
+
+  // Flash / glow the target message when redirected from notification
+  useEffect(() => {
+    if (!targetHighlightMessageId || !messages.length) return;
+    const msgId = targetHighlightMessageId;
+    const timer = setTimeout(() => {
+      const el = document.getElementById(`shc-msg-${msgId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.remove('shc-msg-highlight');
+        void el.offsetWidth;
+        el.classList.add('shc-msg-highlight');
+        setTimeout(() => {
+          el.classList.remove('shc-msg-highlight');
+          setTargetHighlightMessageId(null);
+        }, 2200);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [targetHighlightMessageId, messages]);
 
 const handleSearchMessage = async (target: Rec) => {
   if (!uid || !target?.id || target.id === uid) return;

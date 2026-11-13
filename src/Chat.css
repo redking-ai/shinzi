@@ -36,7 +36,7 @@
     Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
-  padding-top: env(safe-area-inset-top, 0px);
+  padding-top: calc(env(safe-area-inset-top, 0px) + var(--shinzi-banner-h, 0px));
 }
 
 .shc-page button {

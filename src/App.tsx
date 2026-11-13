@@ -24,6 +24,8 @@ import SignUp from './SignUp';
 import Login from './Login';
 import Chat from './Chat';
 import Servers from './Servers';
+import InstallBanner from './InstallBanner';
+import NotificationManager from './NotificationManager';
 import { getCachedProfile, setCachedProfile, navigateTo } from './profileCache';
 import { updateUserPresence } from './presenceService';
 
@@ -219,281 +221,266 @@ useEffect(() => {
       );
     };
   }, []);
-// ==========================================================
-// TERMS OF SERVICE
-// ==========================================================
+  const renderContent = () => {
+    // ==========================================================
+    // TERMS OF SERVICE
+    // ==========================================================
 
-if (currentPath === '/terms') {
-  return <Terms />;
-}
+    if (currentPath === '/terms') {
+      return <Terms />;
+    }
 
+    if (currentPath === '/privacy') {
+      return <Privacy />;
+    }
 
-if (currentPath === '/privacy') {
-  return <Privacy />;
-}
+    // ==========================================================
+    // SHINZI CHAT
+    // ==========================================================
 
-// ==========================================================
-// SHINZI CHAT
-// ==========================================================
+    if (currentPath === '/chat') {
+      return <Chat />;
+    }
 
-if (currentPath === '/chat') {
-  return <Chat />;
-}
+    // ==========================================================
+    // SHINZI SERVERS
+    // ==========================================================
 
-// ==========================================================
-// SHINZI SERVERS
-// ==========================================================
-
-if (currentPath === '/servers') {
-  return (
-    <Servers
-      onBack={() => {
-        if (window.history.length > 1) {
-          window.history.back();
-        } else {
-          navigateTo('/chat');
-        }
-      }}
-      onOpenChat={() => navigateTo('/chat')}
-      onOpenProfile={() => navigateTo('/profile')}
-      onOpenNotifications={() => navigateTo('/chat?screen=notifications')}
-    />
-  );
-}
-  // ==========================================================
-  // AUTH LOADING
-  // ==========================================================
-
-  if (
-  authLoading ||
-  (user && !signupBusy && profileExists === null)
-) {
-    return (
-      <>
-        <div style={styles.loadingContainer}>
-          <div style={styles.spinner} />
-        </div>
-
-        <style>{spinnerAnimation}</style>
-      </>
-    );
-  }
-
-  
-  // ==========================================================
-  // PROFILE SCREENS
-  // ==========================================================
-
-  if (user && !signupBusy && profileExists) {
-    const params = new URLSearchParams(currentSearch);
-    const targetUid = params.get('uid');
-
-    // Another user's profile
-    if (
-      currentPath === '/profile' &&
-      targetUid &&
-      targetUid !== user.uid
-    ) {
+    if (currentPath === '/servers') {
       return (
-        <OtherProfile
-          targetUid={targetUid}
-          onClose={() => {
+        <Servers
+          onBack={() => {
             if (window.history.length > 1) {
               window.history.back();
             } else {
               navigateTo('/chat');
             }
           }}
-          onOpenChat={(uid) => {
-            navigateTo(`/chat?user=${encodeURIComponent(uid)}`);
-          }}
+          onOpenChat={() => navigateTo('/chat')}
+          onOpenProfile={() => navigateTo('/profile')}
+          onOpenNotifications={() => navigateTo('/chat?screen=notifications')}
         />
       );
     }
 
-    // Settings
-    if (currentPath === '/settings') {
+    // ==========================================================
+    // AUTH LOADING
+    // ==========================================================
+
+    if (
+      authLoading ||
+      (user && !signupBusy && profileExists === null)
+    ) {
       return (
-        <Settings
-          onBack={() => {
-            if (window.history.length > 1) {
-              window.history.back();
-            } else {
-              navigateTo('/profile');
+        <>
+          <div style={styles.loadingContainer}>
+            <div style={styles.spinner} />
+          </div>
+
+          <style>{spinnerAnimation}</style>
+        </>
+      );
+    }
+
+    // ==========================================================
+    // PROFILE & MAIN SCREENS FOR LOGGED-IN USERS
+    // ==========================================================
+
+    if (user && !signupBusy && profileExists) {
+      const params = new URLSearchParams(currentSearch);
+      const targetUid = params.get('uid');
+
+      // Another user's profile
+      if (
+        currentPath === '/profile' &&
+        targetUid &&
+        targetUid !== user.uid
+      ) {
+        return (
+          <OtherProfile
+            targetUid={targetUid}
+            onClose={() => {
+              if (window.history.length > 1) {
+                window.history.back();
+              } else {
+                navigateTo('/chat');
+              }
+            }}
+            onOpenChat={(uid) => {
+              navigateTo(`/chat?user=${encodeURIComponent(uid)}`);
+            }}
+          />
+        );
+      }
+
+      // Settings
+      if (currentPath === '/settings') {
+        return (
+          <Settings
+            onBack={() => {
+              if (window.history.length > 1) {
+                window.history.back();
+              } else {
+                navigateTo('/profile');
+              }
+            }}
+          />
+        );
+      }
+
+      // Your own profile
+      if (currentPath === '/profile') {
+        return <Profile />;
+      }
+
+      // Auto-navigate to chat for logged-in users visiting root / other screens
+      navigateTo('/chat');
+      return <Chat />;
+    }
+
+    // ==========================================================
+    // SIGN UP
+    // ==========================================================
+
+    if (
+      currentScreen === 'signup' ||
+      (user && profileExists === false)
+    ) {
+      return (
+        <SignUp
+          onBack={async () => {
+            if (auth.currentUser) {
+              await signOut(auth);
             }
+
+            setCurrentScreen('welcome');
+          }}
+          onBusyChange={setSignupBusy}
+        />
+      );
+    }
+
+    // ==========================================================
+    // LOGIN
+    // ==========================================================
+
+    if (currentScreen === 'login') {
+      return (
+        <Login
+          onBack={() => {
+            setCurrentScreen('welcome');
           }}
         />
       );
     }
 
-    // Your own profile
-    if (currentPath === '/profile') {
-      return <Profile />;
-    }
+    // ==========================================================
+    // RESPONSIVE STYLES
+    // ==========================================================
 
-    // Existing placeholder for other app screens
+    const safeAreaStyle: CSSProperties = {
+      ...styles.safeArea,
+      ...(isDesktop ? styles.desktopSafeArea : {}),
+    };
+
+    const heroStyle: CSSProperties = {
+      ...styles.heroSection,
+      ...(isDesktop ? styles.desktopHeroSection : {}),
+    };
+
+    const logoStyle: CSSProperties = {
+      ...styles.logo,
+      ...(isDesktop ? styles.desktopLogo : {}),
+    };
+
+    const titleStyle: CSSProperties = {
+      ...styles.title,
+      ...(isDesktop ? styles.desktopTitle : {}),
+    };
+
+    const descriptionStyle: CSSProperties = {
+      ...styles.description,
+      ...(isDesktop ? styles.desktopDescription : {}),
+    };
+
+    const actionStyle: CSSProperties = {
+      ...styles.actionSection,
+      ...(isDesktop ? styles.desktopActionSection : {}),
+    };
+
+    const signUpStyle: CSSProperties = {
+      ...styles.signUpButton,
+      ...(isDesktop ? styles.desktopButton : {}),
+    };
+
+    const logInStyle: CSSProperties = {
+      ...styles.logInButton,
+      ...(isDesktop ? styles.desktopButton : {}),
+    };
+
+    // ==========================================================
+    // WELCOME SCREEN
+    // ==========================================================
+
     return (
-      <div style={styles.mainAppPlaceholder}>
-        <h1 style={styles.placeholderTitle}>
-          Shinzi
-        </h1>
+      <div style={styles.container}>
+        <div style={styles.background}>
+          <div style={safeAreaStyle}>
+            {/* HERO */}
+            <div style={heroStyle}>
+              <img
+                src={logo}
+                alt="Shinzi Hub"
+                style={logoStyle}
+              />
 
-        <p style={styles.placeholderText}>
-          Main Shinzi app coming soon.
-        </p>
+              <h1 style={titleStyle}>
+                Welcome to
+                <br />
+                Shinzi Hub
+              </h1>
 
-        <button
-          type="button"
-          style={styles.backButton}
-          onClick={() => {
-            navigateTo('/profile');
-          }}
-        >
-          Open my profile
-        </button>
-      </div>
-    );
-  }
+              <p style={descriptionStyle}>
+                Join servers, search, or chat.
+                <br />
+                Tap below to get started.
+              </p>
+            </div>
 
+            {/* BUTTONS */}
+            <div style={actionStyle}>
+              <button
+                type="button"
+                style={signUpStyle}
+                onClick={() => {
+                  setCurrentScreen('signup');
+                }}
+              >
+                Register
+              </button>
 
-  // ==========================================================
-  // SIGN UP
-  // ==========================================================
-
-  if (
-  currentScreen === 'signup' ||
-  (user && profileExists === false)
-) {
-    return (
-      <SignUp
-        onBack={async () => {
-  if (auth.currentUser) {
-    await signOut(auth);
-  }
-
-  setCurrentScreen('welcome');
-}}
-        onBusyChange={setSignupBusy}
-      />
-    );
-  }
-
-  // ==========================================================
-  // LOGIN
-  // ==========================================================
-
-  if (currentScreen === 'login') {
-    return (
-      <Login
-        onBack={() => {
-          setCurrentScreen('welcome');
-        }}
-      />
-    );
-  }
-
-  // ==========================================================
-  // RESPONSIVE STYLES
-  // ==========================================================
-
-  const safeAreaStyle: CSSProperties = {
-    ...styles.safeArea,
-    ...(isDesktop ? styles.desktopSafeArea : {}),
-  };
-
-  const heroStyle: CSSProperties = {
-    ...styles.heroSection,
-    ...(isDesktop ? styles.desktopHeroSection : {}),
-  };
-
-  const logoStyle: CSSProperties = {
-    ...styles.logo,
-    ...(isDesktop ? styles.desktopLogo : {}),
-  };
-
-  const titleStyle: CSSProperties = {
-    ...styles.title,
-    ...(isDesktop ? styles.desktopTitle : {}),
-  };
-
-  const descriptionStyle: CSSProperties = {
-    ...styles.description,
-    ...(isDesktop ? styles.desktopDescription : {}),
-  };
-
-  const actionStyle: CSSProperties = {
-    ...styles.actionSection,
-    ...(isDesktop ? styles.desktopActionSection : {}),
-  };
-
-  const signUpStyle: CSSProperties = {
-    ...styles.signUpButton,
-    ...(isDesktop ? styles.desktopButton : {}),
-  };
-
-  const logInStyle: CSSProperties = {
-    ...styles.logInButton,
-    ...(isDesktop ? styles.desktopButton : {}),
-  };
-
-  // ==========================================================
-  // WELCOME SCREEN
-  // ==========================================================
-
-  return (
-    <div style={styles.container}>
-      <div style={styles.background}>
-        <div style={safeAreaStyle}>
-
-          {/* HERO */}
-
-          <div style={heroStyle}>
-            <img
-              src={logo}
-              alt="Shinzi Hub"
-              style={logoStyle}
-            />
-
-            <h1 style={titleStyle}>
-              Welcome to
-              <br />
-              Shinzi Hub
-            </h1>
-
-            <p style={descriptionStyle}>
-              Join servers, search, or chat.
-              <br />
-              Tap below to get started.
-            </p>
+              <button
+                type="button"
+                style={logInStyle}
+                onClick={() => {
+                  setCurrentScreen('login');
+                }}
+              >
+                Log In
+              </button>
+            </div>
           </div>
-
-          {/* BUTTONS */}
-
-          <div style={actionStyle}>
-            <button
-              type="button"
-              style={signUpStyle}
-              onClick={() => {
-                setCurrentScreen('signup');
-              }}
-            >
-              Register
-            </button>
-
-            <button
-              type="button"
-              style={logInStyle}
-              onClick={() => {
-                setCurrentScreen('login');
-              }}
-            >
-              Log In
-            </button>
-          </div>
-
         </div>
       </div>
-    </div>
+    );
+  };
+
+  return (
+    <>
+      <InstallBanner />
+      <NotificationManager currentUid={user?.uid || null} />
+      {renderContent()}
+    </>
   );
 }
 
