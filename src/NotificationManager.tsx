@@ -22,42 +22,100 @@ interface NotificationManagerProps {
   currentUid: string | null;
 }
 
-function parseMillis(ts: any): number {
-  if (!ts) return 0;
-  if (typeof ts === 'number') return ts;
-  if (typeof ts.toMillis === 'function') return ts.toMillis();
-  if (ts.seconds) return ts.seconds * 1000 + Math.floor((ts.nanoseconds || 0) / 1000000);
-  if (typeof ts === 'string') {
-    const d = Date.parse(ts);
-    return isNaN(d) ? 0 : d;
+// Rock-solid notification dispatcher for mobile Chrome & desktop
+async function dispatchOSNotification(title: string, options: Record<string, any>) {
+  try {
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    if (Notification.permission !== 'granted') return;
+
+    // Use ServiceWorker registration (Required by Chrome on Android)
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.ready;
+      if (reg && typeof reg.showNotification === 'function') {
+        await reg.showNotification(title, {
+          ...options,
+          badge: '/icon-192.png',
+          vibrate: [200, 100, 200],
+        } as any);
+        return;
+      }
+    }
+
+    // Fallback for desktop Safari/Firefox
+    if (typeof window.Notification === 'function') {
+      new window.Notification(title, options as any);
+    }
+  } catch (err) {
+    console.warn('[NotificationManager] Notification error:', err);
   }
-  return 0;
 }
 
 export default function NotificationManager({ currentUid }: NotificationManagerProps) {
   const [activeToast, setActiveToast] = useState<InAppToast | null>(null);
   const [isExiting, setIsExiting] = useState(false);
   const toastTimeoutRef = useRef<any>(null);
-  const startTimeRef = useRef<number>(Date.now());
 
-  // Request Notification permission quietly if supported
+  // In-App Notification Permission Prompt state
+  const [showPermissionBanner, setShowPermissionBanner] = useState<boolean>(false);
+  const [permissionDeniedGuide, setPermissionDeniedGuide] = useState<boolean>(false);
+
+  // Message tracking
+  const initialLoadedRef = useRef<boolean>(false);
+  const seenMessageIdsRef = useRef<Set<string>>(new Set());
+
+  // Check permission on mount
   useEffect(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      if (Notification.permission === 'default') {
-        const handleUserGesture = () => {
-          Notification.requestPermission().catch(() => {});
-          window.removeEventListener('click', handleUserGesture);
-        };
-        window.addEventListener('click', handleUserGesture, { once: true });
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+
+    const checkPermissionState = () => {
+      const perm = Notification.permission;
+      const dismissedThisSession = sessionStorage.getItem('shinzi_perm_banner_dismissed') === 'true';
+
+      if (perm === 'default' && !dismissedThisSession) {
+        setShowPermissionBanner(true);
+      } else {
+        setShowPermissionBanner(false);
       }
-    }
+    };
+
+    checkPermissionState();
   }, []);
+
+  const handleRequestPermission = async () => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      return;
+    }
+
+    try {
+      const result = await Notification.requestPermission();
+      if (result === 'granted') {
+        setShowPermissionBanner(false);
+        // Send immediate test / confirmation notification to register Android notification channel
+        void dispatchOSNotification('Shinzi Notifications', {
+          body: 'Notifications enabled! You will now receive alerts for new messages.',
+          icon: '/icon-192.png',
+          tag: 'shinzi-welcome',
+        });
+      } else if (result === 'denied') {
+        setShowPermissionBanner(false);
+        setPermissionDeniedGuide(true);
+      }
+    } catch (err) {
+      console.warn('Error requesting notification permission:', err);
+    }
+  };
+
+  const handleDismissPermissionBanner = () => {
+    setShowPermissionBanner(false);
+    sessionStorage.setItem('shinzi_perm_banner_dismissed', 'true');
+  };
 
   // Listen for direct messages across all user's conversations
   useEffect(() => {
     if (!currentUid) return undefined;
 
-    startTimeRef.current = Date.now();
+    initialLoadedRef.current = false;
+    seenMessageIdsRef.current = new Set();
 
     const q = query(
       collection(db, 'conversations'),
@@ -67,19 +125,33 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
+        // First snapshot: index all existing message IDs so we never alert old messages
+        if (!initialLoadedRef.current) {
+          snapshot.docs.forEach((docSnap) => {
+            const data = docSnap.data();
+            if (data.lastMessageId) {
+              seenMessageIdsRef.current.add(data.lastMessageId);
+            }
+          });
+          initialLoadedRef.current = true;
+          return;
+        }
+
+        // Subsequent snapshots: process incoming new messages
         snapshot.docChanges().forEach((change) => {
           if (change.type === 'added' || change.type === 'modified') {
             const conv = change.doc.data();
             const convId = change.doc.id;
+            const messageId = conv.lastMessageId;
 
-            // Direct messages only (ignore servers and group chats)
-            if (conv.type === 'group' || conv.type === 'channel' || conv.serverId) {
+            // Must have a new message ID we haven't processed yet
+            if (!messageId || seenMessageIdsRef.current.has(messageId)) {
               return;
             }
+            seenMessageIdsRef.current.add(messageId);
 
-            const lastMsgAt = parseMillis(conv.lastMessageAt);
-            // Ignore historical messages from before the page was loaded
-            if (!lastMsgAt || lastMsgAt < startTimeRef.current - 4000) {
+            // Direct messages only (ignore servers and group channels)
+            if (conv.type === 'group' || conv.type === 'channel' || conv.serverId) {
               return;
             }
 
@@ -89,16 +161,11 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
               return;
             }
 
-            // Check if user is currently inside this active conversation and document is visible
+            // Check if user is currently inside this active conversation AND page is visible
             const activeConvId = (window as any).__activeConversationId;
             const isUserInsideThisChat =
               activeConvId === convId &&
               document.visibilityState === 'visible';
-
-            if (isUserInsideThisChat) {
-              // Actively looking at this chat; no toast needed
-              return;
-            }
 
             const senderProfile = conv.memberProfiles?.[lastSenderId];
             const senderName =
@@ -109,61 +176,37 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
 
             const senderAvatar = senderProfile?.photoURL || '';
             const previewText = conv.lastMessageText || 'Sent a message';
-            const messageId = conv.lastMessageId || '';
 
-            // 1. Show In-App Floating Toast
-            triggerToast({
-              id: `${convId}-${lastMsgAt}-${Math.random()}`,
-              convId,
-              senderUid: lastSenderId,
-              senderName,
-              senderAvatar,
-              text: previewText,
-              messageId,
-            });
+            // 1. Show Root-style In-App Floating Toast (if not looking at this chat)
+            if (!isUserInsideThisChat) {
+              triggerToast({
+                id: `${convId}-${messageId}-${Date.now()}`,
+                convId,
+                senderUid: lastSenderId,
+                senderName,
+                senderAvatar,
+                text: previewText,
+                messageId,
+              });
+            }
 
-            // 2. Trigger Real OS Push Notification when tab is hidden or backgrounded
-            if (
-              'Notification' in window &&
-              Notification.permission === 'granted' &&
-              document.hidden
-            ) {
-              try {
-                if (navigator.serviceWorker?.controller) {
-                  navigator.serviceWorker.ready.then((reg) => {
-                    reg.showNotification(senderName, {
-                      body: previewText,
-                      icon: senderAvatar || '/icon-192.png',
-                      badge: '/favicon.png',
-                      tag: `shinzi-msg-${convId}-${messageId || Date.now()}`,
-                      renotify: true,
-                      data: {
-                        url: `/chat?user=${encodeURIComponent(lastSenderId)}&msg=${encodeURIComponent(messageId)}`,
-                      },
-                    } as any);
-                  }).catch(() => {
-                    new Notification(senderName, {
-                      body: previewText,
-                      icon: senderAvatar || '/icon-192.png',
-                      tag: `shinzi-msg-${convId}-${messageId || Date.now()}`,
-                    });
-                  });
-                } else {
-                  new Notification(senderName, {
-                    body: previewText,
-                    icon: senderAvatar || '/icon-192.png',
-                    tag: `shinzi-msg-${convId}-${messageId || Date.now()}`,
-                  });
-                }
-              } catch (err) {
-                console.warn('Could not display system notification:', err);
-              }
+            // 2. ALWAYS dispatch real OS notification if outside this chat OR if app is minimized/hidden
+            if (!isUserInsideThisChat || document.hidden) {
+              void dispatchOSNotification(senderName, {
+                body: previewText,
+                icon: senderAvatar || '/icon-192.png',
+                tag: `shinzi-${convId}-${messageId}`,
+                renotify: true,
+                data: {
+                  url: `/chat?user=${encodeURIComponent(lastSenderId)}&msg=${encodeURIComponent(messageId)}`,
+                },
+              });
             }
 
             // Vibration feedback if supported
             if (navigator.vibrate) {
               try {
-                navigator.vibrate(60);
+                navigator.vibrate(80);
               } catch {}
             }
           }
@@ -206,69 +249,131 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
     }
     setActiveToast(null);
 
-    // Navigate to chat and pass message ID to highlight/glow
+    // Navigate to chat and highlight message
     navigateTo(`/chat?user=${encodeURIComponent(senderUid)}&msg=${encodeURIComponent(messageId || '')}`);
   };
 
-  if (!activeToast) return null;
-
   return (
     <>
-      <div
-        style={{
-          ...toastStyles.container,
-          ...(isExiting ? toastStyles.containerExiting : toastStyles.containerEntering),
-        }}
-        onClick={handleToastClick}
-      >
-        <div style={toastStyles.body}>
-          {activeToast.senderAvatar ? (
-            <img
-              src={activeToast.senderAvatar}
-              alt={activeToast.senderName}
-              style={toastStyles.avatar}
-              onError={(e) => {
-                // Fallback to placeholder if avatar fails to load
-                (e.target as HTMLElement).style.display = 'none';
-              }}
-            />
-          ) : (
-            <div style={toastStyles.avatarFallback}>
-              {activeToast.senderName.charAt(0).toUpperCase()}
-            </div>
-          )}
-
-          <div style={toastStyles.textCol}>
-            <div style={toastStyles.topRow}>
-              <span style={toastStyles.name}>{activeToast.senderName}</span>
-              <span style={toastStyles.subtitle}>Direct Message</span>
-            </div>
-            <div style={toastStyles.previewText}>
-              {activeToast.text}
+      {/* IN-APP NOTIFICATION PERMISSION BANNER */}
+      {showPermissionBanner && (
+        <div style={permBannerStyles.container}>
+          <div style={permBannerStyles.left}>
+            <div style={permBannerStyles.bellIcon}>🔔</div>
+            <div style={permBannerStyles.textCol}>
+              <span style={permBannerStyles.title}>Enable Notifications</span>
+              <span style={permBannerStyles.subtitle}>
+                Get alerted when friends send you messages
+              </span>
             </div>
           </div>
-
-          <button
-            type="button"
-            style={toastStyles.closeBtn}
-            onClick={(e) => {
-              e.stopPropagation();
-              dismissToast();
-            }}
-            aria-label="Close notification"
-          >
-            ✕
-          </button>
+          <div style={permBannerStyles.right}>
+            <button
+              type="button"
+              onClick={handleRequestPermission}
+              style={permBannerStyles.enableBtn}
+            >
+              Allow
+            </button>
+            <button
+              type="button"
+              onClick={handleDismissPermissionBanner}
+              style={permBannerStyles.dismissBtn}
+              aria-label="Dismiss notification prompt"
+            >
+              ✕
+            </button>
+          </div>
         </div>
+      )}
 
-        {/* 5-second Backward Shrinking Progress Bar */}
-        <div style={toastStyles.progressTrack}>
-          <div
-            key={activeToast.id}
-            style={toastStyles.progressBar}
-          />
+      {/* PERMISSION DENIED HELP DIALOG */}
+      {permissionDeniedGuide && (
+        <div style={modalStyles.overlay} onClick={() => setPermissionDeniedGuide(false)}>
+          <div style={modalStyles.content} onClick={(e) => e.stopPropagation()}>
+            <h3 style={modalStyles.title}>Notifications are Blocked</h3>
+            <p style={modalStyles.body}>
+              To receive message alerts, please allow notifications for Shinzi in your browser settings:
+            </p>
+            <ol style={modalStyles.list}>
+              <li style={modalStyles.listItem}>
+                Tap the <strong>lock icon (🔒) or tune icon (⚙️)</strong> in Chrome's address bar.
+              </li>
+              <li style={modalStyles.listItem}>
+                Tap <strong>Permissions</strong> or <strong>Site settings</strong>.
+              </li>
+              <li style={modalStyles.listItem}>
+                Set <strong>Notifications</strong> to <strong>Allow</strong>.
+              </li>
+            </ol>
+            <button
+              type="button"
+              onClick={() => setPermissionDeniedGuide(false)}
+              style={modalStyles.closeBtn}
+            >
+              Got it
+            </button>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* ROOT-STYLE IN-APP FLOATING NOTIFICATION TOAST */}
+      {activeToast && (
+        <div
+          style={{
+            ...toastStyles.container,
+            ...(isExiting ? toastStyles.containerExiting : toastStyles.containerEntering),
+          }}
+          onClick={handleToastClick}
+        >
+          <div style={toastStyles.body}>
+            {activeToast.senderAvatar ? (
+              <img
+                src={activeToast.senderAvatar}
+                alt={activeToast.senderName}
+                style={toastStyles.avatar}
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = 'none';
+                }}
+              />
+            ) : (
+              <div style={toastStyles.avatarFallback}>
+                {activeToast.senderName.charAt(0).toUpperCase()}
+              </div>
+            )}
+
+            <div style={toastStyles.textCol}>
+              <div style={toastStyles.topRow}>
+                <span style={toastStyles.name}>{activeToast.senderName}</span>
+                <span style={toastStyles.subtitle}>Direct Message</span>
+              </div>
+              <div style={toastStyles.previewText}>
+                {activeToast.text}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              style={toastStyles.closeBtn}
+              onClick={(e) => {
+                e.stopPropagation();
+                dismissToast();
+              }}
+              aria-label="Close notification"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* 5-second Backward Shrinking Progress Bar */}
+          <div style={toastStyles.progressTrack}>
+            <div
+              key={activeToast.id}
+              style={toastStyles.progressBar}
+            />
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes shinziToastSlideDown {
@@ -303,6 +408,149 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
     </>
   );
 }
+
+const permBannerStyles: Record<string, React.CSSProperties> = {
+  container: {
+    position: 'sticky',
+    top: 'var(--shinzi-banner-h, 0px)',
+    left: 0,
+    right: 0,
+    zIndex: 99998,
+    backgroundColor: '#1e1f22',
+    borderBottom: '1px solid rgba(88, 101, 242, 0.4)',
+    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.4)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '10px 14px',
+    boxSizing: 'border-box',
+    gap: 10,
+  },
+  left: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    minWidth: 0,
+    flex: 1,
+  },
+  bellIcon: {
+    fontSize: 22,
+    lineHeight: 1,
+    flexShrink: 0,
+  },
+  textCol: {
+    display: 'flex',
+    flexDirection: 'column',
+    minWidth: 0,
+    flex: 1,
+  },
+  title: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: 700,
+    lineHeight: 1.2,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  subtitle: {
+    color: '#b5bac1',
+    fontSize: 11,
+    fontWeight: 500,
+    lineHeight: 1.2,
+    marginTop: 2,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  right: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 0,
+  },
+  enableBtn: {
+    backgroundColor: '#5865f2',
+    color: '#FFFFFF',
+    border: 'none',
+    borderRadius: 16,
+    padding: '6px 14px',
+    fontSize: 12,
+    fontWeight: 700,
+    cursor: 'pointer',
+    transition: 'opacity 0.15s ease',
+  },
+  dismissBtn: {
+    background: 'none',
+    border: 'none',
+    color: '#949ba4',
+    fontSize: 14,
+    cursor: 'pointer',
+    padding: '4px 6px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+};
+
+const modalStyles: Record<string, React.CSSProperties> = {
+  overlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    zIndex: 1000001,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    backdropFilter: 'blur(4px)',
+  },
+  content: {
+    backgroundColor: '#1e1f22',
+    border: '1px solid rgba(255, 255, 255, 0.15)',
+    borderRadius: 16,
+    maxWidth: 380,
+    width: '100%',
+    padding: 20,
+    color: '#FFFFFF',
+    boxShadow: '0 12px 36px rgba(0,0,0,0.8)',
+  },
+  title: {
+    margin: '0 0 10px 0',
+    fontSize: 18,
+    fontWeight: 700,
+  },
+  body: {
+    margin: '0 0 12px 0',
+    fontSize: 13,
+    color: '#dbdee1',
+    lineHeight: 1.4,
+  },
+  list: {
+    margin: '0 0 18px 0',
+    paddingLeft: 20,
+    fontSize: 13,
+    color: '#b5bac1',
+    lineHeight: 1.5,
+  },
+  listItem: {
+    marginBottom: 8,
+  },
+  closeBtn: {
+    width: '100%',
+    backgroundColor: '#5865f2',
+    color: '#FFFFFF',
+    border: 'none',
+    borderRadius: 20,
+    padding: '10px 16px',
+    fontSize: 14,
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+};
 
 const toastStyles: Record<string, React.CSSProperties> = {
   container: {

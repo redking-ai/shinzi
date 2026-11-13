@@ -1,5 +1,5 @@
 // Shinzi Service Worker
-const CACHE_NAME = 'shinzi-v1';
+const CACHE_NAME = 'shinzi-v2';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -18,10 +18,17 @@ self.addEventListener('activate', (event) => {
 // Basic network-first strategy for navigation and assets
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
-  // Let network handle it directly; service worker presence is required for PWA installability
   event.respondWith(
     fetch(event.request).catch(() => caches.match(event.request))
   );
+});
+
+// Handle messages from client to show notification with high priority
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
+    const { title, options } = event.data;
+    self.registration.showNotification(title, options);
+  }
 });
 
 self.addEventListener('notificationclick', (event) => {
