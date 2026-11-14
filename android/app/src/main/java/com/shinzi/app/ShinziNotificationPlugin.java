@@ -68,11 +68,23 @@ public class ShinziNotificationPlugin extends Plugin {
 
     @PluginMethod
     public void getFcmToken(PluginCall call) {
-        String token = getContext().getSharedPreferences("shinzi_prefs", Context.MODE_PRIVATE)
-                .getString("fcm_token", null);
-        JSObject ret = new JSObject();
-        ret.put("token", token);
-        call.resolve(ret);
+        com.google.firebase.messaging.FirebaseMessaging.getInstance().getToken()
+                .addOnCompleteListener(task -> {
+                    JSObject ret = new JSObject();
+                    if (task.isSuccessful() && task.getResult() != null) {
+                        String token = task.getResult();
+                        getContext().getSharedPreferences("shinzi_prefs", Context.MODE_PRIVATE)
+                                .edit()
+                                .putString("fcm_token", token)
+                                .apply();
+                        ret.put("token", token);
+                    } else {
+                        String cached = getContext().getSharedPreferences("shinzi_prefs", Context.MODE_PRIVATE)
+                                .getString("fcm_token", null);
+                        ret.put("token", cached);
+                    }
+                    call.resolve(ret);
+                });
     }
 
     public static void createNotificationChannel(Context context) {
@@ -206,10 +218,9 @@ public class ShinziNotificationPlugin extends Plugin {
                         flags
                 );
 
-                // 7. Assemble NotificationCompat
+                // 7. Assemble NotificationCompat (Avatar placed on LEFT via Person icon in MessagingStyle)
                 NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID)
                         .setSmallIcon(R.drawable.ic_stat_shinzi)
-                        .setLargeIcon(avatarBitmap) // Shows avatar on left, badge on bottom-right
                         .setStyle(style)
                         .setContentIntent(contentPendingIntent)
                         .addAction(replyAction)

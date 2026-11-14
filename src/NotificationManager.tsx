@@ -74,23 +74,39 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
 
     const cap = (window as any).Capacitor;
     if (cap?.Plugins?.ShinziNotification) {
+      let isSubscribed = true;
+
       const syncToken = async (token: string) => {
-        if (!token) return;
+        if (!token || !isSubscribed) return;
         try {
-          const { doc, updateDoc, arrayUnion } = await import('firebase/firestore');
-          await updateDoc(doc(db, 'users', currentUid), {
-            fcmTokens: arrayUnion(token),
-          });
+          const { doc, setDoc, arrayUnion } = await import('firebase/firestore');
+          await setDoc(
+            doc(db, 'users', currentUid),
+            { fcmTokens: arrayUnion(token) },
+            { merge: true }
+          );
+          console.log('[FCM] Token synced to Firestore successfully:', token.slice(0, 10) + '...');
         } catch (e) {
           console.warn('[FCM] Failed to sync token to Firestore:', e);
         }
       };
 
-      void cap.Plugins.ShinziNotification.getFcmToken()
-        .then((res: any) => {
-          if (res?.token) void syncToken(res.token);
-        })
-        .catch(() => {});
+      const fetchAndSync = () => {
+        cap.Plugins.ShinziNotification.getFcmToken()
+          .then((res: any) => {
+            if (res?.token) {
+              void syncToken(res.token);
+            }
+          })
+          .catch(() => {});
+      };
+
+      // Attempt immediately
+      fetchAndSync();
+
+      // Retry after 2s and 5s in case Google Play Services token was resolving on app startup
+      const t1 = setTimeout(fetchAndSync, 2000);
+      const t2 = setTimeout(fetchAndSync, 5000);
 
       let tokenListener: any = null;
       if (typeof cap.Plugins.ShinziNotification.addListener === 'function') {
@@ -103,6 +119,9 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
       }
 
       return () => {
+        isSubscribed = false;
+        clearTimeout(t1);
+        clearTimeout(t2);
         if (tokenListener && typeof tokenListener.remove === 'function') {
           tokenListener.remove();
         }
@@ -178,8 +197,11 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
             const senderAvatar = senderProfile?.photoURL || '';
             const previewText = conv.lastMessageText || 'Sent a message';
 
-            // 1. Show Root-style In-App Floating Toast (if not looking at this chat)
-            if (!isUserInsideThisChat) {
+            const cap = (window as any).Capacitor;
+            const isNative = !!cap?.Plugins?.ShinziNotification;
+
+            // 1. Show Root-style In-App Floating Toast ONLY on Web Browser (suppressed in native APK to prevent overlapping)
+            if (!isUserInsideThisChat && !isNative) {
               triggerToast({
                 id: `${convId}-${messageId}-${Date.now()}`,
                 convId,
@@ -191,11 +213,10 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
               });
             }
 
-            // 2. ALWAYS dispatch real OS notification if outside this chat OR if app is minimized/hidden
+            // 2. Dispatch real OS notification if outside this chat OR if app is minimized/hidden
             if (!isUserInsideThisChat || document.hidden) {
-              // Trigger native Android MessagingStyle notification with Reply button if running on Android APK
-              const cap = (window as any).Capacitor;
-              if (cap?.Plugins?.ShinziNotification) {
+              if (isNative) {
+                // Native Android APK: Real Android system MessagingStyle notification with Reply button
                 void cap.Plugins.ShinziNotification.showMessagingNotification({
                   senderName,
                   text: previewText,
@@ -203,17 +224,18 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
                   convId,
                   messageId,
                 }).catch((e: any) => console.warn('[ShinziNotification]', e));
+              } else {
+                // Web Browser: Standard Web Push / ServiceWorker notification
+                void dispatchOSNotification(senderName, {
+                  body: previewText,
+                  icon: senderAvatar || '/icon-192.png',
+                  tag: `shinzi-${convId}-${messageId}`,
+                  renotify: true,
+                  data: {
+                    url: `/chat?user=${encodeURIComponent(lastSenderId)}&msg=${encodeURIComponent(messageId)}`,
+                  },
+                });
               }
-
-              void dispatchOSNotification(senderName, {
-                body: previewText,
-                icon: senderAvatar || '/icon-192.png',
-                tag: `shinzi-${convId}-${messageId}`,
-                renotify: true,
-                data: {
-                  url: `/chat?user=${encodeURIComponent(lastSenderId)}&msg=${encodeURIComponent(messageId)}`,
-                },
-              });
             }
 
             // Vibration feedback if supported
