@@ -95,78 +95,86 @@ match /users/{userId} {
   allow update: if request.auth != null  
     && request.auth.uid == userId  
 
-    && request.resource.data  
-      .diff(resource.data)  
-      .affectedKeys()  
-      .hasOnly([  
-        'displayName',  
-        'bio',  
-        'bubleText',  
-        'pronouns',
-        'photoURL',
-        'bannerUrl',
-        'profileAssetId',
-        'bannerAssetId',
-        'username',  
-        'usernameLastChanged',  
-        'onlineStatusMode',
-        'isOnline',
-        'lastSeen',
-        'updatedAt'  
-      ])  
+    && (
+      // Allow syncing push tokens directly
+      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fcmTokens'])
+      ||
+      (
+        request.resource.data  
+          .diff(resource.data)  
+          .affectedKeys()  
+          .hasOnly([  
+            'displayName',  
+            'bio',  
+            'bubleText',  
+            'pronouns',
+            'photoURL',
+            'bannerUrl',
+            'profileAssetId',
+            'bannerAssetId',
+            'username',  
+            'usernameLastChanged',  
+            'onlineStatusMode',
+            'isOnline',
+            'lastSeen',
+            'updatedAt',
+            'fcmTokens'  
+          ])  
 
-    && request.resource.data.displayName is string  
-    && request.resource.data.displayName.size() >= 1  
-    && request.resource.data.displayName.size() <= 50  
+        && request.resource.data.displayName is string  
+        && request.resource.data.displayName.size() >= 1  
+        && request.resource.data.displayName.size() <= 50  
 
-    // Profile.tsx writes updatedAt using serverTimestamp().  
-    && request.resource.data.updatedAt == request.time  
-
-    && (  
-
-      // Username is unchanged.  
-      (  
-        !(  
-          'username'  
-          in request.resource.data.diff(resource.data).affectedKeys()  
-        )  
-
-        && request.resource.data.usernameLastChanged  
-          == resource.data.usernameLastChanged  
-      )  
-
-      ||  
-
-      // Username is changing.  
-      (  
-        'username'  
-        in request.resource.data.diff(resource.data).affectedKeys()  
-
-        && isValidUsername(  
-          request.resource.data.username  
-        )  
-
-        && request.resource.data.usernameLastChanged is timestamp  
-
-        && request.resource.data.usernameLastChanged  
-          == request.time  
+        // Profile.tsx writes updatedAt using serverTimestamp().  
+        && request.resource.data.updatedAt == request.time  
 
         && (  
-          !('usernameLastChanged' in resource.data)  
-          || resource.data.usernameLastChanged == null  
-          || request.time  
-            > resource.data.usernameLastChanged  
-              + duration.value(2, 'd')  
-        )  
 
-        && existsAfter(  
-          /databases/$(database)/documents/usernames/$(request.resource.data.username)  
-        )  
+          // Username is unchanged.  
+          (  
+            !(  
+              'username'  
+              in request.resource.data.diff(resource.data).affectedKeys()  
+            )  
 
-        && getAfter(  
-          /databases/$(database)/documents/usernames/$(request.resource.data.username)  
-        ).data.uid == userId  
-      )  
+            && request.resource.data.usernameLastChanged  
+              == resource.data.usernameLastChanged  
+          )  
+
+          ||  
+
+          // Username is changing.  
+          (  
+            'username'  
+            in request.resource.data.diff(resource.data).affectedKeys()  
+
+            && isValidUsername(  
+              request.resource.data.username  
+            )  
+
+            && request.resource.data.usernameLastChanged is timestamp  
+
+            && request.resource.data.usernameLastChanged  
+              == request.time  
+
+            && (  
+              !('usernameLastChanged' in resource.data)  
+              || resource.data.usernameLastChanged == null  
+              || request.time  
+                > resource.data.usernameLastChanged  
+                  + duration.value(2, 'd')  
+            )  
+
+            && existsAfter(  
+              /databases/$(database)/documents/usernames/$(request.resource.data.username)  
+            )  
+
+            && getAfter(  
+              /databases/$(database)/documents/usernames/$(request.resource.data.username)  
+            ).data.uid == userId  
+          )  
+        )
+      )
     );  
 
   // ==============================  
@@ -195,6 +203,15 @@ match /users/{userId} {
     allow read: if request.auth != null;  
     allow write: if request.auth != null  
       && (request.auth.uid == userId || request.auth.uid == friendId);  
+  }  
+
+  // ==============================  
+  // PUSH SUBSCRIPTIONS  
+  // ==============================  
+
+  match /pushSubscriptions/{subId} {  
+    allow read, write: if request.auth != null  
+      && request.auth.uid == userId;  
   }  
 }  
 

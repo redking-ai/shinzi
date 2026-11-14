@@ -137,6 +137,7 @@ public class ShinziNotificationPlugin extends Plugin {
                         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                         conn.setDoInput(true);
                         conn.setConnectTimeout(3000);
+                        conn.setReadTimeout(3000);
                         conn.connect();
                         InputStream input = conn.getInputStream();
                         Bitmap raw = BitmapFactory.decodeStream(input);
@@ -224,9 +225,10 @@ public class ShinziNotificationPlugin extends Plugin {
                         .setStyle(style)
                         .setContentIntent(contentPendingIntent)
                         .addAction(replyAction)
-                        .setPriority(NotificationCompat.PRIORITY_HIGH)
+                        .setPriority(NotificationCompat.PRIORITY_MAX)
                         .setCategory(NotificationCompat.CATEGORY_MESSAGE)
                         .setAutoCancel(true)
+                        .setDefaults(NotificationCompat.DEFAULT_ALL)
                         .setWhen(System.currentTimeMillis())
                         .setShowWhen(true);
 

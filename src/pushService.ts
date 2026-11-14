@@ -53,16 +53,37 @@ export async function subscribeToWebPush(uid: string): Promise<boolean> {
     const subJson = subscription.toJSON();
     const docId = hashEndpoint(subscription.endpoint);
 
-    await setDoc(
-      doc(db, 'users', uid, 'pushSubscriptions', docId),
-      {
-        endpoint: subscription.endpoint,
-        keys: subJson.keys,
-        updatedAt: serverTimestamp(),
-        userAgent: navigator.userAgent,
-      },
-      { merge: true }
-    );
+    const apiBase = typeof window !== 'undefined' && window.location.origin.includes('localhost')
+      ? 'https://shinzi.vercel.app'
+      : '';
+
+    void fetch(`${apiBase}/api/register-token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        uid,
+        pushSubscription: {
+          endpoint: subscription.endpoint,
+          keys: subJson.keys,
+          userAgent: navigator.userAgent,
+        },
+      }),
+    }).catch(() => {});
+
+    try {
+      await setDoc(
+        doc(db, 'users', uid, 'pushSubscriptions', docId),
+        {
+          endpoint: subscription.endpoint,
+          keys: subJson.keys,
+          updatedAt: serverTimestamp(),
+          userAgent: navigator.userAgent,
+        },
+        { merge: true }
+      );
+    } catch (e) {
+      // Backend registration via /api/register-token already handled it
+    }
 
     return true;
   } catch (err) {
@@ -80,7 +101,10 @@ export async function sendWebPushToUser(params: {
   tag?: string;
 }): Promise<void> {
   try {
-    void fetch('/api/send-push', {
+    const apiBase = typeof window !== 'undefined' && window.location.origin.includes('localhost')
+      ? 'https://shinzi.vercel.app'
+      : '';
+    void fetch(`${apiBase}/api/send-push`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),

@@ -1,4 +1,5 @@
 import { adminDb, adminMessaging } from './_lib/firebaseAdmin.js';
+import { FieldValue } from 'firebase-admin/firestore';
 
 const VAPID_PUBLIC_KEY = 'BNWehV8Z7f44UDrA2a8A1b3y7F61JvEkveZJOSGljWPp6EiyNnFubo3BlH00pl3jtfqsh8geehCXkaocKcqaiy8';
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'uWcBHce8dCYW6A-s3tdIWhtya_uE7LzepN8q_lVuuFU';
@@ -75,9 +76,33 @@ export default {
             },
             android: {
               priority: 'high',
+              ttl: 24 * 60 * 60 * 1000,
             },
           });
           fcmSentCount = fcmResponse.successCount;
+
+          const badTokens: string[] = [];
+          fcmResponse.responses.forEach((resp, idx) => {
+            if (!resp.success && resp.error) {
+              const code = resp.error.code;
+              if (
+                code === 'messaging/registration-token-not-registered' ||
+                code === 'messaging/invalid-registration-token'
+              ) {
+                badTokens.push(fcmTokens[idx]);
+              }
+            }
+          });
+
+          if (badTokens.length > 0) {
+            void adminDb
+              .collection('users')
+              .doc(recipientUid)
+              .update({
+                fcmTokens: FieldValue.arrayRemove(...badTokens),
+              })
+              .catch(() => {});
+          }
         }
       } catch (fcmErr) {
         console.warn('[send-push] FCM delivery error:', fcmErr);

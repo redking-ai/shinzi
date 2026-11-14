@@ -46,7 +46,20 @@ public class MainActivity extends BridgeActivity {
             }
         }
 
-        // 3. Retrieve and cache current FCM Registration Token
+        // 3. Request Battery Optimization Exemption so Android OEM never kills background push
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
+                if (pm != null && !pm.isIgnoringBatteryOptimizations(getPackageName())) {
+                    android.content.Intent bIntent = new android.content.Intent();
+                    bIntent.setAction(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                    bIntent.setData(android.net.Uri.parse("package:" + getPackageName()));
+                    startActivity(bIntent);
+                }
+            }
+        } catch (Exception ignored) {}
+
+        // 4. Retrieve and cache current FCM Registration Token
         FirebaseMessaging.getInstance().getToken().addOnCompleteListener(task -> {
             if (task.isSuccessful() && task.getResult() != null) {
                 String token = task.getResult();
@@ -55,6 +68,8 @@ public class MainActivity extends BridgeActivity {
                         .putString("fcm_token", token)
                         .apply();
                 ShinziNotificationPlugin.notifyTokenRefresh(token);
+            } else if (task.getException() != null) {
+                android.util.Log.e("ShinziFCM", "getToken failed: " + task.getException().getMessage());
             }
         });
     }

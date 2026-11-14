@@ -79,6 +79,17 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
       const syncToken = async (token: string) => {
         if (!token || !isSubscribed) return;
         try {
+          // 1. Send to backend register-token endpoint (uses Firebase Admin SDK - bypasses Firestore rules)
+          const apiBase = typeof window !== 'undefined' && window.location.origin.includes('localhost')
+            ? 'https://shinzi.vercel.app'
+            : '';
+          void fetch(`${apiBase}/api/register-token`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uid: currentUid, fcmToken: token }),
+          }).catch((err) => console.warn('[FCM] Backend token register error:', err));
+
+          // 2. Client-side Firestore write as secondary fallback
           const { doc, setDoc, arrayUnion } = await import('firebase/firestore');
           await setDoc(
             doc(db, 'users', currentUid),
@@ -87,7 +98,7 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
           );
           console.log('[FCM] Token synced to Firestore successfully:', token.slice(0, 10) + '...');
         } catch (e) {
-          console.warn('[FCM] Failed to sync token to Firestore:', e);
+          console.warn('[FCM] Client Firestore sync notice:', e);
         }
       };
 
