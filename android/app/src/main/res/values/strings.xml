@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Shinzi</string>
+    <string name="title_activity_main">Shinzi</string>
+    <string name="package_name">com.shinzi.app</string>
+    <string name="custom_url_scheme">com.shinzi.app</string>
+</resources>

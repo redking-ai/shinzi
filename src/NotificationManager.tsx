@@ -7,7 +7,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 import { navigateTo } from './profileCache';
-import { subscribeToWebPush, sendWebPushToUser } from './pushService';
+import { subscribeToWebPush } from './pushService';
 
 interface InAppToast {
   id: string;
@@ -56,77 +56,17 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
   const [isExiting, setIsExiting] = useState(false);
   const toastTimeoutRef = useRef<any>(null);
 
-  // In-App Notification Permission Prompt state
-  const [showPermissionBanner, setShowPermissionBanner] = useState<boolean>(false);
-  const [permissionDeniedGuide, setPermissionDeniedGuide] = useState<boolean>(false);
-
   // Message tracking
   const initialLoadedRef = useRef<boolean>(false);
   const seenMessageIdsRef = useRef<Set<string>>(new Set());
 
-  // Check permission on mount
+  // Check permission on mount and auto-subscribe if granted
   useEffect(() => {
     if (typeof window === 'undefined' || !('Notification' in window)) return;
-
-    const checkPermissionState = () => {
-      const perm = Notification.permission;
-      const dismissedThisSession = sessionStorage.getItem('shinzi_perm_banner_dismissed') === 'true';
-
-      if (perm === 'default' && !dismissedThisSession) {
-        setShowPermissionBanner(true);
-      } else {
-        setShowPermissionBanner(false);
-      }
-    };
-
-    checkPermissionState();
-
     if (Notification.permission === 'granted' && currentUid) {
       void subscribeToWebPush(currentUid);
     }
   }, [currentUid]);
-
-  const handleRequestPermission = async () => {
-    if (typeof window === 'undefined' || !('Notification' in window)) {
-      return;
-    }
-
-    try {
-      const result = await Notification.requestPermission();
-      if (result === 'granted') {
-        setShowPermissionBanner(false);
-        if (currentUid) {
-          void subscribeToWebPush(currentUid).then((ok) => {
-            if (ok) {
-              void sendWebPushToUser({
-                recipientUid: currentUid,
-                title: 'Shinzi Notifications',
-                text: 'Push notifications active! You will receive alerts even when Shinzi is closed.',
-                icon: '/icon-192.png',
-                tag: 'shinzi-welcome-push',
-              });
-            }
-          });
-        }
-        // Send immediate confirmation notification via ServiceWorker
-        void dispatchOSNotification('Shinzi Notifications', {
-          body: 'Notifications enabled! You will now receive alerts for new messages.',
-          icon: '/icon-192.png',
-          tag: 'shinzi-welcome',
-        });
-      } else if (result === 'denied') {
-        setShowPermissionBanner(false);
-        setPermissionDeniedGuide(true);
-      }
-    } catch (err) {
-      console.warn('Error requesting notification permission:', err);
-    }
-  };
-
-  const handleDismissPermissionBanner = () => {
-    setShowPermissionBanner(false);
-    sessionStorage.setItem('shinzi_perm_banner_dismissed', 'true');
-  };
 
   // Listen for direct messages across all user's conversations
   useEffect(() => {
@@ -210,6 +150,18 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
 
             // 2. ALWAYS dispatch real OS notification if outside this chat OR if app is minimized/hidden
             if (!isUserInsideThisChat || document.hidden) {
+              // Trigger native Android MessagingStyle notification with Reply button if running on Android APK
+              const cap = (window as any).Capacitor;
+              if (cap?.Plugins?.ShinziNotification) {
+                void cap.Plugins.ShinziNotification.showMessagingNotification({
+                  senderName,
+                  text: previewText,
+                  avatarUrl: senderAvatar,
+                  convId,
+                  messageId,
+                }).catch((e: any) => console.warn('[ShinziNotification]', e));
+              }
+
               void dispatchOSNotification(senderName, {
                 body: previewText,
                 icon: senderAvatar || '/icon-192.png',
@@ -235,7 +187,43 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
       }
     );
 
-    return () => unsubscribe();
+    // Inline reply listener from Android notification
+    const cap = (window as any).Capacitor;
+    let replyListenerHandle: any = null;
+    if (cap?.Plugins?.ShinziNotification?.addListener) {
+      replyListenerHandle = cap.Plugins.ShinziNotification.addListener(
+        'onNotificationReply',
+        async (data: { convId: string; replyText: string }) => {
+          if (!data?.replyText || !data?.convId || !currentUid) return;
+          try {
+            const { collection, addDoc, serverTimestamp, doc, updateDoc } = await import('firebase/firestore');
+            const messagesRef = collection(db, 'conversations', data.convId, 'messages');
+            const newMsgRef = await addDoc(messagesRef, {
+              senderId: currentUid,
+              text: data.replyText.trim(),
+              createdAt: serverTimestamp(),
+              seenBy: [currentUid],
+              delivered: true,
+            });
+            await updateDoc(doc(db, 'conversations', data.convId), {
+              lastMessageText: data.replyText.trim(),
+              lastSenderId: currentUid,
+              lastMessageTime: serverTimestamp(),
+              lastMessageId: newMsgRef.id,
+            });
+          } catch (err) {
+            console.warn('[NotificationManager] Failed to post reply from notification:', err);
+          }
+        }
+      );
+    }
+
+    return () => {
+      unsubscribe();
+      if (replyListenerHandle && typeof replyListenerHandle.remove === 'function') {
+        replyListenerHandle.remove();
+      }
+    };
   }, [currentUid]);
 
   const triggerToast = (toastData: InAppToast) => {
@@ -273,68 +261,6 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
 
   return (
     <>
-      {/* IN-APP NOTIFICATION PERMISSION BANNER */}
-      {showPermissionBanner && (
-        <div style={permBannerStyles.container}>
-          <div style={permBannerStyles.left}>
-            <div style={permBannerStyles.bellIcon}>🔔</div>
-            <div style={permBannerStyles.textCol}>
-              <span style={permBannerStyles.title}>Enable Notifications</span>
-              <span style={permBannerStyles.subtitle}>
-                Get alerted when friends send you messages
-              </span>
-            </div>
-          </div>
-          <div style={permBannerStyles.right}>
-            <button
-              type="button"
-              onClick={handleRequestPermission}
-              style={permBannerStyles.enableBtn}
-            >
-              Allow
-            </button>
-            <button
-              type="button"
-              onClick={handleDismissPermissionBanner}
-              style={permBannerStyles.dismissBtn}
-              aria-label="Dismiss notification prompt"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* PERMISSION DENIED HELP DIALOG */}
-      {permissionDeniedGuide && (
-        <div style={modalStyles.overlay} onClick={() => setPermissionDeniedGuide(false)}>
-          <div style={modalStyles.content} onClick={(e) => e.stopPropagation()}>
-            <h3 style={modalStyles.title}>Notifications are Blocked</h3>
-            <p style={modalStyles.body}>
-              To receive message alerts, please allow notifications for Shinzi in your browser settings:
-            </p>
-            <ol style={modalStyles.list}>
-              <li style={modalStyles.listItem}>
-                Tap the <strong>lock icon (🔒) or tune icon (⚙️)</strong> in Chrome's address bar.
-              </li>
-              <li style={modalStyles.listItem}>
-                Tap <strong>Permissions</strong> or <strong>Site settings</strong>.
-              </li>
-              <li style={modalStyles.listItem}>
-                Set <strong>Notifications</strong> to <strong>Allow</strong>.
-              </li>
-            </ol>
-            <button
-              type="button"
-              onClick={() => setPermissionDeniedGuide(false)}
-              style={modalStyles.closeBtn}
-            >
-              Got it
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* ROOT-STYLE IN-APP FLOATING NOTIFICATION TOAST */}
       {activeToast && (
         <div
@@ -426,149 +352,6 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
     </>
   );
 }
-
-const permBannerStyles: Record<string, React.CSSProperties> = {
-  container: {
-    position: 'sticky',
-    top: 'var(--shinzi-banner-h, 0px)',
-    left: 0,
-    right: 0,
-    zIndex: 99998,
-    backgroundColor: '#1e1f22',
-    borderBottom: '1px solid rgba(88, 101, 242, 0.4)',
-    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.4)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '10px 14px',
-    boxSizing: 'border-box',
-    gap: 10,
-  },
-  left: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    minWidth: 0,
-    flex: 1,
-  },
-  bellIcon: {
-    fontSize: 22,
-    lineHeight: 1,
-    flexShrink: 0,
-  },
-  textCol: {
-    display: 'flex',
-    flexDirection: 'column',
-    minWidth: 0,
-    flex: 1,
-  },
-  title: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: 700,
-    lineHeight: 1.2,
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-  },
-  subtitle: {
-    color: '#b5bac1',
-    fontSize: 11,
-    fontWeight: 500,
-    lineHeight: 1.2,
-    marginTop: 2,
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-  },
-  right: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    flexShrink: 0,
-  },
-  enableBtn: {
-    backgroundColor: '#5865f2',
-    color: '#FFFFFF',
-    border: 'none',
-    borderRadius: 16,
-    padding: '6px 14px',
-    fontSize: 12,
-    fontWeight: 700,
-    cursor: 'pointer',
-    transition: 'opacity 0.15s ease',
-  },
-  dismissBtn: {
-    background: 'none',
-    border: 'none',
-    color: '#949ba4',
-    fontSize: 14,
-    cursor: 'pointer',
-    padding: '4px 6px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-};
-
-const modalStyles: Record<string, React.CSSProperties> = {
-  overlay: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    zIndex: 1000001,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-    backdropFilter: 'blur(4px)',
-  },
-  content: {
-    backgroundColor: '#1e1f22',
-    border: '1px solid rgba(255, 255, 255, 0.15)',
-    borderRadius: 16,
-    maxWidth: 380,
-    width: '100%',
-    padding: 20,
-    color: '#FFFFFF',
-    boxShadow: '0 12px 36px rgba(0,0,0,0.8)',
-  },
-  title: {
-    margin: '0 0 10px 0',
-    fontSize: 18,
-    fontWeight: 700,
-  },
-  body: {
-    margin: '0 0 12px 0',
-    fontSize: 13,
-    color: '#dbdee1',
-    lineHeight: 1.4,
-  },
-  list: {
-    margin: '0 0 18px 0',
-    paddingLeft: 20,
-    fontSize: 13,
-    color: '#b5bac1',
-    lineHeight: 1.5,
-  },
-  listItem: {
-    marginBottom: 8,
-  },
-  closeBtn: {
-    width: '100%',
-    backgroundColor: '#5865f2',
-    color: '#FFFFFF',
-    border: 'none',
-    borderRadius: 20,
-    padding: '10px 16px',
-    fontSize: 14,
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-};
 
 const toastStyles: Record<string, React.CSSProperties> = {
   container: {

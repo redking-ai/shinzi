@@ -1,0 +1,18 @@
+{
+  "appId": "com.shinzi.app",
+  "appName": "Shinzi",
+  "webDir": "dist",
+  "server": {
+    "url": "https://shinzi.vercel.app",
+    "cleartext": false
+  },
+  "android": {
+    "allowMixedContent": true,
+    "webContentsDebuggingEnabled": false
+  },
+  "plugins": {
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    }
+  }
+}

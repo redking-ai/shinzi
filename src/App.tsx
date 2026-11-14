@@ -24,7 +24,6 @@ import SignUp from './SignUp';
 import Login from './Login';
 import Chat from './Chat';
 import Servers from './Servers';
-import InstallBanner from './InstallBanner';
 import NotificationManager from './NotificationManager';
 import { getCachedProfile, setCachedProfile, navigateTo } from './profileCache';
 import { updateUserPresence } from './presenceService';
@@ -477,7 +476,6 @@ useEffect(() => {
 
   return (
     <>
-      <InstallBanner />
       <NotificationManager currentUid={user?.uid || null} />
       {renderContent()}
     </>
