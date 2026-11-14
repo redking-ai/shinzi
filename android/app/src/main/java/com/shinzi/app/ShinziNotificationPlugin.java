@@ -46,7 +46,7 @@ public class ShinziNotificationPlugin extends Plugin {
     public void load() {
         super.load();
         instance = this;
-        createNotificationChannel();
+        createNotificationChannel(getContext());
     }
 
     public static void notifyReplyReceived(String convId, String replyText) {
@@ -58,7 +58,24 @@ public class ShinziNotificationPlugin extends Plugin {
         }
     }
 
-    private void createNotificationChannel() {
+    public static void notifyTokenRefresh(String token) {
+        if (instance != null) {
+            JSObject data = new JSObject();
+            data.put("token", token);
+            instance.notifyListeners("onFcmToken", data);
+        }
+    }
+
+    @PluginMethod
+    public void getFcmToken(PluginCall call) {
+        String token = getContext().getSharedPreferences("shinzi_prefs", Context.MODE_PRIVATE)
+                .getString("fcm_token", null);
+        JSObject ret = new JSObject();
+        ret.put("token", token);
+        call.resolve(ret);
+    }
+
+    public static void createNotificationChannel(Context context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
                     CHANNEL_ID,
@@ -70,7 +87,7 @@ public class ShinziNotificationPlugin extends Plugin {
             channel.setShowBadge(true);
             channel.setLockscreenVisibility(NotificationCompat.VISIBILITY_PUBLIC);
 
-            NotificationManager manager = (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE);
+            NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
             if (manager != null) {
                 manager.createNotificationChannel(channel);
             }
@@ -83,13 +100,24 @@ public class ShinziNotificationPlugin extends Plugin {
         String text = call.getString("text", "");
         String avatarUrl = call.getString("avatarUrl", "");
         String convId = call.getString("convId", "default");
+
+        showNotificationNative(getContext(), senderName, text, avatarUrl, convId);
+        call.resolve(new JSObject().put("success", true));
+    }
+
+    public static void showNotificationNative(
+            Context context,
+            String senderName,
+            String text,
+            String avatarUrl,
+            String convId
+    ) {
+        createNotificationChannel(context);
         int notificationId = convId.hashCode();
 
         new Thread(() -> {
             try {
-                Context context = getContext();
-
-                // 1. Fetch or generate avatar bitmap
+                // 1. Fetch or generate circular avatar bitmap
                 Bitmap avatarBitmap = null;
                 if (avatarUrl != null && !avatarUrl.isEmpty() && avatarUrl.startsWith("http")) {
                     try {
@@ -193,10 +221,8 @@ public class ShinziNotificationPlugin extends Plugin {
 
                 NotificationManagerCompat notificationManager = NotificationManagerCompat.from(context);
                 notificationManager.notify(notificationId, builder.build());
-
-                call.resolve(new JSObject().put("success", true));
             } catch (Exception e) {
-                call.reject("Notification failed: " + e.getMessage());
+                e.printStackTrace();
             }
         }).start();
     }

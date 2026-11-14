@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "1063333455169",
+    "project_id": "shinzi-hub",
+    "storage_bucket": "shinzi-hub.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1063333455169:android:e07f054e760de97798edc0",
+        "android_client_info": {
+          "package_name": "com.shinzi.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1063333455169-ht2ld80klgvb89tgmj276mll1uacev8e.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBjtgLIkegNS5xdWVwSJ04QnF6O84rSpeE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1063333455169-ht2ld80klgvb89tgmj276mll1uacev8e.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

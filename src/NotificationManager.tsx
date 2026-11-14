@@ -68,6 +68,49 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
     }
   }, [currentUid]);
 
+  // Sync Native Android FCM Token to Firestore
+  useEffect(() => {
+    if (!currentUid || typeof window === 'undefined') return undefined;
+
+    const cap = (window as any).Capacitor;
+    if (cap?.Plugins?.ShinziNotification) {
+      const syncToken = async (token: string) => {
+        if (!token) return;
+        try {
+          const { doc, updateDoc, arrayUnion } = await import('firebase/firestore');
+          await updateDoc(doc(db, 'users', currentUid), {
+            fcmTokens: arrayUnion(token),
+          });
+        } catch (e) {
+          console.warn('[FCM] Failed to sync token to Firestore:', e);
+        }
+      };
+
+      void cap.Plugins.ShinziNotification.getFcmToken()
+        .then((res: any) => {
+          if (res?.token) void syncToken(res.token);
+        })
+        .catch(() => {});
+
+      let tokenListener: any = null;
+      if (typeof cap.Plugins.ShinziNotification.addListener === 'function') {
+        tokenListener = cap.Plugins.ShinziNotification.addListener(
+          'onFcmToken',
+          (data: { token: string }) => {
+            if (data?.token) void syncToken(data.token);
+          }
+        );
+      }
+
+      return () => {
+        if (tokenListener && typeof tokenListener.remove === 'function') {
+          tokenListener.remove();
+        }
+      };
+    }
+    return undefined;
+  }, [currentUid]);
+
   // Listen for direct messages across all user's conversations
   useEffect(() => {
     if (!currentUid) return undefined;

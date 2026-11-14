@@ -1,4 +1,4 @@
-import { adminDb } from './_lib/firebaseAdmin.js';
+import { adminDb, adminMessaging } from './_lib/firebaseAdmin.js';
 
 const VAPID_PUBLIC_KEY = 'BNWehV8Z7f44UDrA2a8A1b3y7F61JvEkveZJOSGljWPp6EiyNnFubo3BlH00pl3jtfqsh8geehCXkaocKcqaiy8';
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'uWcBHce8dCYW6A-s3tdIWhtya_uE7LzepN8q_lVuuFU';
@@ -58,14 +58,39 @@ export default {
         return Response.json({ error: 'Missing recipientUid' }, { status: 400, headers: CORS_HEADERS });
       }
 
-      // Query recipient's push subscriptions from Firestore
+      // 1. Send Native Android FCM Push (Delivers even when app is killed)
+      let fcmSentCount = 0;
+      try {
+        const userDoc = await adminDb.collection('users').doc(recipientUid).get();
+        const fcmTokens: string[] = userDoc.data()?.fcmTokens || [];
+
+        if (fcmTokens.length > 0) {
+          const fcmResponse = await adminMessaging.sendEachForMulticast({
+            tokens: fcmTokens,
+            data: {
+              senderName: title || 'Shinzi',
+              text: text || 'You received a new message',
+              avatarUrl: icon || '',
+              convId: tag || 'default',
+            },
+            android: {
+              priority: 'high',
+            },
+          });
+          fcmSentCount = fcmResponse.successCount;
+        }
+      } catch (fcmErr) {
+        console.warn('[send-push] FCM delivery error:', fcmErr);
+      }
+
+      // 2. Query recipient's Web Push subscriptions from Firestore
       const subsSnapshot = await adminDb
         .collection('users')
         .doc(recipientUid)
         .collection('pushSubscriptions')
         .get();
 
-      if (subsSnapshot.empty) {
+      if (subsSnapshot.empty && fcmSentCount === 0) {
         return Response.json(
           { ok: true, sent: 0, reason: 'No subscriptions found' },
           { headers: CORS_HEADERS }
@@ -103,7 +128,7 @@ export default {
 
       await Promise.allSettled(promises);
 
-      return Response.json({ ok: true, sent: subsSnapshot.size }, { headers: CORS_HEADERS });
+      return Response.json({ ok: true, webPushSent: subsSnapshot.size, fcmSent: fcmSentCount }, { headers: CORS_HEADERS });
     } catch (error: any) {
       console.error('[send-push] Execution error:', error);
       return Response.json(

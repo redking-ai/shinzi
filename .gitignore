@@ -26,3 +26,4 @@ dist-ssr
 *serviceAccount*.json
 *.pem
 .env*
+*.apk
