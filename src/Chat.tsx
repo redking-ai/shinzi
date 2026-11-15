@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   lazy,
   useMemo,
   useRef,
@@ -1318,6 +1317,13 @@ export default function Chat({ onNavigate }: ChatProps) {
   const [sentDMRequests, setSentDMRequests] = useState<Rec[]>([]);
   const [messages, setMessages] = useState<Rec[]>([]);
   const [pendingDmMessages, setPendingDmMessages] = useState<Rec[]>([]);
+  const currentConversationMessages = useMemo(() => {
+    return (messages && messages.length > 0)
+      ? messages
+      : (pendingDmMessages && pendingDmMessages.length > 0
+          ? pendingDmMessages
+          : messages);
+  }, [messages, pendingDmMessages]);
   const [activity, setActivity] = useState<Record<string, Rec>>({});
   const [now, setNow] = useState(() => Date.now());
 
@@ -1394,8 +1400,8 @@ export default function Chat({ onNavigate }: ChatProps) {
     });
   };
 
-  // Caret restoration layoutEffect: sets selection synchronously after React commits the messageText update
-  useLayoutEffect(() => {
+  // Caret restoration effect: sets selection asynchronously after React commits the messageText update
+  useEffect(() => {
     if (pendingCaretRef.current !== null && inputRef.current) {
       const pos = pendingCaretRef.current;
       pendingCaretRef.current = null;
@@ -1485,14 +1491,25 @@ export default function Chat({ onNavigate }: ChatProps) {
   const docRef = useRef<HTMLInputElement | null>(null);
   const [targetHighlightMessageId, setTargetHighlightMessageId] = useState<string | null>(null);
 
-  // Expose active conversation ID to window so NotificationManager knows if user is actively in this chat
+  // Expose active conversation ID to window and native plugin so NotificationManager & Android FCM knows if user is actively in this chat
   useEffect(() => {
     if (typeof window !== 'undefined') {
       (window as any).__activeConversationId = selected?.id || null;
+      const cap = (window as any).Capacitor;
+      if (cap?.Plugins?.ShinziNotification?.setActiveConversation) {
+        void cap.Plugins.ShinziNotification.setActiveConversation({ convId: selected?.id || null }).catch(() => {});
+      }
+      if (selected?.id && cap?.Plugins?.ShinziNotification?.clearConversationNotification) {
+        void cap.Plugins.ShinziNotification.clearConversationNotification({ convId: selected.id }).catch(() => {});
+      }
     }
     return () => {
       if (typeof window !== 'undefined') {
         (window as any).__activeConversationId = null;
+        const cap = (window as any).Capacitor;
+        if (cap?.Plugins?.ShinziNotification?.setActiveConversation) {
+          void cap.Plugins.ShinziNotification.setActiveConversation({ convId: null }).catch(() => {});
+        }
       }
     };
   }, [selected?.id]);
@@ -2692,11 +2709,13 @@ const handleSearchMessage = async (target: Rec) => {
     }
 
     if (el) {
-      const targetHeight = Math.min(el.scrollHeight, 120);
-      if (Math.abs(el.clientHeight - targetHeight) > 4) {
-        el.style.height = 'auto';
-        el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
-      }
+      requestAnimationFrame(() => {
+        const targetHeight = Math.min(el.scrollHeight, 120);
+        if (Math.abs(el.clientHeight - targetHeight) > 4) {
+          el.style.height = 'auto';
+          el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+        }
+      });
     }
 
     if (!selected?.id || !uid) return;
@@ -5270,6 +5289,19 @@ const handleSearchMessage = async (target: Rec) => {
     );
   };
 
+  const renderedMessages = useMemo(() => {
+    return currentConversationMessages.map((item, index) =>
+      renderMessage(item, index, currentConversationMessages)
+    );
+  }, [
+    currentConversationMessages,
+    uid,
+    profile,
+    selected?.id,
+    selectedConversation?.memberProfiles,
+    targetHighlightMessageId,
+  ]);
+
   const renderBottomNav = () => (
     <nav className="shc-bottom" aria-label="Main navigation">
       <button
@@ -5786,11 +5818,7 @@ const handleSearchMessage = async (target: Rec) => {
     const name = getConversationName(selectedConversation);
     const username = getConversationUsername(selectedConversation);
     const dmRequestState = getDirectRequestState(selectedConversation);
-    const conversationMessages = (messages && messages.length > 0)
-      ? messages
-      : (pendingDmMessages && pendingDmMessages.length > 0
-          ? pendingDmMessages
-          : messages);
+    const conversationMessages = currentConversationMessages;
     const hasFirstContactIntro = Boolean(
       targetUid && selectedConversation?.hasChatIntro && conversationMessages.length === 0
     );
@@ -5913,7 +5941,7 @@ const handleSearchMessage = async (target: Rec) => {
               />
             )
           ) : (
-            conversationMessages.map((item, index) => renderMessage(item, index, conversationMessages))
+            renderedMessages
           )}
         </div>
 

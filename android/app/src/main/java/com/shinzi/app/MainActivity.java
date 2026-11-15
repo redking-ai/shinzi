@@ -73,4 +73,16 @@ public class MainActivity extends BridgeActivity {
             }
         });
     }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        ShinziNotificationPlugin.isAppForeground = true;
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        ShinziNotificationPlugin.isAppForeground = false;
+    }
 }

@@ -5,6 +5,7 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
@@ -27,11 +28,20 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @CapacitorPlugin(name = "ShinziNotification")
 public class ShinziNotificationPlugin extends Plugin {
@@ -39,11 +49,25 @@ public class ShinziNotificationPlugin extends Plugin {
     private static final String CHANNEL_NAME = "Direct Messages";
     private static ShinziNotificationPlugin instance;
 
-    // Cache message history per conversation for multi-message stacked display
-    private static final Map<String, NotificationCompat.MessagingStyle> conversationStyles = new HashMap<>();
+    // Track app foreground and active conversation
+    public static volatile boolean isAppForeground = false;
+    public static volatile String activeConversationId = null;
 
-    public static Map<String, NotificationCompat.MessagingStyle> getConversationStyles() {
-        return conversationStyles;
+    // Cache circular avatar bitmaps in memory
+    private static final Map<String, Bitmap> cachedAvatars = new ConcurrentHashMap<>();
+
+    public static class HistoryMessage {
+        public String sender;
+        public String text;
+        public long time;
+        public boolean isMe;
+
+        public HistoryMessage(String sender, String text, long time, boolean isMe) {
+            this.sender = sender;
+            this.text = text;
+            this.time = time;
+            this.isMe = isMe;
+        }
     }
 
     @Override
@@ -51,6 +75,24 @@ public class ShinziNotificationPlugin extends Plugin {
         super.load();
         instance = this;
         createNotificationChannel(getContext());
+    }
+
+    @PluginMethod
+    public void setActiveConversation(PluginCall call) {
+        String convId = call.getString("convId", null);
+        activeConversationId = (convId != null && !convId.isEmpty()) ? convId : null;
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void clearConversationNotification(PluginCall call) {
+        String convId = call.getString("convId", "");
+        if (!convId.isEmpty()) {
+            NotificationManagerCompat manager = NotificationManagerCompat.from(getContext());
+            manager.cancel(convId.hashCode());
+            clearHistory(getContext(), convId);
+        }
+        call.resolve();
     }
 
     @PluginMethod
@@ -157,31 +199,18 @@ public class ShinziNotificationPlugin extends Plugin {
 
         new Thread(() -> {
             try {
-                // 1. Fetch or generate circular avatar bitmap
-                Bitmap avatarBitmap = null;
-                if (avatarUrl != null && !avatarUrl.isEmpty() && avatarUrl.startsWith("http")) {
-                    try {
-                        URL url = new URL(avatarUrl);
-                        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                        conn.setDoInput(true);
-                        conn.setInstanceFollowRedirects(true);
-                        conn.setRequestProperty("User-Agent", "Mozilla/5.0 ShinziAndroid");
-                        conn.setConnectTimeout(4000);
-                        conn.setReadTimeout(4000);
-                        conn.connect();
-                        InputStream input = conn.getInputStream();
-                        Bitmap raw = BitmapFactory.decodeStream(input);
-                        if (raw != null) {
-                            avatarBitmap = getCircularBitmap(raw);
-                        }
-                    } catch (Exception ignored) {}
+                // 1. Append incoming message to conversation history (limit to last 12 messages)
+                List<HistoryMessage> history = loadHistory(context, convId);
+                history.add(new HistoryMessage(senderName, text, System.currentTimeMillis(), false));
+                if (history.size() > 12) {
+                    history = history.subList(history.size() - 12, history.size());
                 }
+                saveHistory(context, convId, history);
 
-                if (avatarBitmap == null) {
-                    avatarBitmap = createInitialAvatar(senderName);
-                }
+                // 2. Fetch or retrieve large circular sender avatar
+                Bitmap avatarBitmap = fetchCircularAvatar(context, avatarUrl, senderName, convId);
 
-                // 2. Build Sender Person
+                // 3. Sender Person with circular avatar
                 Person.Builder personBuilder = new Person.Builder()
                         .setName(senderName)
                         .setKey(senderName);
@@ -190,53 +219,27 @@ public class ShinziNotificationPlugin extends Plugin {
                 }
                 Person senderPerson = personBuilder.build();
 
-                // 3. User (Recipient) Person
-                Person mePerson = new Person.Builder()
-                        .setName("You")
-                        .build();
+                // 4. User Person ("You")
+                Person mePerson = new Person.Builder().setName("You").build();
 
-                // 4. MessagingStyle (Supports multi-message vertical stacking)
-                NotificationCompat.MessagingStyle style = conversationStyles.get(convId);
-                if (style == null) {
-                    style = new NotificationCompat.MessagingStyle(mePerson);
-                    conversationStyles.put(convId, style);
-                }
-                style.addMessage(text, System.currentTimeMillis(), senderPerson);
+                // 5. Build MessagingStyle populated with all stacked history messages
+                NotificationCompat.MessagingStyle style = new NotificationCompat.MessagingStyle(mePerson);
+                style.setConversationTitle(null); // Direct chat format (shows sender name & avatar)
+                style.setGroupConversation(false);
 
-                // 5. Inline RemoteInput Reply Action
-                RemoteInput remoteInput = new RemoteInput.Builder(ReplyReceiver.KEY_TEXT_REPLY)
-                        .setLabel("Reply")
-                        .build();
-
-                Intent replyIntent = new Intent(context, ReplyReceiver.class);
-                replyIntent.setAction(ReplyReceiver.ACTION_REPLY);
-                replyIntent.putExtra("notificationId", notificationId);
-                replyIntent.putExtra("convId", convId);
-                replyIntent.putExtra("senderName", senderName);
-                replyIntent.putExtra("senderUid", senderUid);
-
-                int flags = PendingIntent.FLAG_UPDATE_CURRENT;
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    flags |= PendingIntent.FLAG_MUTABLE;
+                for (HistoryMessage msg : history) {
+                    if (msg.isMe) {
+                        // Pass (Person) null so Android renders "You: <text>" cleanly without avatar bubble
+                        style.addMessage(msg.text, msg.time, (Person) null);
+                    } else {
+                        style.addMessage(msg.text, msg.time, senderPerson);
+                    }
                 }
 
-                PendingIntent replyPendingIntent = PendingIntent.getBroadcast(
-                        context,
-                        notificationId,
-                        replyIntent,
-                        flags
-                );
+                // 6. Inline RemoteInput Reply Action (keeps Reply button on notification)
+                NotificationCompat.Action replyAction = createReplyAction(context, notificationId, convId, senderName, senderUid);
 
-                NotificationCompat.Action replyAction = new NotificationCompat.Action.Builder(
-                        R.drawable.ic_stat_shinzi,
-                        "Reply",
-                        replyPendingIntent
-                )
-                        .addRemoteInput(remoteInput)
-                        .setAllowGeneratedReplies(true)
-                        .build();
-
-                // 6. Open App Intent on tap
+                // 7. Content Intent on tap (opens specific chat)
                 Intent openIntent = new Intent(context, MainActivity.class);
                 openIntent.setAction(Intent.ACTION_VIEW);
                 String openUrl = "https://shinzi.vercel.app/chat?conv=" + convId;
@@ -246,6 +249,11 @@ public class ShinziNotificationPlugin extends Plugin {
                 openIntent.setData(Uri.parse(openUrl));
                 openIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
+                int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    flags |= PendingIntent.FLAG_MUTABLE;
+                }
+
                 PendingIntent contentPendingIntent = PendingIntent.getActivity(
                         context,
                         notificationId,
@@ -253,12 +261,13 @@ public class ShinziNotificationPlugin extends Plugin {
                         flags
                 );
 
-                // 7. Assemble NotificationCompat (Avatar placed on LEFT via Person icon in MessagingStyle)
+                // 8. Assemble NotificationCompat with large circular avatar on the far left
                 NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID)
                         .setSmallIcon(R.drawable.ic_stat_shinzi)
+                        .setLargeIcon(avatarBitmap) // WhatsApp-style large circular avatar on the far left
                         .setStyle(style)
                         .setContentIntent(contentPendingIntent)
-                        .addAction(replyAction)
+                        .addAction(replyAction) // Reply action button
                         .setPriority(NotificationCompat.PRIORITY_MAX)
                         .setCategory(NotificationCompat.CATEGORY_MESSAGE)
                         .setAutoCancel(true)
@@ -272,6 +281,195 @@ public class ShinziNotificationPlugin extends Plugin {
                 e.printStackTrace();
             }
         }).start();
+    }
+
+    public static NotificationCompat.Action createReplyAction(
+            Context context,
+            int notificationId,
+            String convId,
+            String senderName,
+            String senderUid
+    ) {
+        RemoteInput remoteInput = new RemoteInput.Builder(ReplyReceiver.KEY_TEXT_REPLY)
+                .setLabel("Reply")
+                .build();
+
+        Intent replyIntent = new Intent(context, ReplyReceiver.class);
+        replyIntent.setAction(ReplyReceiver.ACTION_REPLY);
+        replyIntent.putExtra("notificationId", notificationId);
+        replyIntent.putExtra("convId", convId);
+        replyIntent.putExtra("senderName", senderName);
+        replyIntent.putExtra("senderUid", senderUid);
+
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            flags |= PendingIntent.FLAG_MUTABLE;
+        }
+
+        PendingIntent replyPendingIntent = PendingIntent.getBroadcast(
+                context,
+                notificationId,
+                replyIntent,
+                flags
+        );
+
+        return new NotificationCompat.Action.Builder(
+                R.drawable.ic_stat_shinzi,
+                "Reply",
+                replyPendingIntent
+        )
+                .addRemoteInput(remoteInput)
+                .setAllowGeneratedReplies(true)
+                .build();
+    }
+
+    public static Bitmap fetchCircularAvatar(Context context, String avatarUrl, String senderName, String convId) {
+        // Check memory cache
+        if (cachedAvatars.containsKey(convId)) {
+            return cachedAvatars.get(convId);
+        }
+
+        // Check local disk cache
+        File diskCache = new File(context.getCacheDir(), "avatar_" + Math.abs(convId.hashCode()) + ".png");
+        if (diskCache.exists()) {
+            try {
+                Bitmap cached = BitmapFactory.decodeFile(diskCache.getAbsolutePath());
+                if (cached != null) {
+                    cachedAvatars.put(convId, cached);
+                    return cached;
+                }
+            } catch (Exception ignored) {}
+        }
+
+        Bitmap avatarBitmap = null;
+        if (avatarUrl != null && !avatarUrl.isEmpty() && avatarUrl.startsWith("http")) {
+            try {
+                String currentUrl = avatarUrl;
+                HttpURLConnection conn = null;
+                // Follow up to 4 HTTP/HTTPS cross-protocol redirects
+                for (int redirect = 0; redirect < 4; redirect++) {
+                    URL url = new URL(currentUrl);
+                    conn = (HttpURLConnection) url.openConnection();
+                    conn.setInstanceFollowRedirects(true);
+                    conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) ShinziMobile");
+                    conn.setConnectTimeout(4500);
+                    conn.setReadTimeout(4500);
+                    int status = conn.getResponseCode();
+                    if (status == HttpURLConnection.HTTP_MOVED_TEMP
+                            || status == HttpURLConnection.HTTP_MOVED_PERM
+                            || status == HttpURLConnection.HTTP_SEE_OTHER
+                            || status == 307 || status == 308) {
+                        String newLocation = conn.getHeaderField("Location");
+                        if (newLocation != null && !newLocation.isEmpty()) {
+                            currentUrl = newLocation;
+                            continue;
+                        }
+                    }
+                    break;
+                }
+
+                if (conn != null) {
+                    InputStream in = conn.getInputStream();
+                    ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+                    byte[] chunk = new byte[8192];
+                    int bytesRead;
+                    while ((bytesRead = in.read(chunk, 0, chunk.length)) != -1) {
+                        buffer.write(chunk, 0, bytesRead);
+                    }
+                    buffer.flush();
+                    byte[] imageBytes = buffer.toByteArray();
+                    in.close();
+
+                    if (imageBytes.length > 0) {
+                        // Decodes first frame of animated GIFs as static preview, or JPEG/PNG/WebP
+                        Bitmap raw = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length);
+                        if (raw != null) {
+                            avatarBitmap = getCircularBitmap(raw);
+                            // Persist to disk cache
+                            try (FileOutputStream fos = new FileOutputStream(diskCache)) {
+                                avatarBitmap.compress(Bitmap.CompressFormat.PNG, 95, fos);
+                            } catch (Exception ignored) {}
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+
+        if (avatarBitmap == null) {
+            avatarBitmap = createInitialAvatar(senderName);
+        }
+
+        cachedAvatars.put(convId, avatarBitmap);
+        return avatarBitmap;
+    }
+
+    public static Bitmap getCachedAvatar(Context context, String convId, String senderName) {
+        if (cachedAvatars.containsKey(convId)) {
+            return cachedAvatars.get(convId);
+        }
+        File diskCache = new File(context.getCacheDir(), "avatar_" + Math.abs(convId.hashCode()) + ".png");
+        if (diskCache.exists()) {
+            try {
+                Bitmap cached = BitmapFactory.decodeFile(diskCache.getAbsolutePath());
+                if (cached != null) {
+                    cachedAvatars.put(convId, cached);
+                    return cached;
+                }
+            } catch (Exception ignored) {}
+        }
+        return createInitialAvatar(senderName);
+    }
+
+    public static synchronized List<HistoryMessage> loadHistory(Context context, String convId) {
+        List<HistoryMessage> list = new ArrayList<>();
+        try {
+            SharedPreferences sp = context.getSharedPreferences("shinzi_conv_history", Context.MODE_PRIVATE);
+            String jsonStr = sp.getString(convId, null);
+            if (jsonStr != null && !jsonStr.isEmpty()) {
+                JSONArray arr = new JSONArray(jsonStr);
+                for (int i = 0; i < arr.length(); i++) {
+                    JSONObject obj = arr.getJSONObject(i);
+                    list.add(new HistoryMessage(
+                            obj.optString("sender", "Friend"),
+                            obj.optString("text", ""),
+                            obj.optLong("time", System.currentTimeMillis()),
+                            obj.optBoolean("isMe", false)
+                    ));
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return list;
+    }
+
+    public static synchronized void saveHistory(Context context, String convId, List<HistoryMessage> list) {
+        try {
+            JSONArray arr = new JSONArray();
+            for (HistoryMessage m : list) {
+                JSONObject obj = new JSONObject();
+                obj.put("sender", m.sender);
+                obj.put("text", m.text);
+                obj.put("time", m.time);
+                obj.put("isMe", m.isMe);
+                arr.put(obj);
+            }
+            context.getSharedPreferences("shinzi_conv_history", Context.MODE_PRIVATE)
+                    .edit()
+                    .putString(convId, arr.toString())
+                    .apply();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static synchronized void clearHistory(Context context, String convId) {
+        try {
+            context.getSharedPreferences("shinzi_conv_history", Context.MODE_PRIVATE)
+                    .edit()
+                    .remove(convId)
+                    .apply();
+        } catch (Exception ignored) {}
     }
 
     private static Bitmap getCircularBitmap(Bitmap bitmap) {

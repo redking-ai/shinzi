@@ -218,8 +218,9 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
             const cap = (window as any).Capacitor;
             const isNative = !!cap?.Plugins?.ShinziNotification;
 
-            // 1. Show Root-style In-App Floating Toast ONLY on Web Browser (suppressed in native APK to prevent overlapping)
-            if (!isUserInsideThisChat && !isNative) {
+            // 1. Show Root-style In-App Floating Toast when user is NOT inside this active chat
+            // Enabled for both Web and Native APK so the 5-second toast with tap-to-chat always works inside the app
+            if (!isUserInsideThisChat && document.visibilityState === 'visible') {
               triggerToast({
                 id: `${convId}-${messageId}-${Date.now()}`,
                 convId,
@@ -231,10 +232,10 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
               });
             }
 
-            // 2. Dispatch real OS notification if outside this chat OR if app is minimized/hidden
-            if (!isUserInsideThisChat || document.hidden) {
+            // 2. Dispatch real OS notification ONLY when app is hidden / minimized in background
+            if (document.hidden) {
               if (isNative) {
-                // Native Android APK: Real Android system MessagingStyle notification with Reply button
+                // Background native push notification with large avatar and inline reply
                 void cap.Plugins.ShinziNotification.showMessagingNotification({
                   senderName,
                   text: previewText,
@@ -277,27 +278,10 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
     if (cap?.Plugins?.ShinziNotification?.addListener) {
       replyListenerHandle = cap.Plugins.ShinziNotification.addListener(
         'onNotificationReply',
-        async (data: { convId: string; replyText: string }) => {
-          if (!data?.replyText || !data?.convId || !currentUid) return;
-          try {
-            const { collection, addDoc, serverTimestamp, doc, updateDoc } = await import('firebase/firestore');
-            const messagesRef = collection(db, 'conversations', data.convId, 'messages');
-            const newMsgRef = await addDoc(messagesRef, {
-              senderId: currentUid,
-              text: data.replyText.trim(),
-              createdAt: serverTimestamp(),
-              seenBy: [currentUid],
-              delivered: true,
-            });
-            await updateDoc(doc(db, 'conversations', data.convId), {
-              lastMessageText: data.replyText.trim(),
-              lastSenderId: currentUid,
-              lastMessageTime: serverTimestamp(),
-              lastMessageId: newMsgRef.id,
-            });
-          } catch (err) {
-            console.warn('[NotificationManager] Failed to post reply from notification:', err);
-          }
+        (data: { convId: string; replyText: string }) => {
+          // ReplyReceiver.java already posts the message to Firestore via /api/send-push.
+          // We intentionally do not duplicate the write here to prevent vector spamming / doubled messages.
+          console.log('[NotificationManager] Notification reply received for conversation:', data?.convId);
         }
       );
     }

@@ -22,6 +22,12 @@ public class ShinziFirebaseMessagingService extends FirebaseMessagingService {
     public void onMessageReceived(@NonNull RemoteMessage remoteMessage) {
         super.onMessageReceived(remoteMessage);
 
+        // If the app is currently running in the foreground, do NOT display an Android system
+        // status bar notification. The web app's 5-second in-app floating toast handles it.
+        if (ShinziNotificationPlugin.isAppForeground) {
+            return;
+        }
+
         Map<String, String> data = remoteMessage.getData();
         String senderName = data.get("senderName");
         if (senderName == null || senderName.isEmpty()) {
