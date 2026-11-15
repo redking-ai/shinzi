@@ -199,8 +199,15 @@ public class ShinziNotificationPlugin extends Plugin {
 
         new Thread(() -> {
             try {
-                // 1. Append incoming message to conversation history (limit to last 12 messages)
+                // 1. Deduplicate & append incoming message to conversation history (limit to last 12 messages)
                 List<HistoryMessage> history = loadHistory(context, convId);
+                if (!history.isEmpty()) {
+                    HistoryMessage last = history.get(history.size() - 1);
+                    if (last.text != null && last.text.equals(text) && !last.isMe && (System.currentTimeMillis() - last.time < 4000)) {
+                        // Suppress duplicate push event
+                        return;
+                    }
+                }
                 history.add(new HistoryMessage(senderName, text, System.currentTimeMillis(), false));
                 if (history.size() > 12) {
                     history = history.subList(history.size() - 12, history.size());
@@ -219,12 +226,16 @@ public class ShinziNotificationPlugin extends Plugin {
                 }
                 Person senderPerson = personBuilder.build();
 
-                // 4. User Person ("You")
-                Person mePerson = new Person.Builder().setName("You").build();
+                // 4. User Person ("You") with 1x1 transparent icon so Android SystemUI does not draw a gray silhouette icon!
+                Bitmap transparentPixel = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888);
+                Person mePerson = new Person.Builder()
+                        .setName("You")
+                        .setIcon(IconCompat.createWithBitmap(transparentPixel))
+                        .build();
 
                 // 5. Build MessagingStyle populated with all stacked history messages
                 NotificationCompat.MessagingStyle style = new NotificationCompat.MessagingStyle(mePerson);
-                style.setConversationTitle(null); // Direct chat format (shows sender name & avatar)
+                style.setConversationTitle(null); // Direct chat format (shows sender name & avatar on the left)
                 style.setGroupConversation(false);
 
                 for (HistoryMessage msg : history) {
@@ -261,10 +272,11 @@ public class ShinziNotificationPlugin extends Plugin {
                         flags
                 );
 
-                // 8. Assemble NotificationCompat with large circular avatar on the far left
+                // 8. Assemble NotificationCompat.
+                // Note: builder.setLargeIcon is REMOVED so Android does NOT place a duplicate avatar on the right side!
+                // The circular avatar is displayed on the left next to sender messages via senderPerson.
                 NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID)
                         .setSmallIcon(R.drawable.ic_stat_shinzi)
-                        .setLargeIcon(avatarBitmap) // WhatsApp-style large circular avatar on the far left
                         .setStyle(style)
                         .setContentIntent(contentPendingIntent)
                         .addAction(replyAction) // Reply action button
@@ -324,6 +336,12 @@ public class ShinziNotificationPlugin extends Plugin {
     }
 
     public static Bitmap fetchCircularAvatar(Context context, String avatarUrl, String senderName, String convId) {
+        if (avatarUrl != null && !avatarUrl.isEmpty()) {
+            if (avatarUrl.startsWith("/")) {
+                avatarUrl = "https://shinzi.vercel.app" + avatarUrl;
+            }
+        }
+
         // Check memory cache
         if (cachedAvatars.containsKey(convId)) {
             return cachedAvatars.get(convId);

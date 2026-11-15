@@ -89,6 +89,15 @@ export default {
         });
 
         if (actualRecipient) {
+          let replyAvatar = '';
+          try {
+            const senderDoc = await adminDb.collection('users').doc(senderUid).get();
+            replyAvatar = senderDoc.data()?.photoURL || '';
+            if (replyAvatar && replyAvatar.startsWith('/')) {
+              replyAvatar = 'https://shinzi.vercel.app' + replyAvatar;
+            }
+          } catch {}
+
           const userDoc = await adminDb.collection('users').doc(actualRecipient).get();
           const fcmTokens: string[] = userDoc.data()?.fcmTokens || [];
           if (fcmTokens.length > 0) {
@@ -97,6 +106,7 @@ export default {
               data: {
                 senderName: senderName || 'Friend',
                 text,
+                avatarUrl: replyAvatar,
                 convId,
                 senderUid,
               },
@@ -116,6 +126,17 @@ export default {
       // 1. Send Native Android FCM Push (Delivers even when app is killed)
       let fcmSentCount = 0;
       try {
+        let pushAvatar = icon || '';
+        if (!pushAvatar && senderUid) {
+          try {
+            const senderDoc = await adminDb.collection('users').doc(senderUid).get();
+            pushAvatar = senderDoc.data()?.photoURL || '';
+          } catch {}
+        }
+        if (pushAvatar && pushAvatar.startsWith('/')) {
+          pushAvatar = 'https://shinzi.vercel.app' + pushAvatar;
+        }
+
         const userDoc = await adminDb.collection('users').doc(recipientUid).get();
         const fcmTokens: string[] = userDoc.data()?.fcmTokens || [];
 
@@ -125,7 +146,7 @@ export default {
             data: {
               senderName: title || 'Shinzi',
               text: text || 'You received a new message',
-              avatarUrl: icon || '',
+              avatarUrl: pushAvatar,
               convId: actualConvId,
               senderUid: senderUid || '',
             },

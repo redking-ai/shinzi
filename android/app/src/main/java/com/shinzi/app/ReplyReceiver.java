@@ -77,8 +77,14 @@ public class ReplyReceiver extends BroadcastReceiver {
                 // 2. Notify active web plugin if app is running in foreground
                 ShinziNotificationPlugin.notifyReplyReceived(convId, text);
 
-                // 3. Append user's reply to conversation history
+                // 3. Deduplicate & append user's reply to conversation history
                 List<ShinziNotificationPlugin.HistoryMessage> history = ShinziNotificationPlugin.loadHistory(context, convId);
+                if (!history.isEmpty()) {
+                    ShinziNotificationPlugin.HistoryMessage last = history.get(history.size() - 1);
+                    if (last.text != null && last.text.equals(text) && last.isMe && (System.currentTimeMillis() - last.time < 4000)) {
+                        return;
+                    }
+                }
                 history.add(new ShinziNotificationPlugin.HistoryMessage(myName, text, System.currentTimeMillis(), true));
                 if (history.size() > 12) {
                     history = history.subList(history.size() - 12, history.size());
@@ -97,7 +103,12 @@ public class ReplyReceiver extends BroadcastReceiver {
                 }
                 Person senderPerson = personBuilder.build();
 
-                Person mePerson = new Person.Builder().setName("You").build();
+                // 1x1 transparent icon so Android SystemUI does not draw the gray silhouette avatar
+                Bitmap transparentPixel = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888);
+                Person mePerson = new Person.Builder()
+                        .setName("You")
+                        .setIcon(IconCompat.createWithBitmap(transparentPixel))
+                        .build();
 
                 // 6. Build MessagingStyle keeping full conversation history
                 NotificationCompat.MessagingStyle style = new NotificationCompat.MessagingStyle(mePerson);
@@ -144,10 +155,9 @@ public class ReplyReceiver extends BroadcastReceiver {
                         flags
                 );
 
-                // 9. Update notification with large avatar, clean "You: <reply>", and persistent reply button
+                // 9. Update notification with single sender avatar on the left, clean "You: <reply>", and persistent reply button
                 NotificationCompat.Builder repliedNotification = new NotificationCompat.Builder(context, ShinziNotificationPlugin.CHANNEL_ID)
                         .setSmallIcon(R.drawable.ic_stat_shinzi)
-                        .setLargeIcon(avatarBitmap)
                         .setStyle(style)
                         .setContentIntent(contentPendingIntent)
                         .addAction(replyAction) // Allows user to send multiple replies without losing the input action

@@ -232,30 +232,18 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
               });
             }
 
-            // 2. Dispatch real OS notification ONLY when app is hidden / minimized in background
-            if (document.hidden) {
-              if (isNative) {
-                // Background native push notification with large avatar and inline reply
-                void cap.Plugins.ShinziNotification.showMessagingNotification({
-                  senderName,
-                  text: previewText,
-                  avatarUrl: senderAvatar,
-                  convId,
-                  senderUid: lastSenderId,
-                  messageId,
-                }).catch((e: any) => console.warn('[ShinziNotification]', e));
-              } else {
-                // Web Browser: Standard Web Push / ServiceWorker notification
-                void dispatchOSNotification(senderName, {
-                  body: previewText,
-                  icon: senderAvatar || '/icon-192.png',
-                  tag: `shinzi-${convId}-${messageId}`,
-                  renotify: true,
-                  data: {
-                    url: `/chat?user=${encodeURIComponent(lastSenderId)}&msg=${encodeURIComponent(messageId)}`,
-                  },
-                });
-              }
+            // 2. Dispatch real OS notification ONLY for web browsers when page is hidden
+            if (document.hidden && !isNative) {
+              // Web Browser: Standard Web Push / ServiceWorker notification
+              void dispatchOSNotification(senderName, {
+                body: previewText,
+                icon: senderAvatar ? (senderAvatar.startsWith('/') ? `https://shinzi.vercel.app${senderAvatar}` : senderAvatar) : '/icon-192.png',
+                tag: `shinzi-${convId}-${messageId}`,
+                renotify: true,
+                data: {
+                  url: `/chat?user=${encodeURIComponent(lastSenderId)}&msg=${encodeURIComponent(messageId)}`,
+                },
+              });
             }
 
             // Vibration feedback if supported
