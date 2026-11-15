@@ -53,7 +53,8 @@ export default {
     try {
       const wp = await getWebPush();
       const body = await request.json();
-      const { recipientUid, title, text, icon, url, tag } = body;
+      const { recipientUid, title, text, icon, url, tag, convId, senderUid } = body;
+      const actualConvId = convId || tag || 'default';
 
       if (!recipientUid) {
         return Response.json({ error: 'Missing recipientUid' }, { status: 400, headers: CORS_HEADERS });
@@ -72,7 +73,8 @@ export default {
               senderName: title || 'Shinzi',
               text: text || 'You received a new message',
               avatarUrl: icon || '',
-              convId: tag || 'default',
+              convId: actualConvId,
+              senderUid: senderUid || '',
             },
             android: {
               priority: 'high',

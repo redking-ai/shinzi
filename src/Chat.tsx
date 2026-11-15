@@ -2517,6 +2517,20 @@ export default function Chat({ onNavigate }: ChatProps) {
     const handleUrlChatOpen = () => {
       if (!uid || loadingChats || loadingFriends) return;
       const params = new URLSearchParams(window.location.search);
+      const targetConv = params.get('conv') || '';
+      if (targetConv) {
+        const found = conversations.find((c) => c.id === targetConv);
+        if (found) {
+          setSelected(found);
+          const nextUrl = new URL(window.location.href);
+          nextUrl.searchParams.delete('conv');
+          nextUrl.searchParams.delete('user');
+          nextUrl.searchParams.delete('msg');
+          window.history.replaceState({}, '', `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
+          return;
+        }
+      }
+
       const targetUid = params.get('user') || '';
       const targetMsg = params.get('msg') || '';
       if (!targetUid || targetUid === uid) return;
@@ -2812,8 +2826,10 @@ const handleSearchMessage = async (target: Rec) => {
       title: profile?.displayName || profile?.username || 'New Message',
       text: previewText,
       icon: profile?.photoURL || '/icon-192.png',
-      url: `/chat?user=${encodeURIComponent(uid || '')}&msg=${encodeURIComponent(messageId)}`,
-      tag: `shinzi-${selected.id}-${messageId}`,
+      url: `/chat?conv=${encodeURIComponent(selected.id)}&user=${encodeURIComponent(uid || '')}&msg=${encodeURIComponent(messageId)}`,
+      tag: selected.id,
+      convId: selected.id,
+      senderUid: uid || undefined,
     });
   };
 

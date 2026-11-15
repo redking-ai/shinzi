@@ -44,15 +44,20 @@ public class ShinziFirebaseMessagingService extends FirebaseMessagingService {
         String avatarUrl = data.get("avatarUrl");
         String convId = data.get("convId");
         if (convId == null || convId.isEmpty()) {
+            convId = data.get("tag");
+        }
+        if (convId == null || convId.isEmpty()) {
             convId = "default";
         }
+        String senderUid = data.get("senderUid");
 
         ShinziNotificationPlugin.showNotificationNative(
                 this,
                 senderName,
                 text,
                 avatarUrl,
-                convId
+                convId,
+                senderUid != null ? senderUid : ""
         );
     }
 }

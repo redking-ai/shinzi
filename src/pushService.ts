@@ -99,6 +99,8 @@ export async function sendWebPushToUser(params: {
   icon?: string;
   url?: string;
   tag?: string;
+  convId?: string;
+  senderUid?: string;
 }): Promise<void> {
   try {
     const apiBase = typeof window !== 'undefined' && window.location.origin.includes('localhost')

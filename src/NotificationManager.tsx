@@ -76,6 +76,13 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
     if (cap?.Plugins?.ShinziNotification) {
       let isSubscribed = true;
 
+      if (typeof cap.Plugins.ShinziNotification.setCurrentUser === 'function') {
+        void cap.Plugins.ShinziNotification.setCurrentUser({
+          uid: currentUid,
+          name: 'You',
+        }).catch(() => {});
+      }
+
       const syncToken = async (token: string) => {
         if (!token || !isSubscribed) return;
         try {
@@ -233,6 +240,7 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
                   text: previewText,
                   avatarUrl: senderAvatar,
                   convId,
+                  senderUid: lastSenderId,
                   messageId,
                 }).catch((e: any) => console.warn('[ShinziNotification]', e));
               } else {

@@ -42,11 +42,27 @@ public class ShinziNotificationPlugin extends Plugin {
     // Cache message history per conversation for multi-message stacked display
     private static final Map<String, NotificationCompat.MessagingStyle> conversationStyles = new HashMap<>();
 
+    public static Map<String, NotificationCompat.MessagingStyle> getConversationStyles() {
+        return conversationStyles;
+    }
+
     @Override
     public void load() {
         super.load();
         instance = this;
         createNotificationChannel(getContext());
+    }
+
+    @PluginMethod
+    public void setCurrentUser(PluginCall call) {
+        String uid = call.getString("uid", "");
+        String name = call.getString("name", "You");
+        getContext().getSharedPreferences("shinzi_prefs", Context.MODE_PRIVATE)
+                .edit()
+                .putString("current_uid", uid)
+                .putString("current_name", name)
+                .apply();
+        call.resolve();
     }
 
     public static void notifyReplyReceived(String convId, String replyText) {
@@ -112,8 +128,9 @@ public class ShinziNotificationPlugin extends Plugin {
         String text = call.getString("text", "");
         String avatarUrl = call.getString("avatarUrl", "");
         String convId = call.getString("convId", "default");
+        String senderUid = call.getString("senderUid", "");
 
-        showNotificationNative(getContext(), senderName, text, avatarUrl, convId);
+        showNotificationNative(getContext(), senderName, text, avatarUrl, convId, senderUid);
         call.resolve(new JSObject().put("success", true));
     }
 
@@ -123,6 +140,17 @@ public class ShinziNotificationPlugin extends Plugin {
             String text,
             String avatarUrl,
             String convId
+    ) {
+        showNotificationNative(context, senderName, text, avatarUrl, convId, "");
+    }
+
+    public static void showNotificationNative(
+            Context context,
+            String senderName,
+            String text,
+            String avatarUrl,
+            String convId,
+            String senderUid
     ) {
         createNotificationChannel(context);
         int notificationId = convId.hashCode();
@@ -136,8 +164,10 @@ public class ShinziNotificationPlugin extends Plugin {
                         URL url = new URL(avatarUrl);
                         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                         conn.setDoInput(true);
-                        conn.setConnectTimeout(3000);
-                        conn.setReadTimeout(3000);
+                        conn.setInstanceFollowRedirects(true);
+                        conn.setRequestProperty("User-Agent", "Mozilla/5.0 ShinziAndroid");
+                        conn.setConnectTimeout(4000);
+                        conn.setReadTimeout(4000);
                         conn.connect();
                         InputStream input = conn.getInputStream();
                         Bitmap raw = BitmapFactory.decodeStream(input);
@@ -168,8 +198,7 @@ public class ShinziNotificationPlugin extends Plugin {
                 // 4. MessagingStyle (Supports multi-message vertical stacking)
                 NotificationCompat.MessagingStyle style = conversationStyles.get(convId);
                 if (style == null) {
-                    style = new NotificationCompat.MessagingStyle(mePerson)
-                            .setConversationTitle(senderName);
+                    style = new NotificationCompat.MessagingStyle(mePerson);
                     conversationStyles.put(convId, style);
                 }
                 style.addMessage(text, System.currentTimeMillis(), senderPerson);
@@ -184,6 +213,7 @@ public class ShinziNotificationPlugin extends Plugin {
                 replyIntent.putExtra("notificationId", notificationId);
                 replyIntent.putExtra("convId", convId);
                 replyIntent.putExtra("senderName", senderName);
+                replyIntent.putExtra("senderUid", senderUid);
 
                 int flags = PendingIntent.FLAG_UPDATE_CURRENT;
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -209,7 +239,11 @@ public class ShinziNotificationPlugin extends Plugin {
                 // 6. Open App Intent on tap
                 Intent openIntent = new Intent(context, MainActivity.class);
                 openIntent.setAction(Intent.ACTION_VIEW);
-                openIntent.setData(Uri.parse("https://shinzi.vercel.app/?conv=" + convId));
+                String openUrl = "https://shinzi.vercel.app/chat?conv=" + convId;
+                if (senderUid != null && !senderUid.isEmpty()) {
+                    openUrl += "&user=" + senderUid;
+                }
+                openIntent.setData(Uri.parse(openUrl));
                 openIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
                 PendingIntent contentPendingIntent = PendingIntent.getActivity(
