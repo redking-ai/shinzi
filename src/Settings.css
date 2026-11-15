@@ -32,22 +32,6 @@
   }
 }
 
-/* Material Symbols configuration */
-.material-symbols-outlined {
-  font-family: 'Material Symbols Outlined';
-  font-weight: normal;
-  font-style: normal;
-  font-size: 22px;
-  line-height: 1;
-  letter-spacing: normal;
-  text-transform: none;
-  display: inline-block;
-  white-space: nowrap;
-  word-wrap: normal;
-  direction: ltr;
-  -webkit-font-feature-settings: 'liga';
-  -webkit-font-smoothing: antialiased;
-}
 
 /* Top Sticky Header */
 .sh-settings-header {
@@ -77,21 +61,25 @@
   justify-content: center;
   width: 36px;
   height: 36px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
   color: #ffffff;
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.1s ease;
+  transition: opacity 0.15s ease, transform 0.1s ease;
   -webkit-tap-highlight-color: transparent;
+  padding: 0;
 }
 
 .sh-settings-back-btn:hover {
-  background: rgba(255, 255, 255, 0.16);
+  opacity: 0.8;
+  background: transparent;
 }
 
 .sh-settings-back-btn:active {
-  transform: scale(0.94);
+  transform: scale(0.92);
+  opacity: 0.7;
 }
 
 .sh-settings-title {

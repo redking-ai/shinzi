@@ -36,6 +36,7 @@ import {
   FileText,
   Smile,
   Square,
+  Camera,
 } from 'lucide-react';
 import { auth, db } from './firebaseConfig';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
@@ -2856,9 +2857,7 @@ export default function Servers({
                   }}
                 >
                   <div className="sh-invite-share-icon">
-                    <span className="material-symbols-outlined" style={{ fontSize: 24 }}>
-                      chat
-                    </span>
+                    <MessageCircle size={24} color="#ffffff" />
                   </div>
                   <span className="sh-invite-share-label">WhatsApp</span>
                 </button>
@@ -2869,9 +2868,7 @@ export default function Servers({
                   onClick={() => alert('Instagram Direct share')}
                 >
                   <div className="sh-invite-share-icon">
-                    <span className="material-symbols-outlined" style={{ fontSize: 24 }}>
-                      photo_camera
-                    </span>
+                    <Camera size={24} color="#ffffff" />
                   </div>
                   <span className="sh-invite-share-label">Instagram</span>
                 </button>
@@ -3654,12 +3651,7 @@ export default function Servers({
                   </>
                 ) : (
                   <>
-                    <span
-                      className="material-symbols-outlined"
-                      style={{ fontSize: 26, color: '#ffffff' }}
-                    >
-                      image
-                    </span>
+                    <ImageIcon size={26} color="#ffffff" />
                     <span className="sh-create-thumbnail-label">
                       Server Thumbnail / Banner (Supports GIF)
                     </span>
@@ -3693,12 +3685,7 @@ export default function Servers({
                       }}
                     />
                   ) : (
-                    <span
-                      className="material-symbols-outlined"
-                      style={{ fontSize: 22, color: '#ffffff' }}
-                    >
-                      account_circle
-                    </span>
+                    <User size={22} color="#ffffff" />
                   )}
                 </div>
 

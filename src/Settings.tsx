@@ -3,6 +3,33 @@ import './Settings.css';
 import { auth } from './firebaseConfig';
 import { signOut } from 'firebase/auth';
 import TextStylesModal from './TextStylesModal';
+import {
+  ArrowLeft,
+  User,
+  ChevronRight,
+  Lock,
+  Laptop,
+  Sparkles,
+  UserX,
+  Bot,
+  Bell,
+  Users,
+  Store,
+  History,
+  Image as ImageIcon,
+  Download,
+  Smartphone,
+  Mic,
+  Type,
+  Headphones,
+  Bug,
+  HelpCircle,
+  Heart,
+  LogOut,
+  Info,
+  Code,
+  Copy,
+} from 'lucide-react';
 
 interface SettingsProps {
   onBack: () => void;
@@ -44,32 +71,6 @@ const SpinRoyalIcon: React.FC<{ color?: string; size?: number }> = ({
     <path d="M9.2 17.5 L7.5 22 M14.8 17.5 L16.5 22" />
     <line x1="5.5" y1="22" x2="18.5" y2="22" strokeWidth="2" />
   </svg>
-);
-
-const MaterialIcon: React.FC<{
-  name: string;
-  color?: string;
-  size?: number;
-  className?: string;
-}> = ({ name, color = '#ffffff', size = 22, className = '' }) => (
-  <span
-    className={`material-symbols-outlined ${className}`}
-    style={{
-      fontSize: `${size}px`,
-      color,
-      width: `${size}px`,
-      height: `${size}px`,
-      display: 'inline-flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      lineHeight: 1,
-      userSelect: 'none',
-      flexShrink: 0,
-    }}
-    aria-hidden="true"
-  >
-    {name}
-  </span>
 );
 
 export default function Settings({ onBack }: SettingsProps) {
@@ -191,7 +192,7 @@ export default function Settings({ onBack }: SettingsProps) {
             aria-label="Back to Profile"
             title="Back"
           >
-            <MaterialIcon name="arrow_back" size={20} />
+            <ArrowLeft size={22} color="#ffffff" />
           </button>
           <h1 className="sh-settings-title">Settings</h1>
         </div>
@@ -216,12 +217,12 @@ export default function Settings({ onBack }: SettingsProps) {
             >
               <div className="sh-settings-item-left">
                 <span className="sh-settings-item-icon">
-                  <MaterialIcon name="account_circle" />
+                  <User size={22} color="#ffffff" />
                 </span>
                 <span className="sh-settings-item-label">Profile</span>
               </div>
               <div className="sh-settings-item-right">
-                <MaterialIcon name="chevron_right" className="sh-settings-chevron" size={20} />
+                <ChevronRight className="sh-settings-chevron" size={20} color="#949ba4" />
               </div>
             </button>
 
@@ -233,12 +234,12 @@ export default function Settings({ onBack }: SettingsProps) {
             >
               <div className="sh-settings-item-left">
                 <span className="sh-settings-item-icon">
-                  <MaterialIcon name="lock" />
+                  <Lock size={22} color="#ffffff" />
                 </span>
                 <span className="sh-settings-item-label">Privacy and Safety</span>
               </div>
               <div className="sh-settings-item-right">
-                <MaterialIcon name="chevron_right" className="sh-settings-chevron" size={20} />
+                <ChevronRight className="sh-settings-chevron" size={20} color="#949ba4" />
               </div>
             </button>
 
@@ -250,12 +251,12 @@ export default function Settings({ onBack }: SettingsProps) {
             >
               <div className="sh-settings-item-left">
                 <span className="sh-settings-item-icon">
-                  <MaterialIcon name="devices_other" />
+                  <Laptop size={22} color="#ffffff" />
                 </span>
                 <span className="sh-settings-item-label">Devices</span>
               </div>
               <div className="sh-settings-item-right">
-                <MaterialIcon name="chevron_right" className="sh-settings-chevron" size={20} />
+                <ChevronRight className="sh-settings-chevron" size={20} color="#949ba4" />
               </div>
             </button>
 
@@ -267,12 +268,12 @@ export default function Settings({ onBack }: SettingsProps) {
             >
               <div className="sh-settings-item-left">
                 <span className="sh-settings-item-icon">
-                  <MaterialIcon name="interests" />
+                  <Sparkles size={22} color="#ffffff" />
                 </span>
                 <span className="sh-settings-item-label">Other Platforms</span>
               </div>
               <div className="sh-settings-item-right">
-                <MaterialIcon name="chevron_right" className="sh-settings-chevron" size={20} />
+                <ChevronRight className="sh-settings-chevron" size={20} color="#949ba4" />
               </div>
             </button>
 
@@ -284,12 +285,12 @@ export default function Settings({ onBack }: SettingsProps) {
             >
               <div className="sh-settings-item-left">
                 <span className="sh-settings-item-icon">
-                  <MaterialIcon name="person_cancel" />
+                  <UserX size={22} color="#ffffff" />
                 </span>
                 <span className="sh-settings-item-label">Restricted accounts</span>
               </div>
               <div className="sh-settings-item-right">
-                <MaterialIcon name="chevron_right" className="sh-settings-chevron" size={20} />
+                <ChevronRight className="sh-settings-chevron" size={20} color="#949ba4" />
               </div>
             </button>
 
@@ -301,12 +302,12 @@ export default function Settings({ onBack }: SettingsProps) {
             >
               <div className="sh-settings-item-left">
                 <span className="sh-settings-item-icon">
-                  <MaterialIcon name="smart_toy" />
+                  <Bot size={22} color="#ffffff" />
                 </span>
                 <span className="sh-settings-item-label">Permitted bots</span>
               </div>
               <div className="sh-settings-item-right">
-                <MaterialIcon name="chevron_right" className="sh-settings-chevron" size={20} />
+                <ChevronRight className="sh-settings-chevron" size={20} color="#949ba4" />
               </div>
             </button>
 
@@ -318,12 +319,12 @@ export default function Settings({ onBack }: SettingsProps) {
             >
               <div className="sh-settings-item-left">
                 <span className="sh-settings-item-icon">
-                  <MaterialIcon name="notifications" />
+                  <Bell size={22} color="#ffffff" />
                 </span>
                 <span className="sh-settings-item-label">Notifications</span>
               </div>
               <div className="sh-settings-item-right">
-                <MaterialIcon name="chevron_right" className="sh-settings-chevron" size={20} />
+                <ChevronRight className="sh-settings-chevron" size={20} color="#949ba4" />
               </div>
             </button>
 
@@ -335,12 +336,12 @@ export default function Settings({ onBack }: SettingsProps) {
             >
               <div className="sh-settings-item-left">
                 <span className="sh-settings-item-icon">
-                  <MaterialIcon name="group" />
+                  <Users size={22} color="#ffffff" />
                 </span>
                 <span className="sh-settings-item-label">Friends</span>
               </div>
               <div className="sh-settings-item-right">
-                <MaterialIcon name="chevron_right" className="sh-settings-chevron" size={20} />
+                <ChevronRight className="sh-settings-chevron" size={20} color="#949ba4" />
               </div>
             </button>
           </div>
@@ -362,12 +363,12 @@ export default function Settings({ onBack }: SettingsProps) {
             >
               <div className="sh-settings-item-left">
                 <span className="sh-settings-item-icon">
-                  <MaterialIcon name="storefront" />
+                  <Store size={22} color="#ffffff" />
                 </span>
                 <span className="sh-settings-item-label">Shop</span>
               </div>
               <div className="sh-settings-item-right">
-                <MaterialIcon name="chevron_right" className="sh-settings-chevron" size={20} />
+                <ChevronRight className="sh-settings-chevron" size={20} color="#949ba4" />
               </div>
             </button>
 
@@ -384,7 +385,7 @@ export default function Settings({ onBack }: SettingsProps) {
                 <span className="sh-settings-item-label">Spin Royal</span>
               </div>
               <div className="sh-settings-item-right">
-                <MaterialIcon name="chevron_right" className="sh-settings-chevron" size={20} />
+                <ChevronRight className="sh-settings-chevron" size={20} color="#949ba4" />
               </div>
             </button>
 
@@ -396,12 +397,12 @@ export default function Settings({ onBack }: SettingsProps) {
             >
               <div className="sh-settings-item-left">
                 <span className="sh-settings-item-icon">
-                  <MaterialIcon name="history" />
+                  <History size={22} color="#ffffff" />
                 </span>
                 <span className="sh-settings-item-label">Spent History</span>
               </div>
               <div className="sh-settings-item-right">
-                <MaterialIcon name="chevron_right" className="sh-settings-chevron" size={20} />
+                <ChevronRight className="sh-settings-chevron" size={20} color="#949ba4" />
               </div>
             </button>
           </div>
@@ -423,12 +424,12 @@ export default function Settings({ onBack }: SettingsProps) {
             >
               <div className="sh-settings-item-left">
                 <span className="sh-settings-item-icon">
-                  <MaterialIcon name="image" />
+                  <ImageIcon size={22} color="#ffffff" />
                 </span>
                 <span className="sh-settings-item-label">Appearance</span>
               </div>
               <div className="sh-settings-item-right">
-                <MaterialIcon name="chevron_right" className="sh-settings-chevron" size={20} />
+                <ChevronRight className="sh-settings-chevron" size={20} color="#949ba4" />
               </div>
             </button>
 
@@ -440,12 +441,12 @@ export default function Settings({ onBack }: SettingsProps) {
             >
               <div className="sh-settings-item-left">
                 <span className="sh-settings-item-icon">
-                  <MaterialIcon name="download" />
+                  <Download size={22} color="#ffffff" />
                 </span>
                 <span className="sh-settings-item-label">Download settings</span>
               </div>
               <div className="sh-settings-item-right">
-                <MaterialIcon name="chevron_right" className="sh-settings-chevron" size={20} />
+                <ChevronRight className="sh-settings-chevron" size={20} color="#949ba4" />
               </div>
             </button>
 
@@ -457,12 +458,12 @@ export default function Settings({ onBack }: SettingsProps) {
             >
               <div className="sh-settings-item-left">
                 <span className="sh-settings-item-icon">
-                  <MaterialIcon name="app_registration" />
+                  <Smartphone size={22} color="#ffffff" />
                 </span>
                 <span className="sh-settings-item-label">APP icon</span>
               </div>
               <div className="sh-settings-item-right">
-                <MaterialIcon name="chevron_right" className="sh-settings-chevron" size={20} />
+                <ChevronRight className="sh-settings-chevron" size={20} color="#949ba4" />
               </div>
             </button>
 
@@ -474,12 +475,12 @@ export default function Settings({ onBack }: SettingsProps) {
             >
               <div className="sh-settings-item-left">
                 <span className="sh-settings-item-icon">
-                  <MaterialIcon name="mic" />
+                  <Mic size={22} color="#ffffff" />
                 </span>
                 <span className="sh-settings-item-label">Voice</span>
               </div>
               <div className="sh-settings-item-right">
-                <MaterialIcon name="chevron_right" className="sh-settings-chevron" size={20} />
+                <ChevronRight className="sh-settings-chevron" size={20} color="#949ba4" />
               </div>
             </button>
 
@@ -491,12 +492,12 @@ export default function Settings({ onBack }: SettingsProps) {
             >
               <div className="sh-settings-item-left">
                 <span className="sh-settings-item-icon">
-                  <MaterialIcon name="text_fields" />
+                  <Type size={22} color="#ffffff" />
                 </span>
                 <span className="sh-settings-item-label">Text Styles</span>
               </div>
               <div className="sh-settings-item-right">
-                <MaterialIcon name="chevron_right" className="sh-settings-chevron" size={20} />
+                <ChevronRight className="sh-settings-chevron" size={20} color="#949ba4" />
               </div>
             </button>
           </div>
@@ -518,12 +519,12 @@ export default function Settings({ onBack }: SettingsProps) {
             >
               <div className="sh-settings-item-left">
                 <span className="sh-settings-item-icon">
-                  <MaterialIcon name="support_agent" />
+                  <Headphones size={22} color="#ffffff" />
                 </span>
                 <span className="sh-settings-item-label">Support</span>
               </div>
               <div className="sh-settings-item-right">
-                <MaterialIcon name="chevron_right" className="sh-settings-chevron" size={20} />
+                <ChevronRight className="sh-settings-chevron" size={20} color="#949ba4" />
               </div>
             </button>
 
@@ -535,12 +536,12 @@ export default function Settings({ onBack }: SettingsProps) {
             >
               <div className="sh-settings-item-left">
                 <span className="sh-settings-item-icon">
-                  <MaterialIcon name="bug_report" />
+                  <Bug size={22} color="#ffffff" />
                 </span>
                 <span className="sh-settings-item-label">Report bugs</span>
               </div>
               <div className="sh-settings-item-right">
-                <MaterialIcon name="chevron_right" className="sh-settings-chevron" size={20} />
+                <ChevronRight className="sh-settings-chevron" size={20} color="#949ba4" />
               </div>
             </button>
 
@@ -552,12 +553,12 @@ export default function Settings({ onBack }: SettingsProps) {
             >
               <div className="sh-settings-item-left">
                 <span className="sh-settings-item-icon">
-                  <MaterialIcon name="help" />
+                  <HelpCircle size={22} color="#ffffff" />
                 </span>
                 <span className="sh-settings-item-label">Help</span>
               </div>
               <div className="sh-settings-item-right">
-                <MaterialIcon name="chevron_right" className="sh-settings-chevron" size={20} />
+                <ChevronRight className="sh-settings-chevron" size={20} color="#949ba4" />
               </div>
             </button>
 
@@ -569,12 +570,12 @@ export default function Settings({ onBack }: SettingsProps) {
             >
               <div className="sh-settings-item-left">
                 <span className="sh-settings-item-icon">
-                  <MaterialIcon name="favorite" />
+                  <Heart size={22} color="#ffffff" />
                 </span>
                 <span className="sh-settings-item-label">Support us</span>
               </div>
               <div className="sh-settings-item-right">
-                <MaterialIcon name="chevron_right" className="sh-settings-chevron" size={20} />
+                <ChevronRight className="sh-settings-chevron" size={20} color="#949ba4" />
               </div>
             </button>
 
@@ -587,7 +588,7 @@ export default function Settings({ onBack }: SettingsProps) {
             >
               <div className="sh-settings-item-left">
                 <span className="sh-settings-item-icon">
-                  <MaterialIcon name="logout" color="#ff4b4b" />
+                  <LogOut size={22} color="#ff4b4b" />
                 </span>
                 <span className="sh-settings-item-label">Log Out</span>
               </div>
@@ -627,7 +628,7 @@ export default function Settings({ onBack }: SettingsProps) {
             <div className="sh-settings-item">
               <div className="sh-settings-item-left">
                 <span className="sh-settings-item-icon">
-                  <MaterialIcon name="info" />
+                  <Info size={22} color="#ffffff" />
                 </span>
                 <span className="sh-settings-item-label">App version</span>
               </div>
@@ -640,7 +641,7 @@ export default function Settings({ onBack }: SettingsProps) {
             <div className="sh-settings-item">
               <div className="sh-settings-item-left">
                 <span className="sh-settings-item-icon">
-                  <MaterialIcon name="smartphone" />
+                  <Smartphone size={22} color="#ffffff" />
                 </span>
                 <span className="sh-settings-item-label">Device</span>
               </div>
@@ -653,7 +654,7 @@ export default function Settings({ onBack }: SettingsProps) {
             <div className="sh-settings-item">
               <div className="sh-settings-item-left">
                 <span className="sh-settings-item-icon">
-                  <MaterialIcon name="logo_dev" />
+                  <Code size={22} color="#ffffff" />
                 </span>
                 <span className="sh-settings-item-label">Developer code</span>
               </div>
@@ -666,7 +667,7 @@ export default function Settings({ onBack }: SettingsProps) {
                   title="Copy Developer Code"
                   aria-label="Copy Developer Code"
                 >
-                  <MaterialIcon name="content_copy" size={16} />
+                  <Copy size={16} color="#ffffff" />
                   <span>{copiedCode ? 'Copied' : 'Copy'}</span>
                 </button>
               </div>
@@ -686,12 +687,12 @@ export default function Settings({ onBack }: SettingsProps) {
             >
               <div className="sh-settings-item-left">
                 <span className="sh-settings-item-icon">
-                  <MaterialIcon name="help_outline" />
+                  <HelpCircle size={22} color="#ffffff" />
                 </span>
                 <span className="sh-settings-item-label">What's new</span>
               </div>
               <div className="sh-settings-item-right">
-                <MaterialIcon name="chevron_right" className="sh-settings-chevron" size={20} />
+                <ChevronRight className="sh-settings-chevron" size={20} color="#949ba4" />
               </div>
             </button>
           </div>
