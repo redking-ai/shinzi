@@ -43,7 +43,7 @@ public class ReplyReceiver extends BroadcastReceiver {
                 // 1. Post reply to Firestore via backend API
                 new Thread(() -> {
                     try {
-                        URL url = new URL("https://shinzi.vercel.app/api/send-reply");
+                        URL url = new URL("https://shinzi.vercel.app/api/send-push");
                         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                         conn.setRequestMethod("POST");
                         conn.setRequestProperty("Content-Type", "application/json");
@@ -52,6 +52,7 @@ public class ReplyReceiver extends BroadcastReceiver {
                         conn.setDoOutput(true);
 
                         JSONObject payload = new JSONObject();
+                        payload.put("action", "reply");
                         payload.put("convId", convId);
                         payload.put("text", text);
                         payload.put("senderUid", myUid);

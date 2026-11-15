@@ -51,10 +51,63 @@ export default {
     }
 
     try {
-      const wp = await getWebPush();
       const body = await request.json();
-      const { recipientUid, title, text, icon, url, tag, convId, senderUid } = body;
+      const { action, convId, senderUid, senderName, recipientUid, title, text, icon, url, tag } = body;
       const actualConvId = convId || tag || 'default';
+
+      // Support inline replies from native notification bar
+      if (action === 'reply') {
+        if (!convId || !text || !senderUid) {
+          return Response.json({ error: 'Missing required reply fields' }, { status: 400, headers: CORS_HEADERS });
+        }
+        const convRef = adminDb.collection('conversations').doc(convId);
+        const convDoc = await convRef.get();
+        if (!convDoc.exists) {
+          return Response.json({ error: 'Conversation not found' }, { status: 404, headers: CORS_HEADERS });
+        }
+        const convData = convDoc.data() || {};
+        const memberIds: string[] = convData.memberIds || [];
+        const actualRecipient = memberIds.find((m) => m !== senderUid);
+
+        const msgRef = await convRef.collection('messages').add({
+          type: 'text',
+          text,
+          senderId: senderUid,
+          senderName: senderName || 'You',
+          createdAt: Date.now(),
+          editedAt: null,
+          deleted: false,
+        });
+
+        await convRef.update({
+          lastMessageId: msgRef.id,
+          lastMessageText: text,
+          lastMessageAt: FieldValue.serverTimestamp(),
+          lastSenderId: senderUid,
+          lastSenderName: senderName || 'You',
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+
+        if (actualRecipient) {
+          const userDoc = await adminDb.collection('users').doc(actualRecipient).get();
+          const fcmTokens: string[] = userDoc.data()?.fcmTokens || [];
+          if (fcmTokens.length > 0) {
+            await adminMessaging.sendEachForMulticast({
+              tokens: fcmTokens,
+              data: {
+                senderName: senderName || 'Friend',
+                text,
+                convId,
+                senderUid,
+              },
+              android: { priority: 'high', ttl: 24 * 60 * 60 * 1000 },
+            }).catch(() => {});
+          }
+        }
+        return Response.json({ ok: true, messageId: msgRef.id }, { headers: CORS_HEADERS });
+      }
+
+      const wp = await getWebPush();
 
       if (!recipientUid) {
         return Response.json({ error: 'Missing recipientUid' }, { status: 400, headers: CORS_HEADERS });
