@@ -47,6 +47,8 @@
             android:name=".CallActionReceiver"
             android:exported="false">
             <intent-filter>
+                <action android:name="com.shinzi.app.ACTION_CALL_PICKUP" />
+                <action android:name="com.shinzi.app.ACTION_CALL_DECLINE" />
                 <action android:name="com.shinzi.app.ACTION_CALL_HANGUP" />
                 <action android:name="com.shinzi.app.ACTION_CALL_SELF_MUTE" />
                 <action android:name="com.shinzi.app.ACTION_CALL_MUTE_SOUND" />
@@ -79,6 +81,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
 </manifest>

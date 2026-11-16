@@ -6,6 +6,7 @@ import {
   Mic,
   MicOff,
   Video,
+  VideoOff,
   Volume2,
   VolumeX,
   Smartphone,
@@ -147,20 +148,24 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
     if (!cap?.Plugins?.ShinziNotification) return;
 
     if (call && (call.status === 'connected' || call.status === 'ringing')) {
+      const isIncoming = call.status === 'ringing' && !isCaller;
       const callerTitle = isCaller ? (call.receiverName || 'Friend') : (call.callerName || 'Friend');
       void cap.Plugins.ShinziNotification.showCallNotification({
         callerName: callerTitle,
         callId: call.id,
+        convId: call.convId,
+        callType: call.type,
         isConnected: call.status === 'connected',
+        isIncoming,
         isMuted: isSelfMuted,
         isDeafened: isDeafened,
       }).catch(() => {});
     } else {
       void cap.Plugins.ShinziNotification.clearCallNotification().catch(() => {});
     }
-  }, [call?.status, isSelfMuted, isDeafened, isCaller, call?.receiverName, call?.callerName, call?.id]);
+  }, [call?.status, isSelfMuted, isDeafened, isCaller, call?.receiverName, call?.callerName, call?.id, call?.convId, call?.type]);
 
-  // Native notification actions listener (Hangup, Self Mute, Mute Sound)
+  // Native notification actions listener (Pickup, Decline, Hangup, Self Mute, Mute Sound)
   useEffect(() => {
     const cap = (window as any).Capacitor;
     if (!cap?.Plugins?.ShinziNotification?.addListener) return;
@@ -169,8 +174,12 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
       'onCallAction',
       (data: { action: string; callId: string }) => {
         if (!data?.action) return;
-        if (data.action === 'hangup') {
+        if (data.action === 'hangup' || data.action === 'decline') {
           void callEngine.endCall();
+        } else if (data.action === 'pickup') {
+          if (call && !isCaller && call.status === 'ringing') {
+            void callEngine.answerCall(call);
+          }
         } else if (data.action === 'self_mute') {
           void callEngine.toggleMute().then((muted) => setIsSelfMuted(muted));
         } else if (data.action === 'mute_sound') {
@@ -182,7 +191,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
     return () => {
       if (handle && typeof handle.remove === 'function') handle.remove();
     };
-  }, []);
+  }, [call, isCaller]);
 
   // Duration timer for connected calls
   useEffect(() => {
@@ -365,45 +374,40 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   }
 
   // 2. Draggable In-App Floating Box (20261116_191720, VID-20261116-WA0022)
-  if (minimized) {
-    const isRemoteSpeaking = remoteSpeakingLevel > 0;
-    const isMeSpeaking = localSpeakingLevel > 0;
-    const activeSpeakerAvatar = isRemoteSpeaking ? oppositeAvatar : myAvatar;
-    const activeSpeakerName = isRemoteSpeaking ? oppositeName : myName;
+  const isRemoteSpeaking = remoteSpeakingLevel > 0;
+  const isMeSpeaking = localSpeakingLevel > 0;
+  const activeSpeakerAvatar = isRemoteSpeaking ? oppositeAvatar : myAvatar;
+  const activeSpeakerName = isRemoteSpeaking ? oppositeName : myName;
 
-    return (
-      <>
-        {audioNode}
-        <div
-          className="shc-floating-tile"
-          style={{ left: floatingPos.x, top: floatingPos.y }}
-          onTouchStart={onTouchStartFloating}
-          onTouchMove={onTouchMoveFloating}
-          onTouchEnd={onTouchEndFloating}
-          onMouseDown={onTouchStartFloating}
-          onMouseMove={onTouchMoveFloating}
-          onMouseUp={onTouchEndFloating}
-          onClick={() => setMinimized(false)}
-          role="button"
-          tabIndex={0}
-          title="Tap to expand call"
-          aria-label="Expand call"
-        >
-          <img
-            src={activeSpeakerAvatar || '/icon-192.png'}
-            alt={activeSpeakerName || 'User'}
-            className="shc-floating-avatar"
-          />
-          <span className="shc-floating-name">{activeSpeakerName || 'Call'}</span>
+  const floatingCard = minimized ? (
+    <div
+      className="shc-floating-tile"
+      style={{ left: floatingPos.x, top: floatingPos.y }}
+      onTouchStart={onTouchStartFloating}
+      onTouchMove={onTouchMoveFloating}
+      onTouchEnd={onTouchEndFloating}
+      onMouseDown={onTouchStartFloating}
+      onMouseMove={onTouchMoveFloating}
+      onMouseUp={onTouchEndFloating}
+      onClick={() => setMinimized(false)}
+      role="button"
+      tabIndex={0}
+      title="Tap to expand call"
+      aria-label="Expand call"
+    >
+      <img
+        src={activeSpeakerAvatar || '/icon-192.png'}
+        alt={activeSpeakerName || 'User'}
+        className="shc-floating-avatar"
+      />
+      <span className="shc-floating-name">{activeSpeakerName || 'Call'}</span>
 
-          {/* Voice Wave Indicator on floating box */}
-          {(isRemoteSpeaking || isMeSpeaking) && (
-            <div className="shc-voice-wave shc-wave-1" />
-          )}
-        </div>
-      </>
-    );
-  }
+      {/* Voice Wave Indicator on floating box */}
+      {(isRemoteSpeaking || isMeSpeaking) && (
+        <div className="shc-voice-wave shc-wave-1" />
+      )}
+    </div>
+  ) : null;
 
   // 3. Fullscreen Screen Share Expander (20261116_194940)
   if (fullscreenScreenShare && isOppositeScreenSharing) {
@@ -435,9 +439,17 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
 
   // 4. Main Active Call Screen (20261116_190713, IMG-20261116-WA0021)
   return (
-    <div className="shc-call-overlay" role="dialog" aria-modal="true" aria-label="Active call">
-      {audioNode}
-      <div className="shc-active-screen">
+    <>
+      {floatingCard}
+      <div
+        className="shc-call-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Active call"
+        style={{ display: minimized ? 'none' : 'flex' }}
+      >
+        {audioNode}
+        <div className="shc-active-screen">
         {/* Top Bar */}
         <div className="shc-call-topbar">
           <button
@@ -679,8 +691,19 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
             {isDeafened ? <VolumeX size={22} /> : <Volume2 size={22} />}
           </button>
 
-          {/* 4. Screen Sharing Button */}
-          {!isMyScreenSharing ? (
+          {/* 4. Screen Sharing Button or Stop Video Button */}
+          {isMyVideoOn ? (
+            /* Red Cut Video Call Button (20261116_195539) */
+            <button
+              type="button"
+              className="shc-control-btn danger-on"
+              onClick={() => void callEngine.toggleVideo()}
+              title="Turn off video (back to voice)"
+              aria-label="Turn off video"
+            >
+              <VideoOff size={24} />
+            </button>
+          ) : !isMyScreenSharing ? (
             <button
               type="button"
               className="shc-control-btn"
@@ -716,6 +739,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
         </div>
       </div>
     </div>
+    </>
   );
 };
 

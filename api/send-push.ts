@@ -52,7 +52,7 @@ export default {
 
     try {
       const body = await request.json();
-      const { action, convId, senderUid, senderName, recipientUid, title, text, icon, url, tag } = body;
+      const { action, convId, senderUid, senderName, recipientUid, title, text, icon, url, tag, type, callId, callType } = body;
       const actualConvId = convId || tag || 'default';
 
       // Support inline replies from native notification bar
@@ -141,15 +141,20 @@ export default {
         const fcmTokens: string[] = userDoc.data()?.fcmTokens || [];
 
         if (fcmTokens.length > 0) {
+          const dataPayload: Record<string, string> = {
+            senderName: title || senderName || 'Shinzi',
+            text: text || 'You received a new message',
+            avatarUrl: pushAvatar,
+            convId: actualConvId,
+            senderUid: senderUid || '',
+          };
+          if (type) dataPayload.type = String(type);
+          if (callId) dataPayload.callId = String(callId);
+          if (callType) dataPayload.callType = String(callType);
+
           const fcmResponse = await adminMessaging.sendEachForMulticast({
             tokens: fcmTokens,
-            data: {
-              senderName: title || 'Shinzi',
-              text: text || 'You received a new message',
-              avatarUrl: pushAvatar,
-              convId: actualConvId,
-              senderUid: senderUid || '',
-            },
+            data: dataPayload,
             android: {
               priority: 'high',
               ttl: 24 * 60 * 60 * 1000,

@@ -14,6 +14,7 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from './firebaseConfig';
+import { sendWebPushToUser } from './pushService';
 
 export interface CallSession {
   id: string;
@@ -247,6 +248,19 @@ class CallEngine {
     }
     this.playRingtone('outgoing');
 
+    // Wake up receiver device via FCM push even when the app is DEAD / closed!
+    void sendWebPushToUser({
+      recipientUid: params.receiverId,
+      title: params.callerName,
+      text: params.type === 'video' ? 'Incoming Video Call...' : 'Incoming Voice Call...',
+      icon: params.callerPhotoURL,
+      convId: params.convId,
+      senderUid: params.callerId,
+      type: 'incoming_call',
+      callId,
+      callType: params.type,
+    });
+
     try {
       // Get 1080p camera / audio constraints
       const constraints: MediaStreamConstraints = {
@@ -449,6 +463,18 @@ class CallEngine {
           endedAt: Date.now(),
         }).catch(() => {});
       }
+      const peerUid = this.isCaller ? current.receiverId : current.callerId;
+      if (peerUid) {
+        void sendWebPushToUser({
+          recipientUid: peerUid,
+          title: 'Shinzi',
+          text: 'Call ended',
+          convId: current.convId,
+          senderUid: this.isCaller ? current.callerId : current.receiverId,
+          type: 'call_ended',
+          callId: current.id,
+        });
+      }
     }
   }
 
@@ -606,13 +632,32 @@ class CallEngine {
       return false;
     } else {
       try {
-        const stream = await navigator.mediaDevices.getDisplayMedia({
-          video: {
-            cursor: 'always',
-            frameRate: { ideal: 60, min: 30 },
-          } as any,
-          audio: true,
-        });
+        const cap = (window as any).Capacitor;
+        // In Android APK, trigger native MediaProjection permission dialog first!
+        if (cap?.Plugins?.ShinziNotification?.requestScreenCapture) {
+          try {
+            await cap.Plugins.ShinziNotification.requestScreenCapture();
+          } catch (nativeErr) {
+            console.warn('[CallEngine] Native MediaProjection cancelled/denied:', nativeErr);
+            return false;
+          }
+        }
+
+        let stream: MediaStream | null = null;
+        if (navigator.mediaDevices && typeof navigator.mediaDevices.getDisplayMedia === 'function') {
+          stream = await navigator.mediaDevices.getDisplayMedia({
+            video: {
+              cursor: 'always',
+              frameRate: { ideal: 60, min: 30 },
+            } as any,
+            audio: true,
+          });
+        }
+
+        if (!stream) {
+          console.warn('[CallEngine] getDisplayMedia not available in webview');
+          return false;
+        }
 
         this.screenStream = stream;
         if (this.onScreenStreamReady) this.onScreenStreamReady(this.screenStream);

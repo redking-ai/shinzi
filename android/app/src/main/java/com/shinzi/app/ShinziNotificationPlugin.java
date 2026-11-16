@@ -1,5 +1,6 @@
 package com.shinzi.app;
 
+import android.app.Activity;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -14,8 +15,11 @@ import android.graphics.Paint;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
+import android.media.RingtoneManager;
+import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
 import android.os.Build;
+import androidx.activity.result.ActivityResult;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.app.Person;
@@ -26,6 +30,7 @@ import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 import org.json.JSONArray;
@@ -127,7 +132,10 @@ public class ShinziNotificationPlugin extends Plugin {
     public void showCallNotification(PluginCall call) {
         String callerName = call.getString("callerName", "Friend");
         String callId = call.getString("callId", "call_default");
+        String convId = call.getString("convId", "default");
+        String callType = call.getString("callType", "voice");
         boolean isConnected = Boolean.TRUE.equals(call.getBoolean("isConnected", false));
+        boolean isIncoming = Boolean.TRUE.equals(call.getBoolean("isIncoming", false));
         boolean isMuted = Boolean.TRUE.equals(call.getBoolean("isMuted", false));
         boolean isDeafened = Boolean.TRUE.equals(call.getBoolean("isDeafened", false));
 
@@ -135,7 +143,7 @@ public class ShinziNotificationPlugin extends Plugin {
 
         Intent openIntent = new Intent(getContext(), MainActivity.class);
         openIntent.setAction(Intent.ACTION_VIEW);
-        openIntent.setData(Uri.parse("https://shinzi.vercel.app/call?id=" + callId));
+        openIntent.setData(Uri.parse("https://shinzi.vercel.app/call?id=" + callId + "&conv=" + convId));
         openIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
         int flags = PendingIntent.FLAG_UPDATE_CURRENT;
@@ -145,37 +153,71 @@ public class ShinziNotificationPlugin extends Plugin {
 
         PendingIntent openPI = PendingIntent.getActivity(getContext(), CALL_NOTIFICATION_ID, openIntent, flags);
 
-        Intent hangupIntent = new Intent(getContext(), CallActionReceiver.class);
-        hangupIntent.setAction(CallActionReceiver.ACTION_HANG_UP);
-        hangupIntent.putExtra("callId", callId);
-        hangupIntent.putExtra("notificationId", CALL_NOTIFICATION_ID);
-        PendingIntent hangupPI = PendingIntent.getBroadcast(getContext(), 1, hangupIntent, flags);
-
-        Intent muteIntent = new Intent(getContext(), CallActionReceiver.class);
-        muteIntent.setAction(CallActionReceiver.ACTION_SELF_MUTE);
-        muteIntent.putExtra("callId", callId);
-        PendingIntent mutePI = PendingIntent.getBroadcast(getContext(), 2, muteIntent, flags);
-
-        Intent deafenIntent = new Intent(getContext(), CallActionReceiver.class);
-        deafenIntent.setAction(CallActionReceiver.ACTION_MUTE_SOUND);
-        deafenIntent.putExtra("callId", callId);
-        PendingIntent deafenPI = PendingIntent.getBroadcast(getContext(), 3, deafenIntent, flags);
-
         NotificationCompat.Builder builder = new NotificationCompat.Builder(getContext(), CALL_CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_stat_shinzi)
                 .setContentTitle(callerName)
-                .setContentText(isConnected ? "Ongoing Call" : "Calling...")
                 .setContentIntent(openPI)
                 .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setCategory(NotificationCompat.CATEGORY_CALL)
                 .setOngoing(true)
-                .setAutoCancel(false)
-                .addAction(0, "Hang up", hangupPI)
-                .addAction(0, isMuted ? "Unmute" : "Self Mute", mutePI)
-                .addAction(0, isDeafened ? "Undeafen" : "Mute", deafenPI);
+                .setAutoCancel(false);
 
-        if (isConnected) {
-            builder.setUsesChronometer(true);
+        if (isIncoming) {
+            // Incoming Call Screen Notification with Pick Up and Decline
+            builder.setContentText("video".equals(callType) ? "Incoming Video Call..." : "Incoming Voice Call...")
+                    .setFullScreenIntent(openPI, true)
+                    .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))
+                    .setVibrate(new long[]{0, 1000, 1000, 1000, 1000});
+
+            Intent pickupIntent = new Intent(getContext(), CallActionReceiver.class);
+            pickupIntent.setAction(CallActionReceiver.ACTION_CALL_PICKUP);
+            pickupIntent.putExtra("callId", callId);
+            pickupIntent.putExtra("notificationId", CALL_NOTIFICATION_ID);
+            PendingIntent pickupPI = PendingIntent.getBroadcast(getContext(), 10, pickupIntent, flags);
+
+            Intent declineIntent = new Intent(getContext(), CallActionReceiver.class);
+            declineIntent.setAction(CallActionReceiver.ACTION_CALL_DECLINE);
+            declineIntent.putExtra("callId", callId);
+            declineIntent.putExtra("notificationId", CALL_NOTIFICATION_ID);
+            PendingIntent declinePI = PendingIntent.getBroadcast(getContext(), 11, declineIntent, flags);
+
+            builder.addAction(0, "Pick up", pickupPI);
+            builder.addAction(0, "Decline", declinePI);
+        } else if (isConnected) {
+            // Ongoing Active Call
+            builder.setContentText("Ongoing Call")
+                    .setUsesChronometer(true);
+
+            Intent hangupIntent = new Intent(getContext(), CallActionReceiver.class);
+            hangupIntent.setAction(CallActionReceiver.ACTION_HANG_UP);
+            hangupIntent.putExtra("callId", callId);
+            hangupIntent.putExtra("notificationId", CALL_NOTIFICATION_ID);
+            PendingIntent hangupPI = PendingIntent.getBroadcast(getContext(), 1, hangupIntent, flags);
+
+            Intent muteIntent = new Intent(getContext(), CallActionReceiver.class);
+            muteIntent.setAction(CallActionReceiver.ACTION_SELF_MUTE);
+            muteIntent.putExtra("callId", callId);
+            PendingIntent mutePI = PendingIntent.getBroadcast(getContext(), 2, muteIntent, flags);
+
+            Intent deafenIntent = new Intent(getContext(), CallActionReceiver.class);
+            deafenIntent.setAction(CallActionReceiver.ACTION_MUTE_SOUND);
+            deafenIntent.putExtra("callId", callId);
+            PendingIntent deafenPI = PendingIntent.getBroadcast(getContext(), 3, deafenIntent, flags);
+
+            builder.addAction(0, "Hang up", hangupPI);
+            builder.addAction(0, isMuted ? "Unmute" : "Self Mute", mutePI);
+            builder.addAction(0, isDeafened ? "Undeafen" : "Mute", deafenPI);
+        } else {
+            // Outgoing Ringing
+            builder.setContentText("Calling...");
+
+            Intent hangupIntent = new Intent(getContext(), CallActionReceiver.class);
+            hangupIntent.setAction(CallActionReceiver.ACTION_HANG_UP);
+            hangupIntent.putExtra("callId", callId);
+            hangupIntent.putExtra("notificationId", CALL_NOTIFICATION_ID);
+            PendingIntent hangupPI = PendingIntent.getBroadcast(getContext(), 1, hangupIntent, flags);
+
+            builder.addAction(0, "Hang up", hangupPI);
         }
 
         NotificationManagerCompat.from(getContext()).notify(CALL_NOTIFICATION_ID, builder.build());
@@ -184,8 +226,97 @@ public class ShinziNotificationPlugin extends Plugin {
 
     @PluginMethod
     public void clearCallNotification(PluginCall call) {
-        NotificationManagerCompat.from(getContext()).cancel(CALL_NOTIFICATION_ID);
+        clearCallNotificationNative(getContext());
         call.resolve();
+    }
+
+    public static void showIncomingCallNotificationNative(
+            Context context,
+            String callerName,
+            String avatarUrl,
+            String convId,
+            String callId,
+            String callType
+    ) {
+        createCallNotificationChannel(context);
+
+        Intent openIntent = new Intent(context, MainActivity.class);
+        openIntent.setAction(Intent.ACTION_VIEW);
+        openIntent.setData(Uri.parse("https://shinzi.vercel.app/call?id=" + callId + "&conv=" + convId));
+        openIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            flags |= PendingIntent.FLAG_MUTABLE;
+        }
+
+        PendingIntent openPI = PendingIntent.getActivity(context, CALL_NOTIFICATION_ID, openIntent, flags);
+
+        Intent pickupIntent = new Intent(context, CallActionReceiver.class);
+        pickupIntent.setAction(CallActionReceiver.ACTION_CALL_PICKUP);
+        pickupIntent.putExtra("callId", callId);
+        pickupIntent.putExtra("notificationId", CALL_NOTIFICATION_ID);
+        PendingIntent pickupPI = PendingIntent.getBroadcast(context, 10, pickupIntent, flags);
+
+        Intent declineIntent = new Intent(context, CallActionReceiver.class);
+        declineIntent.setAction(CallActionReceiver.ACTION_CALL_DECLINE);
+        declineIntent.putExtra("callId", callId);
+        declineIntent.putExtra("notificationId", CALL_NOTIFICATION_ID);
+        PendingIntent declinePI = PendingIntent.getBroadcast(context, 11, declineIntent, flags);
+
+        Bitmap avatar = getOrDownloadAvatar(context, convId, callerName, avatarUrl);
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CALL_CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_stat_shinzi)
+                .setContentTitle(callerName)
+                .setContentText("video".equals(callType) ? "Incoming Video Call..." : "Incoming Voice Call...")
+                .setContentIntent(openPI)
+                .setFullScreenIntent(openPI, true)
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setCategory(NotificationCompat.CATEGORY_CALL)
+                .setOngoing(true)
+                .setAutoCancel(false)
+                .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))
+                .setVibrate(new long[]{0, 1000, 1000, 1000, 1000})
+                .addAction(0, "Pick up", pickupPI)
+                .addAction(0, "Decline", declinePI);
+
+        if (avatar != null) {
+            builder.setLargeIcon(avatar);
+        }
+
+        NotificationManagerCompat.from(context).notify(CALL_NOTIFICATION_ID, builder.build());
+    }
+
+    public static void clearCallNotificationNative(Context context) {
+        NotificationManagerCompat.from(context).cancel(CALL_NOTIFICATION_ID);
+    }
+
+    @PluginMethod
+    public void requestScreenCapture(PluginCall call) {
+        Activity activity = getActivity();
+        if (activity == null) {
+            call.reject("Activity not available");
+            return;
+        }
+        MediaProjectionManager mpm = (MediaProjectionManager) activity.getSystemService(Context.MEDIA_PROJECTION_SERVICE);
+        if (mpm == null) {
+            call.reject("MediaProjectionManager not available");
+            return;
+        }
+        Intent intent = mpm.createScreenCaptureIntent();
+        startActivityForResult(call, intent, "screenCaptureCallback");
+    }
+
+    @ActivityCallback
+    private void screenCaptureCallback(PluginCall call, ActivityResult result) {
+        if (result != null && result.getResultCode() == Activity.RESULT_OK) {
+            JSObject ret = new JSObject();
+            ret.put("granted", true);
+            call.resolve(ret);
+        } else {
+            call.reject("User cancelled screen capture");
+        }
     }
 
     private static void createCallNotificationChannel(Context context) {
