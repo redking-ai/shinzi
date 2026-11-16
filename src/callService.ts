@@ -6,15 +6,12 @@
  */
 
 import {
-  collection,
   doc,
   setDoc,
-  getDoc,
   updateDoc,
   onSnapshot,
   arrayUnion,
   serverTimestamp,
-  deleteDoc,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from './firebaseConfig';
@@ -65,7 +62,6 @@ class CallEngine {
 
   // Web Audio for speaking detection
   private audioCtx: AudioContext | null = null;
-  private analyser: AnalyserNode | null = null;
   private animFrameId: number | null = null;
 
   // Ringtone oscillators

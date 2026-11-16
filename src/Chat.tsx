@@ -50,10 +50,8 @@ import {
   MessageCircle,
   MessagesSquare,
   Mic,
-  MicOff,
   Pencil,
   Phone,
-  PhoneOff,
   Plus,
   Reply,
   Search,
@@ -1024,8 +1022,6 @@ function ChatMessageAvatar({
   );
 }
 
-const Avatar = UserAvatar;
-
 function Badge({ count }: { count: number }) {
   return <span className="shc-badge">{count > 9 ? '9+' : count}</span>;
 }
@@ -1471,10 +1467,6 @@ export default function Chat({ onNavigate }: ChatProps) {
 
   const [recording, setRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
-
-  const [showCall, setShowCall] = useState(false);
-  const [callMode, setCallMode] = useState<'voice' | 'video'>('voice');
-  const [callMuted, setCallMuted] = useState(false);
 
   const [toast, setToast] = useState<{ title: string; text: string } | null>(
     null,

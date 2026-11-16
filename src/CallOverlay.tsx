@@ -36,6 +36,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   const [call, setCall] = useState<CallSession | null>(null);
   const [minimized, setMinimized] = useState<boolean>(false);
   const [fullscreenScreenShare, setFullscreenScreenShare] = useState<boolean>(false);
+  const isCaller = call?.callerId === currentUid;
 
   // Audio & video stream states
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -233,7 +234,6 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   }, [durationSeconds]);
 
   // Identify roles
-  const isCaller = call?.callerId === currentUid;
   const isIncoming = call?.status === 'ringing' && !isCaller;
   const isOutgoingRinging = call?.status === 'ringing' && isCaller;
 
