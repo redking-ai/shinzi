@@ -180,17 +180,23 @@ public class MainActivity extends BridgeActivity {
             String userUid = uri.getQueryParameter("user");
 
             if (callId != null && !callId.isEmpty()) {
-                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                String caller = uri.getQueryParameter("caller");
+                String avatar = uri.getQueryParameter("avatar");
+                String type = uri.getQueryParameter("type");
+                new Handler(Looper.getMainLooper()).post(() -> {
                     try {
                         WebView webView = getBridge().getWebView();
                         if (webView != null) {
                             String safeCall = callId.replace("'", "\\'");
                             String safeConv = convId != null ? convId.replace("'", "\\'") : "";
-                            String js = "window.dispatchEvent(new CustomEvent('shinzi:incomingCall', { detail: { callId: '" + safeCall + "', convId: '" + safeConv + "' } }));";
+                            String safeCaller = caller != null ? caller.replace("'", "\\'") : "Friend";
+                            String safeAvatar = avatar != null ? avatar.replace("'", "\\'") : "";
+                            String safeType = type != null ? type.replace("'", "\\'") : "voice";
+                            String js = "window.dispatchEvent(new CustomEvent('shinzi:incomingCall', { detail: { callId: '" + safeCall + "', convId: '" + safeConv + "', caller: '" + safeCaller + "', avatar: '" + safeAvatar + "', type: '" + safeType + "' } }));";
                             webView.evaluateJavascript(js, null);
                         }
                     } catch (Exception ignored) {}
-                }, 400);
+                });
             } else if ((convId != null && !convId.isEmpty()) || (userUid != null && !userUid.isEmpty())) {
                 ShinziNotificationPlugin.setPendingNotificationChat(convId, userUid);
 

@@ -144,9 +144,61 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
 
   // Deep Link & Native Wake-up Call Intent listener
   useEffect(() => {
+    // 1. Check window.location query on immediate startup
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const urlCallId = sp.get('id');
+      const urlConvId = sp.get('conv');
+      const urlCaller = sp.get('caller');
+      const urlAvatar = sp.get('avatar');
+      const urlType = (sp.get('type') || 'voice') as 'voice' | 'video';
+
+      if (urlCallId && urlCaller && (!call || call.id !== urlCallId)) {
+        const immediateCall: CallSession = {
+          id: urlCallId,
+          convId: urlConvId || 'default',
+          callerId: 'remote',
+          callerName: urlCaller,
+          callerPhotoURL: urlAvatar || '/icon-192.png',
+          receiverId: currentUid,
+          receiverName: currentProfile?.displayName || 'You',
+          receiverPhotoURL: currentProfile?.photoURL || '/icon-192.png',
+          type: urlType,
+          status: 'ringing',
+          startedAt: Date.now(),
+        };
+        callEngine.activeCall = immediateCall;
+        callEngine.isCaller = false;
+        callEngine.playRingtone('incoming');
+        setCall(immediateCall);
+        callEngine.listenToCall(urlCallId, urlConvId || undefined);
+      }
+    } catch {}
+
     const handleIncomingCallEvent = async (e: any) => {
-      const { callId, convId } = e.detail || {};
+      const { callId, convId, caller, avatar, type } = e.detail || {};
       if (callId && (!call || call.id !== callId)) {
+        if (caller) {
+          const immediateCall: CallSession = {
+            id: callId,
+            convId: convId || 'default',
+            callerId: 'remote',
+            callerName: caller,
+            callerPhotoURL: avatar || '/icon-192.png',
+            receiverId: currentUid,
+            receiverName: currentProfile?.displayName || 'You',
+            receiverPhotoURL: currentProfile?.photoURL || '/icon-192.png',
+            type: type || 'voice',
+            status: 'ringing',
+            startedAt: Date.now(),
+          };
+          callEngine.activeCall = immediateCall;
+          callEngine.isCaller = false;
+          callEngine.playRingtone('incoming');
+          setCall(immediateCall);
+          callEngine.listenToCall(callId, convId || undefined);
+        }
+
         try {
           const callSnap = await getDoc(doc(db, 'calls', callId));
           if (callSnap.exists()) {
@@ -166,7 +218,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
     };
     window.addEventListener('shinzi:incomingCall', handleIncomingCallEvent);
     return () => window.removeEventListener('shinzi:incomingCall', handleIncomingCallEvent);
-  }, [currentUid, call]);
+  }, [currentUid, call, currentProfile]);
 
   // Sync Native Ongoing Notification in Android StatusBar
   useEffect(() => {
@@ -338,13 +390,27 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
     isDraggingRef.current = false;
   };
 
-  // Hidden audio tag for WebRTC voice playback
+  // Audio tag for WebRTC voice playback
   const audioNode = (
     <audio
-      ref={remoteAudioRef}
+      ref={(el) => {
+        remoteAudioRef.current = el;
+        if (el && remoteStream) {
+          el.srcObject = remoteStream;
+          el.play().catch(() => {});
+        }
+      }}
       autoPlay
       playsInline
-      style={{ display: 'none' }}
+      style={{
+        position: 'fixed',
+        top: -9999,
+        left: -9999,
+        width: 1,
+        height: 1,
+        opacity: 0,
+        pointerEvents: 'none',
+      }}
     />
   );
 

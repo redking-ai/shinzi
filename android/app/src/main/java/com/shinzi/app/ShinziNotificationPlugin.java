@@ -165,26 +165,11 @@ public class ShinziNotificationPlugin extends Plugin {
                 .setAutoCancel(false);
 
         if (isIncoming) {
-            // Incoming Call Screen Notification with Pick Up and Decline
+            // Incoming Call Screen Notification (No spammy action buttons; directly opens incoming call screen)
             builder.setContentText("video".equals(callType) ? "Incoming Video Call..." : "Incoming Voice Call...")
                     .setFullScreenIntent(openPI, true)
                     .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))
                     .setVibrate(new long[]{0, 1000, 1000, 1000, 1000});
-
-            Intent pickupIntent = new Intent(getContext(), CallActionReceiver.class);
-            pickupIntent.setAction(CallActionReceiver.ACTION_CALL_PICKUP);
-            pickupIntent.putExtra("callId", callId);
-            pickupIntent.putExtra("notificationId", CALL_NOTIFICATION_ID);
-            PendingIntent pickupPI = PendingIntent.getBroadcast(getContext(), 10, pickupIntent, flags);
-
-            Intent declineIntent = new Intent(getContext(), CallActionReceiver.class);
-            declineIntent.setAction(CallActionReceiver.ACTION_CALL_DECLINE);
-            declineIntent.putExtra("callId", callId);
-            declineIntent.putExtra("notificationId", CALL_NOTIFICATION_ID);
-            PendingIntent declinePI = PendingIntent.getBroadcast(getContext(), 11, declineIntent, flags);
-
-            builder.addAction(0, "Pick up", pickupPI);
-            builder.addAction(0, "Decline", declinePI);
         } else if (isConnected) {
             // Ongoing Active Call
             builder.setContentText("Ongoing Call")
@@ -254,18 +239,6 @@ public class ShinziNotificationPlugin extends Plugin {
 
         PendingIntent openPI = PendingIntent.getActivity(context, CALL_NOTIFICATION_ID, openIntent, flags);
 
-        Intent pickupIntent = new Intent(context, CallActionReceiver.class);
-        pickupIntent.setAction(CallActionReceiver.ACTION_CALL_PICKUP);
-        pickupIntent.putExtra("callId", callId);
-        pickupIntent.putExtra("notificationId", CALL_NOTIFICATION_ID);
-        PendingIntent pickupPI = PendingIntent.getBroadcast(context, 10, pickupIntent, flags);
-
-        Intent declineIntent = new Intent(context, CallActionReceiver.class);
-        declineIntent.setAction(CallActionReceiver.ACTION_CALL_DECLINE);
-        declineIntent.putExtra("callId", callId);
-        declineIntent.putExtra("notificationId", CALL_NOTIFICATION_ID);
-        PendingIntent declinePI = PendingIntent.getBroadcast(context, 11, declineIntent, flags);
-
         Bitmap avatar = fetchCircularAvatar(context, avatarUrl, callerName, convId);
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CALL_INCOMING_CHANNEL_ID)
@@ -279,9 +252,7 @@ public class ShinziNotificationPlugin extends Plugin {
                 .setOngoing(true)
                 .setAutoCancel(false)
                 .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))
-                .setVibrate(new long[]{0, 1000, 1000, 1000, 1000})
-                .addAction(0, "Pick up", pickupPI)
-                .addAction(0, "Decline", declinePI);
+                .setVibrate(new long[]{0, 1000, 1000, 1000, 1000});
 
         if (avatar != null) {
             builder.setLargeIcon(avatar);

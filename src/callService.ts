@@ -67,6 +67,7 @@ class CallEngine {
   private ringTimeoutId: number | null = null;
   private unsubscribeCallDoc: Unsubscribe | null = null;
   private processedCandidates: Set<string> = new Set();
+  private candidateQueue: RTCIceCandidateInit[] = [];
 
   // Audio volume analyzer
   private audioCtx: AudioContext | null = null;
@@ -249,14 +250,14 @@ class CallEngine {
     }
     this.playRingtone('outgoing');
 
-    // Auto-cut call after 12 seconds if receiver does not answer
+    // Auto-cut call after 30 seconds if receiver does not answer
     if (this.ringTimeoutId) clearTimeout(this.ringTimeoutId);
     this.ringTimeoutId = window.setTimeout(() => {
       if (this.activeCall && this.activeCall.status === 'ringing') {
-        console.log('[CallEngine] Call unanswered after 12s, auto-hanging up...');
+        console.log('[CallEngine] Call unanswered after 30s, auto-hanging up...');
         void this.endCall();
       }
-    }, 12000);
+    }, 30000);
 
     // Wake up receiver device via FCM push even when the app is DEAD / closed!
     void sendWebPushToUser({
@@ -293,21 +294,28 @@ class CallEngine {
       if (this.onLocalStreamReady) this.onLocalStreamReady(this.localStream);
       this.initAudioLevelAnalyzer(this.localStream, false);
 
+      if (this.peerConnection) {
+        this.peerConnection.close();
+        this.peerConnection = null;
+      }
       this.peerConnection = new RTCPeerConnection(ICE_SERVERS);
-      try {
-        this.peerConnection.addTransceiver('audio', { direction: 'sendrecv' });
-        this.peerConnection.addTransceiver('video', { direction: 'sendrecv' });
-      } catch {}
+      this.candidateQueue = [];
 
-      // Add local tracks to WebRTC
-      this.localStream.getTracks().forEach((track) => {
-        const sender = this.peerConnection?.getSenders().find((s) => s.track?.kind === track.kind);
-        if (sender) {
-          void sender.replaceTrack(track);
-        } else {
-          this.peerConnection?.addTrack(track, this.localStream!);
-        }
-      });
+      // Add local audio track
+      const audioTrack = this.localStream.getAudioTracks()[0];
+      if (audioTrack) {
+        this.peerConnection.addTrack(audioTrack, this.localStream);
+      } else {
+        this.peerConnection.addTransceiver('audio', { direction: 'sendrecv' });
+      }
+
+      // Add local video track or reserve video transceiver
+      const videoTrack = this.localStream.getVideoTracks()[0];
+      if (videoTrack) {
+        this.peerConnection.addTrack(videoTrack, this.localStream);
+      } else {
+        this.peerConnection.addTransceiver('video', { direction: 'sendrecv' });
+      }
 
       // Handle remote tracks
       this.peerConnection.ontrack = (event) => {
@@ -414,20 +422,28 @@ class CallEngine {
       if (this.onLocalStreamReady) this.onLocalStreamReady(this.localStream);
       this.initAudioLevelAnalyzer(this.localStream, false);
 
+      if (this.peerConnection) {
+        this.peerConnection.close();
+        this.peerConnection = null;
+      }
       this.peerConnection = new RTCPeerConnection(ICE_SERVERS);
-      try {
-        this.peerConnection.addTransceiver('audio', { direction: 'sendrecv' });
-        this.peerConnection.addTransceiver('video', { direction: 'sendrecv' });
-      } catch {}
+      this.candidateQueue = [];
 
-      this.localStream.getTracks().forEach((track) => {
-        const sender = this.peerConnection?.getSenders().find((s) => s.track?.kind === track.kind);
-        if (sender) {
-          void sender.replaceTrack(track);
-        } else {
-          this.peerConnection?.addTrack(track, this.localStream!);
-        }
-      });
+      // Add local audio track
+      const audioTrack = this.localStream.getAudioTracks()[0];
+      if (audioTrack) {
+        this.peerConnection.addTrack(audioTrack, this.localStream);
+      } else {
+        this.peerConnection.addTransceiver('audio', { direction: 'sendrecv' });
+      }
+
+      // Add local video track or reserve video transceiver
+      const videoTrack = this.localStream.getVideoTracks()[0];
+      if (videoTrack) {
+        this.peerConnection.addTrack(videoTrack, this.localStream);
+      } else {
+        this.peerConnection.addTransceiver('video', { direction: 'sendrecv' });
+      }
 
       this.peerConnection.ontrack = (event) => {
         if (event.streams && event.streams[0]) {
@@ -460,6 +476,16 @@ class CallEngine {
         await this.peerConnection.setRemoteDescription(new RTCSessionDescription(call.offer));
         const answer = await this.peerConnection.createAnswer();
         await this.peerConnection.setLocalDescription(answer);
+
+        // Drain any ICE candidates received before answer
+        if (this.candidateQueue.length > 0) {
+          for (const queued of this.candidateQueue) {
+            try {
+              await this.peerConnection.addIceCandidate(new RTCIceCandidate(queued));
+            } catch {}
+          }
+          this.candidateQueue = [];
+        }
 
         const updates = {
           'activeCall.answer': { type: answer.type, sdp: answer.sdp },
@@ -858,6 +884,15 @@ class CallEngine {
           try {
             const answerDesc = new RTCSessionDescription(callData.answer);
             await this.peerConnection.setRemoteDescription(answerDesc);
+            // Drain any queued ICE candidates received before answer arrived
+            if (this.candidateQueue.length > 0) {
+              for (const queued of this.candidateQueue) {
+                try {
+                  await this.peerConnection.addIceCandidate(new RTCIceCandidate(queued));
+                } catch {}
+              }
+              this.candidateQueue = [];
+            }
           } catch (e) {
             console.warn('[CallEngine] setRemoteDescription error:', e);
           }
@@ -871,9 +906,13 @@ class CallEngine {
               const candStr = JSON.stringify(cand);
               if (!this.processedCandidates.has(candStr)) {
                 this.processedCandidates.add(candStr);
-                try {
-                  await this.peerConnection.addIceCandidate(new RTCIceCandidate(cand));
-                } catch {}
+                if (!this.peerConnection.remoteDescription) {
+                  this.candidateQueue.push(cand);
+                } else {
+                  try {
+                    await this.peerConnection.addIceCandidate(new RTCIceCandidate(cand));
+                  } catch {}
+                }
               }
             }
           }
@@ -896,6 +935,7 @@ class CallEngine {
       clearTimeout(this.ringTimeoutId);
       this.ringTimeoutId = null;
     }
+    this.candidateQueue = [];
     if (this.animFrameId) {
       cancelAnimationFrame(this.animFrameId);
       this.animFrameId = null;
