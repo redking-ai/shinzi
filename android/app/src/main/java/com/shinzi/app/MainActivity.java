@@ -1,12 +1,20 @@
 package com.shinzi.app;
 
 import android.Manifest;
+import android.app.DownloadManager;
+import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
 import android.webkit.CookieManager;
+import android.webkit.URLUtil;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.widget.Toast;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
@@ -15,13 +23,14 @@ import com.google.firebase.messaging.FirebaseMessaging;
 
 public class MainActivity extends BridgeActivity {
     private static final int PERMISSION_REQUEST_NOTIFICATIONS = 101;
+    private static final int PERMISSION_REQUEST_AUDIO = 102;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(ShinziNotificationPlugin.class);
         super.onCreate(savedInstanceState);
 
-        // 1. Explicitly enable DomStorage, Database, and CookieManager
+        // 1. Explicitly enable DomStorage, Database, and CookieManager + DownloadListener
         try {
             WebView webView = getBridge().getWebView();
             if (webView != null) {
@@ -29,9 +38,41 @@ public class MainActivity extends BridgeActivity {
                 settings.setDomStorageEnabled(true);
                 settings.setDatabaseEnabled(true);
                 settings.setJavaScriptEnabled(true);
+                settings.setMediaPlaybackRequiresUserGesture(false);
                 CookieManager cookieManager = CookieManager.getInstance();
                 cookieManager.setAcceptCookie(true);
                 cookieManager.setAcceptThirdPartyCookies(webView, true);
+
+                // Native DownloadManager Listener
+                webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
+                    try {
+                        DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+                        if (dm != null && url != null) {
+                            DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
+                            String fileName = URLUtil.guessFileName(url, contentDisposition, mimetype);
+                            request.setTitle(fileName);
+                            request.setDescription("Downloading " + fileName);
+                            if (mimetype != null && !mimetype.isEmpty()) {
+                                request.setMimeType(mimetype);
+                            }
+                            String cookies = CookieManager.getInstance().getCookie(url);
+                            if (cookies != null) {
+                                request.addRequestHeader("cookie", cookies);
+                            }
+                            request.addRequestHeader("User-Agent", userAgent);
+                            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                            request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName);
+                            request.allowScanningByMediaScanner();
+                            dm.enqueue(request);
+                            Toast.makeText(getApplicationContext(), "Downloading " + fileName, Toast.LENGTH_SHORT).show();
+                        }
+                    } catch (Exception e) {
+                        try {
+                            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                            startActivity(intent);
+                        } catch (Exception ignored) {}
+                    }
+                });
             }
         } catch (Exception ignored) {}
 
@@ -46,20 +87,29 @@ public class MainActivity extends BridgeActivity {
             }
         }
 
-        // 3. Request Battery Optimization Exemption so Android OEM never kills background push
+        // 3. Request RECORD_AUDIO Permission for Voice Notes
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(
+                    this,
+                    new String[]{Manifest.permission.RECORD_AUDIO, Manifest.permission.MODIFY_AUDIO_SETTINGS},
+                    PERMISSION_REQUEST_AUDIO
+            );
+        }
+
+        // 4. Request Battery Optimization Exemption so Android OEM never kills background push
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
                 if (pm != null && !pm.isIgnoringBatteryOptimizations(getPackageName())) {
-                    android.content.Intent bIntent = new android.content.Intent();
+                    Intent bIntent = new Intent();
                     bIntent.setAction(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
-                    bIntent.setData(android.net.Uri.parse("package:" + getPackageName()));
+                    bIntent.setData(Uri.parse("package:" + getPackageName()));
                     startActivity(bIntent);
                 }
             }
         } catch (Exception ignored) {}
 
-        // 4. Retrieve and cache current FCM Registration Token
+        // 5. Retrieve and cache current FCM Registration Token
         FirebaseMessaging.getInstance().getToken().addOnCompleteListener(task -> {
             if (task.isSuccessful() && task.getResult() != null) {
                 String token = task.getResult();
@@ -72,6 +122,41 @@ public class MainActivity extends BridgeActivity {
                 android.util.Log.e("ShinziFCM", "getToken failed: " + task.getException().getMessage());
             }
         });
+
+        // 6. Handle Intent if app launched directly by tapping notification
+        handleChatIntent(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleChatIntent(intent);
+    }
+
+    private void handleChatIntent(Intent intent) {
+        if (intent == null) return;
+        Uri uri = intent.getData();
+        if (uri != null) {
+            String convId = uri.getQueryParameter("conv");
+            String userUid = uri.getQueryParameter("user");
+            if ((convId != null && !convId.isEmpty()) || (userUid != null && !userUid.isEmpty())) {
+                ShinziNotificationPlugin.setPendingNotificationChat(convId, userUid);
+
+                // Dispatch custom event to Webview if already active
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    try {
+                        WebView webView = getBridge().getWebView();
+                        if (webView != null) {
+                            String safeConv = convId != null ? convId.replace("'", "\\'") : "";
+                            String safeUser = userUid != null ? userUid.replace("'", "\\'") : "";
+                            String js = "window.dispatchEvent(new CustomEvent('shinzi:openChat', { detail: { convId: '" + safeConv + "', userUid: '" + safeUser + "' } }));";
+                            webView.evaluateJavascript(js, null);
+                        }
+                    } catch (Exception ignored) {}
+                }, 300);
+            }
+        }
     }
 
     @Override

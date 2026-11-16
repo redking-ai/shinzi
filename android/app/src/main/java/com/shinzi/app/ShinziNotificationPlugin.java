@@ -53,6 +53,10 @@ public class ShinziNotificationPlugin extends Plugin {
     public static volatile boolean isAppForeground = false;
     public static volatile String activeConversationId = null;
 
+    // Track pending notification chat opened by tap
+    private static volatile String pendingConvId = null;
+    private static volatile String pendingSenderUid = null;
+
     // Cache circular avatar bitmaps in memory
     private static final Map<String, Bitmap> cachedAvatars = new ConcurrentHashMap<>();
 
@@ -105,6 +109,69 @@ public class ShinziNotificationPlugin extends Plugin {
                 .putString("current_name", name)
                 .apply();
         call.resolve();
+    }
+
+    public static void setPendingNotificationChat(String convId, String senderUid) {
+        pendingConvId = convId;
+        pendingSenderUid = senderUid;
+        notifyNotificationClicked(convId, senderUid);
+    }
+
+    public static void notifyNotificationClicked(String convId, String senderUid) {
+        if (instance != null) {
+            JSObject data = new JSObject();
+            data.put("convId", convId != null ? convId : "");
+            data.put("senderUid", senderUid != null ? senderUid : "");
+            instance.notifyListeners("onNotificationClicked", data);
+        }
+    }
+
+    @PluginMethod
+    public void getPendingNotificationChat(PluginCall call) {
+        JSObject res = new JSObject();
+        res.put("convId", pendingConvId != null ? pendingConvId : "");
+        res.put("senderUid", pendingSenderUid != null ? pendingSenderUid : "");
+        // Consume pending
+        pendingConvId = null;
+        pendingSenderUid = null;
+        call.resolve(res);
+    }
+
+    @PluginMethod
+    public void downloadFile(PluginCall call) {
+        String fileUrl = call.getString("url");
+        String fileName = call.getString("fileName", "download");
+        String mimeType = call.getString("mimeType", "*/*");
+
+        if (fileUrl == null || fileUrl.isEmpty()) {
+            call.reject("Missing download URL");
+            return;
+        }
+
+        try {
+            android.app.DownloadManager dm = (android.app.DownloadManager) getContext().getSystemService(Context.DOWNLOAD_SERVICE);
+            if (dm != null) {
+                android.app.DownloadManager.Request request = new android.app.DownloadManager.Request(Uri.parse(fileUrl));
+                request.setTitle(fileName);
+                request.setDescription("Downloading " + fileName);
+                if (mimeType != null && !mimeType.isEmpty() && !mimeType.equals("*/*")) {
+                    request.setMimeType(mimeType);
+                }
+                request.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                request.setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, fileName);
+                request.allowScanningByMediaScanner();
+                dm.enqueue(request);
+
+                android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
+                handler.post(() -> android.widget.Toast.makeText(getContext(), "Downloading " + fileName, android.widget.Toast.LENGTH_SHORT).show());
+
+                call.resolve(new JSObject().put("success", true));
+                return;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        call.reject("DownloadManager failed");
     }
 
     public static void notifyReplyReceived(String convId, String replyText) {
@@ -491,19 +558,32 @@ public class ShinziNotificationPlugin extends Plugin {
     }
 
     private static Bitmap getCircularBitmap(Bitmap bitmap) {
-        int size = Math.min(bitmap.getWidth(), bitmap.getHeight());
-        Bitmap output = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        if (bitmap == null) return null;
+        int width = bitmap.getWidth();
+        int height = bitmap.getHeight();
+        int size = Math.min(width, height);
+        int x = (width - size) / 2;
+        int y = (height - size) / 2;
+
+        int targetSize = Math.min(size, 256);
+        if (targetSize < 128) targetSize = size;
+
+        Bitmap output = Bitmap.createBitmap(targetSize, targetSize, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(output);
 
         final Paint paint = new Paint();
-        final Rect rect = new Rect(0, 0, size, size);
-
         paint.setAntiAlias(true);
+        paint.setFilterBitmap(true);
+        paint.setDither(true);
+
+        final Rect srcRect = new Rect(x, y, x + size, y + size);
+        final Rect dstRect = new Rect(0, 0, targetSize, targetSize);
+
         canvas.drawARGB(0, 0, 0, 0);
         paint.setColor(Color.WHITE);
-        canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint);
+        canvas.drawCircle(targetSize / 2f, targetSize / 2f, targetSize / 2f, paint);
         paint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SRC_IN));
-        canvas.drawBitmap(bitmap, rect, rect, paint);
+        canvas.drawBitmap(bitmap, srcRect, dstRect, paint);
         return output;
     }
 

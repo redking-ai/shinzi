@@ -41,17 +41,13 @@ jobs:
       - name: Sync Capacitor Android
         run: npx cap sync android
 
-      - name: Generate Release Keystore
+      - name: Verify Permanent Release Keystore
         run: |
-          keytool -genkeypair -v \
-            -keystore android/app/shinzi-release.jks \
-            -alias shinzi \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -storepass shinzi123 \
-            -keypass shinzi123 \
-            -dname "CN=Shinzi, OU=Shinzi Developer, O=Shinzi Team, L=Tokyo, ST=Tokyo, C=JP"
+          if [ ! -f android/app/shinzi-release.jks ]; then
+            echo "Error: Permanent release keystore missing!"
+            exit 1
+          fi
+          keytool -list -keystore android/app/shinzi-release.jks -alias shinzi -storepass shinzi123
 
       - name: Build Android Release APK
         working-directory: android

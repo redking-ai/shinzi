@@ -43,6 +43,24 @@ export const markMediaDownloaded = (id: string): void => {
 export const downloadToDevice = async (url: string, fileName: string): Promise<boolean> => {
   if (!url) return false;
 
+  // 1. If running inside native Android Shinzi APK, use native Android DownloadManager
+  try {
+    const cap = (window as any).Capacitor;
+    if (cap?.Plugins?.ShinziNotification?.downloadFile) {
+      const fullUrl = url.startsWith('http')
+        ? url
+        : new URL(url, (typeof window !== 'undefined' ? window.location.origin : 'https://shinzi.vercel.app')).href;
+      await cap.Plugins.ShinziNotification.downloadFile({
+        url: fullUrl,
+        fileName: fileName || 'download',
+        mimeType: '*/*',
+      });
+      return true;
+    }
+  } catch (nativeErr) {
+    console.warn('[downloadHelper] Native downloadFile failed, falling back:', nativeErr);
+  }
+
   try {
     // If it's a data URI or local blob URL
     if (url.startsWith('data:') || url.startsWith('blob:')) {

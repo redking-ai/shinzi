@@ -42,6 +42,7 @@ import {
   Clock,
   Copy,
   CornerUpLeft,
+  Download,
   ExternalLink,
   Flag,
   Gamepad2,
@@ -91,6 +92,7 @@ import {
 } from './GoogleIcons';
 import { MediaGrid, type MediaItem } from './MediaGrid';
 import { FileMessage } from './FileMessage';
+import { downloadToDevice } from './downloadHelper';
 import { compressImageToWebP } from './imageCompressor';
 import { DateTimePickerModal } from './DateTimePickerModal';
 import { searchKlipy, getCachedKlipy, type KlipyItem } from './klipyService';
@@ -2538,7 +2540,7 @@ export default function Chat({ onNavigate }: ChatProps) {
       if (targetConv) {
         const found = conversations.find((c) => c.id === targetConv);
         if (found) {
-          setSelected(found);
+          void openConversation(found);
           const nextUrl = new URL(window.location.href);
           nextUrl.searchParams.delete('conv');
           nextUrl.searchParams.delete('user');
@@ -2574,8 +2576,70 @@ export default function Chat({ onNavigate }: ChatProps) {
 
     handleUrlChatOpen();
     window.addEventListener('popstate', handleUrlChatOpen);
-    return () => window.removeEventListener('popstate', handleUrlChatOpen);
-  }, [uid, loadingChats, loadingFriends]);
+
+    // Native Android notification click handler
+    const handleCustomOpen = (e: any) => {
+      const convId = e?.detail?.convId;
+      const userUid = e?.detail?.userUid;
+      if (convId) {
+        const found = conversations.find((c) => c.id === convId);
+        if (found) {
+          void openConversation(found);
+        } else {
+          void (async () => {
+            try {
+              const cSnap = await getDoc(doc(db, 'conversations', convId));
+              if (cSnap.exists()) {
+                void openConversation({ id: cSnap.id, ...cSnap.data() });
+              }
+            } catch {}
+          })();
+        }
+      } else if (userUid && userUid !== uid) {
+        void (async () => {
+          try {
+            const userSnap = await getDoc(doc(db, 'users', userUid));
+            if (userSnap.exists()) {
+              await openMessageEntry({ id: userSnap.id, ...userSnap.data() });
+            }
+          } catch {}
+        })();
+      }
+    };
+
+    window.addEventListener('shinzi:openChat', handleCustomOpen);
+
+    // Capacitor ShinziNotification plugin pending or listeners
+    const cap = (window as any).Capacitor;
+    let notifClickListener: any = null;
+    if (cap?.Plugins?.ShinziNotification) {
+      if (typeof cap.Plugins.ShinziNotification.getPendingNotificationChat === 'function') {
+        cap.Plugins.ShinziNotification.getPendingNotificationChat().then((res: any) => {
+          if (res?.convId || res?.senderUid) {
+            handleCustomOpen({ detail: { convId: res.convId, userUid: res.senderUid } });
+          }
+        }).catch(() => {});
+      }
+      if (typeof cap.Plugins.ShinziNotification.addListener === 'function') {
+        notifClickListener = cap.Plugins.ShinziNotification.addListener(
+          'onNotificationClicked',
+          (data: any) => {
+            if (data?.convId || data?.senderUid) {
+              handleCustomOpen({ detail: { convId: data.convId, userUid: data.senderUid } });
+            }
+          }
+        );
+      }
+    }
+
+    return () => {
+      window.removeEventListener('popstate', handleUrlChatOpen);
+      window.removeEventListener('shinzi:openChat', handleCustomOpen);
+      if (notifClickListener && typeof notifClickListener.remove === 'function') {
+        notifClickListener.remove();
+      }
+    };
+  }, [uid, loadingChats, loadingFriends, conversations]);
 
   // Flash / glow the target message when redirected from notification
   useEffect(() => {
@@ -3919,16 +3983,25 @@ const handleSearchMessage = async (target: Rec) => {
 
       const count = params.mediaItems.length;
       let summaryText = '📷 Photo';
+      let pushText = '📷 sent you an image';
       if (params.text) {
         summaryText = params.text;
+        pushText = params.text;
       } else if (isSticker) {
         summaryText = 'Sticker';
+        pushText = 'sent you a sticker';
       } else if (isGif) {
         summaryText = 'GIF';
-      } else if (count > 1) {
-        summaryText = `📷 ${count} media items`;
+        pushText = 'sent you a GIF';
       } else if (firstItem?.type === 'video') {
         summaryText = '🎥 Video';
+        pushText = '📹 sent you a video';
+      } else if (count > 1) {
+        summaryText = `📷 ${count} media items`;
+        pushText = `📷 sent you ${count} photos`;
+      } else {
+        summaryText = '📷 Photo';
+        pushText = '📷 sent you an image';
       }
 
       const updates: Rec = sanitizeForFirestore({
@@ -3941,7 +4014,7 @@ const handleSearchMessage = async (target: Rec) => {
       });
 
       await updateDoc(doc(db, 'conversations', selected.id), updates);
-      triggerPushForDirectMessage(messageRef.id, summaryText);
+      triggerPushForDirectMessage(messageRef.id, pushText);
       setReplyTarget(null);
     } catch (error) {
       console.error('Send media error:', error);
@@ -4299,7 +4372,7 @@ const handleSearchMessage = async (target: Rec) => {
 
       const updates: Rec = {
         lastMessageId: messageRef.id,
-        lastMessageText: `📄 ${params.fileName}`,
+        lastMessageText: `🗄 ${params.fileName}`,
         lastMessageAt: serverTimestamp(),
         lastSenderId: uid,
         lastSenderName: profile?.displayName || profile?.username || 'You',
@@ -4307,7 +4380,7 @@ const handleSearchMessage = async (target: Rec) => {
       };
 
       await updateDoc(doc(db, 'conversations', selected.id), updates);
-      triggerPushForDirectMessage(messageRef.id, `📄 ${params.fileName}`);
+      triggerPushForDirectMessage(messageRef.id, '🗄 sent you a file');
       setReplyTarget(null);
     } catch (error) {
       console.error('Send file error:', error);
@@ -4539,7 +4612,7 @@ const handleSearchMessage = async (target: Rec) => {
       };
 
       await updateDoc(doc(db, 'conversations', selected.id), updates);
-      triggerPushForDirectMessage(messageRef.id, '🎤 Voice message');
+      triggerPushForDirectMessage(messageRef.id, '🎤 sent you a voice message');
       setReplyTarget(null);
  
       // Upload to Google Drive folder 'Shinzi' -> 'Voice' in the background
@@ -6895,6 +6968,23 @@ const handleSearchMessage = async (target: Rec) => {
               {activeImageViewer.fileName || 'Image'}
             </span>
             <div className="shc-lightbox-actions">
+              <button
+                type="button"
+                className="shc-lightbox-btn"
+                title="Download image"
+                aria-label="Download image"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  const targetUrl = activeImageViewer.originalUrl || activeImageViewer.previewUrl;
+                  const success = await downloadToDevice(targetUrl, activeImageViewer.fileName || 'image.jpg');
+                  if (success) {
+                    notify('Download started', `Saving ${activeImageViewer.fileName || 'image.jpg'} to device.`);
+                  }
+                }}
+              >
+                <Download size={16} />
+                <span>Download</span>
+              </button>
               <a
                 href={activeImageViewer.originalUrl || activeImageViewer.previewUrl}
                 target="_blank"
@@ -6942,18 +7032,33 @@ const handleSearchMessage = async (target: Rec) => {
               {activeVideoViewer.fileName || 'Video'}
             </span>
             <div className="shc-lightbox-actions">
+              <button
+                type="button"
+                className="shc-lightbox-btn"
+                title="Download video"
+                aria-label="Download video"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  const success = await downloadToDevice(activeVideoViewer.url, activeVideoViewer.fileName || 'video.mp4');
+                  if (success) {
+                    notify('Download started', `Saving ${activeVideoViewer.fileName || 'video.mp4'} to device.`);
+                  }
+                }}
+              >
+                <Download size={16} />
+                <span>Download</span>
+              </button>
               <a
                 href={activeVideoViewer.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                download={activeVideoViewer.fileName || 'video.mp4'}
                 className="shc-lightbox-btn"
-                title="Download video"
-                aria-label="Download video"
+                title="Open video in new tab"
+                aria-label="Open video in new tab"
                 onClick={(e) => e.stopPropagation()}
               >
                 <ExternalLink size={16} />
-                <span>Download</span>
+                <span>Open</span>
               </a>
               <button
                 type="button"
