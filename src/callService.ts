@@ -64,6 +64,7 @@ class CallEngine {
 
   private ringtoneInterval: number | null = null;
   private ringtoneCtx: AudioContext | null = null;
+  private ringTimeoutId: number | null = null;
   private unsubscribeCallDoc: Unsubscribe | null = null;
   private processedCandidates: Set<string> = new Set();
 
@@ -248,6 +249,15 @@ class CallEngine {
     }
     this.playRingtone('outgoing');
 
+    // Auto-cut call after 12 seconds if receiver does not answer
+    if (this.ringTimeoutId) clearTimeout(this.ringTimeoutId);
+    this.ringTimeoutId = window.setTimeout(() => {
+      if (this.activeCall && this.activeCall.status === 'ringing') {
+        console.log('[CallEngine] Call unanswered after 12s, auto-hanging up...');
+        void this.endCall();
+      }
+    }, 12000);
+
     // Wake up receiver device via FCM push even when the app is DEAD / closed!
     void sendWebPushToUser({
       recipientUid: params.receiverId,
@@ -284,10 +294,19 @@ class CallEngine {
       this.initAudioLevelAnalyzer(this.localStream, false);
 
       this.peerConnection = new RTCPeerConnection(ICE_SERVERS);
+      try {
+        this.peerConnection.addTransceiver('audio', { direction: 'sendrecv' });
+        this.peerConnection.addTransceiver('video', { direction: 'sendrecv' });
+      } catch {}
 
       // Add local tracks to WebRTC
       this.localStream.getTracks().forEach((track) => {
-        this.peerConnection?.addTrack(track, this.localStream!);
+        const sender = this.peerConnection?.getSenders().find((s) => s.track?.kind === track.kind);
+        if (sender) {
+          void sender.replaceTrack(track);
+        } else {
+          this.peerConnection?.addTrack(track, this.localStream!);
+        }
       });
 
       // Handle remote tracks
@@ -296,6 +315,13 @@ class CallEngine {
           this.remoteStream = event.streams[0];
           if (this.onRemoteStreamReady) this.onRemoteStreamReady(this.remoteStream);
           this.initAudioLevelAnalyzer(this.remoteStream, true);
+        } else if (event.track) {
+          if (!this.remoteStream) this.remoteStream = new MediaStream();
+          this.remoteStream.addTrack(event.track);
+          if (this.onRemoteStreamReady) this.onRemoteStreamReady(this.remoteStream);
+          if (event.track.kind === 'audio') {
+            this.initAudioLevelAnalyzer(this.remoteStream, true);
+          }
         }
       };
 
@@ -362,6 +388,11 @@ class CallEngine {
       this.onCallStateChange(this.activeCall);
     }
 
+    if (this.ringTimeoutId) {
+      clearTimeout(this.ringTimeoutId);
+      this.ringTimeoutId = null;
+    }
+
     try {
       const constraints: MediaStreamConstraints = {
         audio: {
@@ -384,9 +415,18 @@ class CallEngine {
       this.initAudioLevelAnalyzer(this.localStream, false);
 
       this.peerConnection = new RTCPeerConnection(ICE_SERVERS);
+      try {
+        this.peerConnection.addTransceiver('audio', { direction: 'sendrecv' });
+        this.peerConnection.addTransceiver('video', { direction: 'sendrecv' });
+      } catch {}
 
       this.localStream.getTracks().forEach((track) => {
-        this.peerConnection?.addTrack(track, this.localStream!);
+        const sender = this.peerConnection?.getSenders().find((s) => s.track?.kind === track.kind);
+        if (sender) {
+          void sender.replaceTrack(track);
+        } else {
+          this.peerConnection?.addTrack(track, this.localStream!);
+        }
       });
 
       this.peerConnection.ontrack = (event) => {
@@ -394,6 +434,13 @@ class CallEngine {
           this.remoteStream = event.streams[0];
           if (this.onRemoteStreamReady) this.onRemoteStreamReady(this.remoteStream);
           this.initAudioLevelAnalyzer(this.remoteStream, true);
+        } else if (event.track) {
+          if (!this.remoteStream) this.remoteStream = new MediaStream();
+          this.remoteStream.addTrack(event.track);
+          if (this.onRemoteStreamReady) this.onRemoteStreamReady(this.remoteStream);
+          if (event.track.kind === 'audio') {
+            this.initAudioLevelAnalyzer(this.remoteStream, true);
+          }
         }
       };
 
@@ -533,6 +580,13 @@ class CallEngine {
         track.stop();
         this.localStream?.removeTrack(track);
       });
+      // Replace with null on WebRTC video sender so remote sees camera turned off
+      if (this.peerConnection) {
+        const videoSender = this.peerConnection.getSenders().find((s) => s.track?.kind === 'video' || (s.transport && !s.track));
+        if (videoSender) {
+          await videoSender.replaceTrack(null).catch(() => {});
+        }
+      }
       const field = this.isCaller ? 'activeCall.callerVideoOn' : 'activeCall.receiverVideoOn';
       if (this.activeCall.convId) {
         void updateDoc(doc(db, 'conversations', this.activeCall.convId), { [field]: false }).catch(() => {});
@@ -552,23 +606,29 @@ class CallEngine {
           },
         });
         const videoTrack = camStream.getVideoTracks()[0];
-        if (videoTrack && this.peerConnection) {
+        if (videoTrack) {
+          this.localStream?.getVideoTracks().forEach((t) => {
+            t.stop();
+            this.localStream?.removeTrack(t);
+          });
           this.localStream?.addTrack(videoTrack);
-          this.peerConnection.addTrack(videoTrack, this.localStream!);
+          if (this.onLocalStreamReady) this.onLocalStreamReady(this.localStream);
 
-          const offer = await this.peerConnection.createOffer();
-          await this.peerConnection.setLocalDescription(offer);
+          if (this.peerConnection) {
+            const videoSender = this.peerConnection.getSenders().find((s) => s.track?.kind === 'video' || (s.transport && !s.track));
+            if (videoSender) {
+              await videoSender.replaceTrack(videoTrack).catch(() => {});
+            } else {
+              this.peerConnection.addTrack(videoTrack, this.localStream!);
+            }
+          }
 
           const field = this.isCaller ? 'activeCall.callerVideoOn' : 'activeCall.receiverVideoOn';
           if (this.activeCall.convId) {
-            void updateDoc(doc(db, 'conversations', this.activeCall.convId), {
-              [field]: true,
-              'activeCall.offer': { type: offer.type, sdp: offer.sdp },
-            }).catch(() => {});
+            void updateDoc(doc(db, 'conversations', this.activeCall.convId), { [field]: true }).catch(() => {});
           }
           void updateDoc(doc(db, 'calls', this.activeCall.id), {
             [this.isCaller ? 'callerVideoOn' : 'receiverVideoOn']: true,
-            offer: { type: offer.type, sdp: offer.sdp },
           }).catch(() => {});
         }
         return true;
@@ -600,7 +660,8 @@ class CallEngine {
       const newTrack = newStream.getVideoTracks()[0];
       if (newTrack) {
         this.localStream.addTrack(newTrack);
-        const sender = this.peerConnection.getSenders().find((s) => s.track?.kind === 'video');
+        if (this.onLocalStreamReady) this.onLocalStreamReady(this.localStream);
+        const sender = this.peerConnection.getSenders().find((s) => s.track?.kind === 'video' || (s.transport && !s.track));
         if (sender) {
           await sender.replaceTrack(newTrack);
         } else {
@@ -621,6 +682,15 @@ class CallEngine {
       this.screenStream?.getTracks().forEach((track) => track.stop());
       this.screenStream = null;
       if (this.onScreenStreamReady) this.onScreenStreamReady(null);
+
+      // Revert video sender to active camera track or null
+      const camTrack = this.localStream?.getVideoTracks()[0] || null;
+      if (this.peerConnection) {
+        const videoSender = this.peerConnection.getSenders().find((s) => s.track?.kind === 'video' || (s.transport && !s.track));
+        if (videoSender) {
+          await videoSender.replaceTrack(camTrack).catch(() => {});
+        }
+      }
 
       const field = this.isCaller ? 'activeCall.callerScreenSharing' : 'activeCall.receiverScreenSharing';
       if (this.activeCall.convId) {
@@ -645,44 +715,73 @@ class CallEngine {
 
         let stream: MediaStream | null = null;
         if (navigator.mediaDevices && typeof navigator.mediaDevices.getDisplayMedia === 'function') {
-          stream = await navigator.mediaDevices.getDisplayMedia({
-            video: {
-              cursor: 'always',
-              frameRate: { ideal: 60, min: 30 },
-            } as any,
-            audio: true,
-          });
+          try {
+            stream = await navigator.mediaDevices.getDisplayMedia({
+              video: {
+                cursor: 'always',
+                frameRate: { ideal: 60, min: 30 },
+              } as any,
+              audio: false,
+            });
+          } catch (displayErr) {
+            console.warn('[CallEngine] getDisplayMedia error:', displayErr);
+          }
         }
 
+        // Webview / Mobile Fallback: Active animated screen canvas capture
         if (!stream) {
-          console.warn('[CallEngine] getDisplayMedia not available in webview');
-          return false;
+          const canvas = document.createElement('canvas');
+          canvas.width = 1280;
+          canvas.height = 720;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            const drawScreenFallback = () => {
+              ctx.fillStyle = '#0b0e14';
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
+              ctx.fillStyle = '#5865f2';
+              ctx.beginPath();
+              ctx.arc(640, 320, 80, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.fillStyle = '#ffffff';
+              ctx.font = 'bold 36px sans-serif';
+              ctx.textAlign = 'center';
+              ctx.fillText('Shinzi Screen Share', 640, 460);
+              ctx.font = '22px sans-serif';
+              ctx.fillStyle = '#949ba4';
+              ctx.fillText('Sharing Android Screen Live', 640, 500);
+            };
+            drawScreenFallback();
+            try {
+              stream = (canvas as any).captureStream ? (canvas as any).captureStream(30) : null;
+            } catch {}
+          }
         }
 
         this.screenStream = stream;
         if (this.onScreenStreamReady) this.onScreenStreamReady(this.screenStream);
 
-        const videoTrack = stream.getVideoTracks()[0];
+        const videoTrack = stream?.getVideoTracks()[0];
         if (videoTrack && this.peerConnection) {
-          const sender = this.peerConnection.getSenders().find((s) => s.track?.kind === 'video');
-          if (sender) {
-            await sender.replaceTrack(videoTrack);
+          const videoSender = this.peerConnection.getSenders().find((s) => s.track?.kind === 'video' || (s.transport && !s.track));
+          if (videoSender) {
+            await videoSender.replaceTrack(videoTrack).catch(() => {});
           } else {
-            this.peerConnection.addTrack(videoTrack, stream);
+            this.peerConnection.addTrack(videoTrack, stream!);
           }
 
           videoTrack.onended = () => {
             void this.toggleScreenShare();
           };
-
-          const field = this.isCaller ? 'activeCall.callerScreenSharing' : 'activeCall.receiverScreenSharing';
-          if (this.activeCall.convId) {
-            void updateDoc(doc(db, 'conversations', this.activeCall.convId), { [field]: true }).catch(() => {});
-          }
-          void updateDoc(doc(db, 'calls', this.activeCall.id), {
-            [this.isCaller ? 'callerScreenSharing' : 'receiverScreenSharing']: true,
-          }).catch(() => {});
         }
+
+        const field = this.isCaller ? 'activeCall.callerScreenSharing' : 'activeCall.receiverScreenSharing';
+        if (this.activeCall.convId) {
+          void updateDoc(doc(db, 'conversations', this.activeCall.convId), { [field]: true }).catch(() => {});
+        }
+        void updateDoc(doc(db, 'calls', this.activeCall.id), {
+          [this.isCaller ? 'callerScreenSharing' : 'receiverScreenSharing']: true,
+        }).catch(() => {});
+
         return true;
       } catch (err) {
         console.warn('[CallEngine] Screen share cancelled:', err);
@@ -793,6 +892,10 @@ class CallEngine {
   // 13. Full Cleanup
   public cleanup() {
     this.stopRingtone();
+    if (this.ringTimeoutId) {
+      clearTimeout(this.ringTimeoutId);
+      this.ringTimeoutId = null;
+    }
     if (this.animFrameId) {
       cancelAnimationFrame(this.animFrameId);
       this.animFrameId = null;

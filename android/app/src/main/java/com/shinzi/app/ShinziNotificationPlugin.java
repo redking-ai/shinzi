@@ -53,8 +53,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ShinziNotificationPlugin extends Plugin {
     public static final String CHANNEL_ID = "shinzi_messages";
     private static final String CHANNEL_NAME = "Direct Messages";
-    public static final String CALL_CHANNEL_ID = "shinzi_calls";
-    public static final String CALL_CHANNEL_NAME = "Voice & Video Calls";
+    public static final String CALL_INCOMING_CHANNEL_ID = "shinzi_call_incoming_v2";
+    public static final String CALL_ONGOING_CHANNEL_ID = "shinzi_call_ongoing_v2";
     private static final int CALL_NOTIFICATION_ID = 8888;
     private static ShinziNotificationPlugin instance;
 
@@ -154,11 +154,12 @@ public class ShinziNotificationPlugin extends Plugin {
 
         PendingIntent openPI = PendingIntent.getActivity(getContext(), CALL_NOTIFICATION_ID, openIntent, flags);
 
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(getContext(), CALL_CHANNEL_ID)
+        String channelToUse = isIncoming ? CALL_INCOMING_CHANNEL_ID : CALL_ONGOING_CHANNEL_ID;
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(getContext(), channelToUse)
                 .setSmallIcon(R.drawable.ic_stat_shinzi)
                 .setContentTitle(callerName)
                 .setContentIntent(openPI)
-                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setPriority(isIncoming ? NotificationCompat.PRIORITY_MAX : NotificationCompat.PRIORITY_LOW)
                 .setCategory(NotificationCompat.CATEGORY_CALL)
                 .setOngoing(true)
                 .setAutoCancel(false);
@@ -267,7 +268,7 @@ public class ShinziNotificationPlugin extends Plugin {
 
         Bitmap avatar = fetchCircularAvatar(context, avatarUrl, callerName, convId);
 
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CALL_CHANNEL_ID)
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CALL_INCOMING_CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_stat_shinzi)
                 .setContentTitle(callerName)
                 .setContentText("video".equals(callType) ? "Incoming Video Call..." : "Incoming Voice Call...")
@@ -322,24 +323,40 @@ public class ShinziNotificationPlugin extends Plugin {
 
     private static void createCallNotificationChannel(Context context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(
-                    CALL_CHANNEL_ID,
-                    CALL_CHANNEL_NAME,
-                    NotificationManager.IMPORTANCE_HIGH
-            );
-            channel.setDescription("Active voice and video calls");
-            channel.enableVibration(true);
-            channel.setVibrationPattern(new long[]{0, 1000, 1000, 1000, 1000});
-            AudioAttributes audioAttributes = new AudioAttributes.Builder()
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
-                    .build();
-            channel.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE), audioAttributes);
-            channel.setLockscreenVisibility(NotificationCompat.VISIBILITY_PUBLIC);
-
             NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
             if (manager != null) {
-                manager.createNotificationChannel(channel);
+                try {
+                    manager.deleteNotificationChannel("shinzi_calls");
+                } catch (Exception ignored) {}
+
+                // 1. High priority incoming call channel with loud ringtone & vibration
+                NotificationChannel incomingChannel = new NotificationChannel(
+                        CALL_INCOMING_CHANNEL_ID,
+                        "Incoming Calls",
+                        NotificationManager.IMPORTANCE_HIGH
+                );
+                incomingChannel.setDescription("Incoming voice and video calls");
+                incomingChannel.enableVibration(true);
+                incomingChannel.setVibrationPattern(new long[]{0, 1000, 1000, 1000, 1000});
+                AudioAttributes audioAttributes = new AudioAttributes.Builder()
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                        .build();
+                incomingChannel.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE), audioAttributes);
+                incomingChannel.setLockscreenVisibility(NotificationCompat.VISIBILITY_PUBLIC);
+                manager.createNotificationChannel(incomingChannel);
+
+                // 2. Silent ongoing call channel (NO ringtone, NO vibration) for caller outgoing & active calls
+                NotificationChannel ongoingChannel = new NotificationChannel(
+                        CALL_ONGOING_CHANNEL_ID,
+                        "Active Call Status",
+                        NotificationManager.IMPORTANCE_LOW
+                );
+                ongoingChannel.setDescription("Ongoing active call indicator");
+                ongoingChannel.setSound(null, null);
+                ongoingChannel.enableVibration(false);
+                ongoingChannel.setLockscreenVisibility(NotificationCompat.VISIBILITY_PUBLIC);
+                manager.createNotificationChannel(ongoingChannel);
             }
         }
     }

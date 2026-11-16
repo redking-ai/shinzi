@@ -19,7 +19,7 @@ import {
   Check,
 } from 'lucide-react';
 import { callEngine, type CallSession } from './callService';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 import './CallOverlay.css';
 
@@ -141,6 +141,32 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
     );
     return () => unsubscribe();
   }, [currentUid]);
+
+  // Deep Link & Native Wake-up Call Intent listener
+  useEffect(() => {
+    const handleIncomingCallEvent = async (e: any) => {
+      const { callId, convId } = e.detail || {};
+      if (callId && (!call || call.id !== callId)) {
+        try {
+          const callSnap = await getDoc(doc(db, 'calls', callId));
+          if (callSnap.exists()) {
+            const data = callSnap.data() as CallSession;
+            if (data.status === 'ringing') {
+              callEngine.activeCall = data;
+              callEngine.isCaller = data.callerId === currentUid;
+              if (!callEngine.isCaller) {
+                callEngine.playRingtone('incoming');
+              }
+              setCall({ ...data });
+              callEngine.listenToCall(callId, convId || data.convId);
+            }
+          }
+        } catch {}
+      }
+    };
+    window.addEventListener('shinzi:incomingCall', handleIncomingCallEvent);
+    return () => window.removeEventListener('shinzi:incomingCall', handleIncomingCallEvent);
+  }, [currentUid, call]);
 
   // Sync Native Ongoing Notification in Android StatusBar
   useEffect(() => {
@@ -497,9 +523,16 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
               // Live Shared Screen
               <>
                 <video
-                  ref={screenShareVideoRef}
+                  ref={(el) => {
+                    screenShareVideoRef.current = el;
+                    if (el && (screenStream || remoteStream)) {
+                      el.srcObject = screenStream || remoteStream;
+                      el.play().catch(() => {});
+                    }
+                  }}
                   autoPlay
                   playsInline
+                  muted
                   className="shc-video-feed"
                 />
                 <span className="shc-screen-expand-hint">Tap to expand full screen</span>
@@ -507,9 +540,16 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
             ) : isOppositeVideoOn ? (
               // 1080p Video Feed
               <video
-                ref={remoteVideoRef}
+                ref={(el) => {
+                  remoteVideoRef.current = el;
+                  if (el && remoteStream) {
+                    el.srcObject = remoteStream;
+                    el.play().catch(() => {});
+                  }
+                }}
                 autoPlay
                 playsInline
+                muted
                 className="shc-video-feed"
               />
             ) : (
@@ -561,7 +601,13 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
             ) : isMyVideoOn ? (
               // Self Camera 1080p Preview
               <video
-                ref={localVideoRef}
+                ref={(el) => {
+                  localVideoRef.current = el;
+                  if (el && localStream) {
+                    el.srcObject = localStream;
+                    el.play().catch(() => {});
+                  }
+                }}
                 autoPlay
                 playsInline
                 muted
@@ -691,7 +737,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
             {isDeafened ? <VolumeX size={22} /> : <Volume2 size={22} />}
           </button>
 
-          {/* 4. Screen Sharing Button or Stop Video Button */}
+          {/* 4. Screen Sharing Button or Stop Video / Stop Screen Share Button */}
           {isMyVideoOn ? (
             /* Red Cut Video Call Button (20261116_195539) */
             <button
@@ -714,7 +760,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
               <ScreenShare size={22} />
             </button>
           ) : (
-            /* Red Stop Screen Share Button (20261116_190815, 20261116_194418) */
+            /* Red Stop Screen Share Button (20261116_190815, 20261116_194418: 4 buttons mode) */
             <button
               type="button"
               className="shc-control-btn stop-share-btn"
@@ -726,16 +772,18 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
             </button>
           )}
 
-          {/* 5. End Call Button (Red Phone Down) */}
-          <button
-            type="button"
-            className="shc-control-btn end-btn"
-            onClick={() => void callEngine.endCall()}
-            title="End Call"
-            aria-label="End call"
-          >
-            <PhoneOff size={26} />
-          </button>
+          {/* 5. End Call Button (Shown when not in 4-button screen-sharing mode) */}
+          {!isMyScreenSharing && (
+            <button
+              type="button"
+              className="shc-control-btn end-btn"
+              onClick={() => void callEngine.endCall()}
+              title="End Call"
+              aria-label="End call"
+            >
+              <PhoneOff size={26} />
+            </button>
+          )}
         </div>
       </div>
     </div>

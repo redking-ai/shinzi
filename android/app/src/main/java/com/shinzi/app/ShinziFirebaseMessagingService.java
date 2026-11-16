@@ -1,5 +1,10 @@
 package com.shinzi.app;
 
+import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
+import android.os.PowerManager;
+import android.util.Log;
 import androidx.annotation.NonNull;
 import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
@@ -7,6 +12,7 @@ import com.google.firebase.messaging.RemoteMessage;
 import java.util.Map;
 
 public class ShinziFirebaseMessagingService extends FirebaseMessagingService {
+    private static final String TAG = "ShinziFCM";
 
     @Override
     public void onNewToken(@NonNull String token) {
@@ -40,12 +46,48 @@ public class ShinziFirebaseMessagingService extends FirebaseMessagingService {
             String callId = data.get("callId");
             String callType = data.get("callType");
 
+            String effectiveCallId = callId != null ? callId : "call_default";
+            String effectiveConvId = convId != null ? convId : "default";
+
+            // 1. Acquire WakeLock to turn on device screen immediately
+            try {
+                PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+                if (pm != null) {
+                    PowerManager.WakeLock wakeLock = pm.newWakeLock(
+                            PowerManager.FULL_WAKE_LOCK |
+                            PowerManager.ACQUIRE_CAUSES_WAKEUP |
+                            PowerManager.ON_AFTER_RELEASE,
+                            "shinzi:call_wake"
+                    );
+                    wakeLock.acquire(10000);
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "Failed to acquire call wakelock: " + e.getMessage());
+            }
+
+            // 2. Launch full-screen call activity over lock screen / home screen
+            try {
+                Intent callIntent = new Intent(this, MainActivity.class);
+                callIntent.setAction(Intent.ACTION_VIEW);
+                callIntent.setData(Uri.parse("https://shinzi.vercel.app/call?id=" + effectiveCallId + "&conv=" + effectiveConvId));
+                callIntent.addFlags(
+                        Intent.FLAG_ACTIVITY_NEW_TASK |
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP |
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP |
+                        Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                );
+                startActivity(callIntent);
+            } catch (Exception e) {
+                Log.w(TAG, "Failed to startActivity from FCM: " + e.getMessage());
+            }
+
+            // 3. Post full-screen incoming call notification with ringtone & answer/decline actions
             ShinziNotificationPlugin.showIncomingCallNotificationNative(
                     this,
                     senderName,
                     avatarUrl,
-                    convId != null ? convId : "default",
-                    callId != null ? callId : "call_default",
+                    effectiveConvId,
+                    effectiveCallId,
                     callType != null ? callType : "voice"
             );
             return;

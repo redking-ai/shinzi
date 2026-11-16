@@ -2,6 +2,7 @@ package com.shinzi.app;
 
 import android.Manifest;
 import android.app.DownloadManager;
+import android.app.KeyguardManager;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
@@ -10,6 +11,7 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.URLUtil;
 import android.webkit.WebSettings;
@@ -32,6 +34,25 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(ShinziNotificationPlugin.class);
         super.onCreate(savedInstanceState);
+
+        // Turn screen on and show over lock screen for incoming calls
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                setShowWhenLocked(true);
+                setTurnScreenOn(true);
+                KeyguardManager km = (KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+                if (km != null) {
+                    km.requestDismissKeyguard(this, null);
+                }
+            } else {
+                getWindow().addFlags(
+                        WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
+                        WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD |
+                        WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON |
+                        WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                );
+            }
+        } catch (Exception ignored) {}
 
         // 1. Explicitly enable DomStorage, Database, and CookieManager + DownloadListener
         try {
@@ -154,9 +175,23 @@ public class MainActivity extends BridgeActivity {
         if (intent == null) return;
         Uri uri = intent.getData();
         if (uri != null) {
+            String callId = uri.getQueryParameter("id");
             String convId = uri.getQueryParameter("conv");
             String userUid = uri.getQueryParameter("user");
-            if ((convId != null && !convId.isEmpty()) || (userUid != null && !userUid.isEmpty())) {
+
+            if (callId != null && !callId.isEmpty()) {
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    try {
+                        WebView webView = getBridge().getWebView();
+                        if (webView != null) {
+                            String safeCall = callId.replace("'", "\\'");
+                            String safeConv = convId != null ? convId.replace("'", "\\'") : "";
+                            String js = "window.dispatchEvent(new CustomEvent('shinzi:incomingCall', { detail: { callId: '" + safeCall + "', convId: '" + safeConv + "' } }));";
+                            webView.evaluateJavascript(js, null);
+                        }
+                    } catch (Exception ignored) {}
+                }, 400);
+            } else if ((convId != null && !convId.isEmpty()) || (userUid != null && !userUid.isEmpty())) {
                 ShinziNotificationPlugin.setPendingNotificationChat(convId, userUid);
 
                 // Dispatch custom event to Webview if already active
