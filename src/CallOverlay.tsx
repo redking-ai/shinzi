@@ -106,26 +106,38 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
     };
   }, []);
 
-  // Listen for Incoming Calls
+  // Listen for Incoming Calls across all user conversations
   useEffect(() => {
     if (!currentUid) return;
     const q = query(
-      collection(db, 'calls'),
-      where('receiverId', '==', currentUid),
-      where('status', '==', 'ringing')
+      collection(db, 'conversations'),
+      where('memberIds', 'array-contains', currentUid)
     );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      if (!snapshot.empty) {
-        const docSnap = snapshot.docs[0];
-        const incomingCall = { id: docSnap.id, ...docSnap.data() } as CallSession;
-        if (!callEngine.activeCall || callEngine.activeCall.id !== incomingCall.id) {
-          callEngine.activeCall = incomingCall;
-          callEngine.isCaller = false;
-          callEngine.playRingtone('incoming');
-          setCall({ ...incomingCall });
-        }
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        snapshot.docs.forEach((docSnap) => {
+          const data = docSnap.data();
+          const incomingCall = data.activeCall as CallSession | undefined;
+          if (
+            incomingCall &&
+            incomingCall.status === 'ringing' &&
+            incomingCall.receiverId === currentUid
+          ) {
+            if (!callEngine.activeCall || callEngine.activeCall.id !== incomingCall.id) {
+              callEngine.activeCall = incomingCall;
+              callEngine.isCaller = false;
+              callEngine.playRingtone('incoming');
+              setCall({ ...incomingCall });
+              callEngine.listenToCall(incomingCall.id, incomingCall.convId);
+            }
+          }
+        });
+      },
+      (err) => {
+        console.warn('[CallOverlay] Conversation incoming call listener error:', err);
       }
-    });
+    );
     return () => unsubscribe();
   }, [currentUid]);
 

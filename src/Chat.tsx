@@ -4688,7 +4688,7 @@ const handleSearchMessage = async (target: Rec) => {
     const targetName = targetProf?.displayName || targetProf?.username || getConversationName(activeConv);
     const targetAvatar = targetProf?.photoURL || '';
 
-    void callEngine.startCall({
+    callEngine.startCall({
       convId: activeConv.id,
       callerId: uid,
       callerName: profile?.displayName || profile?.username || 'You',
@@ -4697,6 +4697,9 @@ const handleSearchMessage = async (target: Rec) => {
       receiverName: targetName,
       receiverPhotoURL: targetAvatar,
       type: mode,
+    }).catch((err: unknown) => {
+      console.error('Call start failed:', err);
+      notify('Call Error', messageOf(err) || 'Could not start call. Check microphone permissions.');
     });
   };
 

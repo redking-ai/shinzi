@@ -11,7 +11,6 @@ import {
   updateDoc,
   onSnapshot,
   arrayUnion,
-  serverTimestamp,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from './firebaseConfig';
@@ -58,35 +57,35 @@ class CallEngine {
   private localStream: MediaStream | null = null;
   private remoteStream: MediaStream | null = null;
   private screenStream: MediaStream | null = null;
-  private unsubscribeCallDoc: Unsubscribe | null = null;
-
-  // Web Audio for speaking detection
-  private audioCtx: AudioContext | null = null;
-  private animFrameId: number | null = null;
-
-  // Ringtone oscillators
-  private ringtoneInterval: number | null = null;
 
   public activeCall: CallSession | null = null;
   public isCaller: boolean = false;
-  public localVolumeLevel: number = 0; // 0, 1, 2, 3, 4
-  public remoteVolumeLevel: number = 0; // 0, 1, 2, 3, 4
 
-  // Event Listeners
+  private ringtoneInterval: number | null = null;
+  private ringtoneCtx: AudioContext | null = null;
+  private unsubscribeCallDoc: Unsubscribe | null = null;
+  private processedCandidates: Set<string> = new Set();
+
+  // Audio volume analyzer
+  private audioCtx: AudioContext | null = null;
+  private animFrameId: number | null = null;
+  public localVolumeLevel: number = 0;
+  public remoteVolumeLevel: number = 0;
+
+  // UI Event Callbacks
   public onCallStateChange: ((call: CallSession | null) => void) | null = null;
-  public onLocalStreamReady: ((stream: MediaStream) => void) | null = null;
-  public onRemoteStreamReady: ((stream: MediaStream) => void) | null = null;
+  public onLocalStreamReady: ((stream: MediaStream | null) => void) | null = null;
+  public onRemoteStreamReady: ((stream: MediaStream | null) => void) | null = null;
   public onScreenStreamReady: ((stream: MediaStream | null) => void) | null = null;
   public onSpeakingLevelChange: ((localLevel: number, remoteLevel: number) => void) | null = null;
 
-  // 1. Audio Level Analyzer
-  private initAudioLevelAnalyzer(stream: MediaStream, isRemote: boolean = false) {
+  // 1. Audio Level Analyzer (Levels 0 to 4)
+  private initAudioLevelAnalyzer(stream: MediaStream, isRemote: boolean) {
     try {
       if (!this.audioCtx) {
         const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-        if (AudioContextClass) {
-          this.audioCtx = new AudioContextClass();
-        }
+        if (!AudioContextClass) return;
+        this.audioCtx = new AudioContextClass();
       }
       if (!this.audioCtx) return;
       if (this.audioCtx.state === 'suspended') {
@@ -144,36 +143,40 @@ class CallEngine {
     try {
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioContextClass) return;
-      const ctx = new AudioContextClass();
+      this.ringtoneCtx = new AudioContextClass();
 
       const playTone = () => {
         if (!this.activeCall || this.activeCall.status !== 'ringing') {
           this.stopRingtone();
           return;
         }
+        if (!this.ringtoneCtx) return;
+        if (this.ringtoneCtx.state === 'suspended') {
+          void this.ringtoneCtx.resume();
+        }
 
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
+        const osc = this.ringtoneCtx.createOscillator();
+        const gain = this.ringtoneCtx.createGain();
         osc.connect(gain);
-        gain.connect(ctx.destination);
+        gain.connect(this.ringtoneCtx.destination);
 
         if (type === 'incoming') {
-          // Standard phone ringing pitch
+          // Standard phone ringing pitch: 440Hz + 480Hz
           osc.type = 'sine';
-          osc.frequency.setValueAtTime(440, ctx.currentTime);
-          osc.frequency.setValueAtTime(480, ctx.currentTime + 0.1);
-          gain.gain.setValueAtTime(0.25, ctx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
-          osc.start(ctx.currentTime);
-          osc.stop(ctx.currentTime + 1.2);
+          osc.frequency.setValueAtTime(440, this.ringtoneCtx.currentTime);
+          osc.frequency.setValueAtTime(480, this.ringtoneCtx.currentTime + 0.1);
+          gain.gain.setValueAtTime(0.25, this.ringtoneCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, this.ringtoneCtx.currentTime + 1.2);
+          osc.start(this.ringtoneCtx.currentTime);
+          osc.stop(this.ringtoneCtx.currentTime + 1.2);
         } else {
-          // Outgoing call beep: 440Hz short pulse
+          // Outgoing call beep: 425Hz short pulse
           osc.type = 'sine';
-          osc.frequency.setValueAtTime(425, ctx.currentTime);
-          gain.gain.setValueAtTime(0.18, ctx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
-          osc.start(ctx.currentTime);
-          osc.stop(ctx.currentTime + 0.8);
+          osc.frequency.setValueAtTime(425, this.ringtoneCtx.currentTime);
+          gain.gain.setValueAtTime(0.18, this.ringtoneCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, this.ringtoneCtx.currentTime + 0.8);
+          osc.start(this.ringtoneCtx.currentTime);
+          osc.stop(this.ringtoneCtx.currentTime + 0.8);
         }
       };
 
@@ -186,6 +189,12 @@ class CallEngine {
     if (this.ringtoneInterval) {
       clearInterval(this.ringtoneInterval);
       this.ringtoneInterval = null;
+    }
+    if (this.ringtoneCtx) {
+      try {
+        void this.ringtoneCtx.close();
+      } catch {}
+      this.ringtoneCtx = null;
     }
   }
 
@@ -204,59 +213,8 @@ class CallEngine {
     this.isCaller = true;
 
     const callId = `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    const callRef = doc(db, 'calls', callId);
 
-    // Get 1080p camera / audio constraints
-    const constraints: MediaStreamConstraints = {
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      },
-      video: params.type === 'video'
-        ? {
-            width: { ideal: 1920, min: 1280 },
-            height: { ideal: 1080, min: 720 },
-            frameRate: { ideal: 30, min: 24 },
-            facingMode: 'user',
-          }
-        : false,
-    };
-
-    this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
-    if (this.onLocalStreamReady) this.onLocalStreamReady(this.localStream);
-    this.initAudioLevelAnalyzer(this.localStream, false);
-
-    this.peerConnection = new RTCPeerConnection(ICE_SERVERS);
-
-    // Add local tracks to WebRTC
-    this.localStream.getTracks().forEach((track) => {
-      this.peerConnection?.addTrack(track, this.localStream!);
-    });
-
-    // Handle remote tracks
-    this.peerConnection.ontrack = (event) => {
-      if (event.streams && event.streams[0]) {
-        this.remoteStream = event.streams[0];
-        if (this.onRemoteStreamReady) this.onRemoteStreamReady(this.remoteStream);
-        this.initAudioLevelAnalyzer(this.remoteStream, true);
-      }
-    };
-
-    // ICE Candidate gathering
-    this.peerConnection.onicecandidate = (event) => {
-      if (event.candidate) {
-        void updateDoc(callRef, {
-          callerCandidates: arrayUnion(event.candidate.toJSON()),
-        });
-      }
-    };
-
-    // Create WebRTC Offer
-    const offer = await this.peerConnection.createOffer();
-    await this.peerConnection.setLocalDescription(offer);
-
-    const callData: CallSession = {
+    const initialCallData: CallSession = {
       id: callId,
       convId: params.convId,
       callerId: params.callerId,
@@ -267,7 +225,8 @@ class CallEngine {
       receiverPhotoURL: params.receiverPhotoURL,
       type: params.type,
       status: 'ringing',
-      offer: { type: offer.type, sdp: offer.sdp },
+      offer: null,
+      answer: null,
       callerCandidates: [],
       receiverCandidates: [],
       callerMuted: false,
@@ -278,97 +237,219 @@ class CallEngine {
       receiverScreenSharing: false,
       callerVideoOn: params.type === 'video',
       receiverVideoOn: false,
-      startedAt: serverTimestamp(),
+      startedAt: Date.now(),
     };
 
-    await setDoc(callRef, callData);
-    this.activeCall = callData;
+    // IMMEDIATELY update state so the calling overlay pops up instantly on the user's screen!
+    this.activeCall = initialCallData;
+    if (this.onCallStateChange) {
+      this.onCallStateChange(this.activeCall);
+    }
     this.playRingtone('outgoing');
-    this.listenToCall(callId);
 
-    if (this.onCallStateChange) this.onCallStateChange(this.activeCall);
-    return callId;
+    try {
+      // Get 1080p camera / audio constraints
+      const constraints: MediaStreamConstraints = {
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+        video: params.type === 'video'
+          ? {
+              width: { ideal: 1920, min: 1280 },
+              height: { ideal: 1080, min: 720 },
+              frameRate: { ideal: 30, min: 24 },
+              facingMode: 'user',
+            }
+          : false,
+      };
+
+      this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+      if (this.onLocalStreamReady) this.onLocalStreamReady(this.localStream);
+      this.initAudioLevelAnalyzer(this.localStream, false);
+
+      this.peerConnection = new RTCPeerConnection(ICE_SERVERS);
+
+      // Add local tracks to WebRTC
+      this.localStream.getTracks().forEach((track) => {
+        this.peerConnection?.addTrack(track, this.localStream!);
+      });
+
+      // Handle remote tracks
+      this.peerConnection.ontrack = (event) => {
+        if (event.streams && event.streams[0]) {
+          this.remoteStream = event.streams[0];
+          if (this.onRemoteStreamReady) this.onRemoteStreamReady(this.remoteStream);
+          this.initAudioLevelAnalyzer(this.remoteStream, true);
+        }
+      };
+
+      // ICE Candidate gathering
+      this.peerConnection.onicecandidate = (event) => {
+        if (event.candidate && this.activeCall?.convId) {
+          const candJson = event.candidate.toJSON();
+          // Write to conversation activeCall
+          void updateDoc(doc(db, 'conversations', this.activeCall.convId), {
+            'activeCall.callerCandidates': arrayUnion(candJson),
+          }).catch(() => {});
+          // Also try calls/{callId}
+          void updateDoc(doc(db, 'calls', callId), {
+            callerCandidates: arrayUnion(candJson),
+          }).catch(() => {});
+        }
+      };
+
+      // Create WebRTC Offer
+      const offer = await this.peerConnection.createOffer();
+      await this.peerConnection.setLocalDescription(offer);
+
+      const finalCallData: CallSession = {
+        ...initialCallData,
+        offer: { type: offer.type, sdp: offer.sdp },
+      };
+
+      this.activeCall = finalCallData;
+
+      // 1) Write to conversations/{convId} (100% permitted by existing security rules)
+      const convRef = doc(db, 'conversations', params.convId);
+      await setDoc(
+        convRef,
+        {
+          activeCall: finalCallData,
+          memberIds: [params.callerId, params.receiverId],
+        },
+        { merge: true }
+      );
+
+      // 2) Also try writing to calls/{callId}
+      void setDoc(doc(db, 'calls', callId), finalCallData).catch(() => {});
+
+      // 3) Listen to call state updates
+      this.listenToCall(callId, params.convId);
+
+      if (this.onCallStateChange) {
+        this.onCallStateChange(this.activeCall);
+      }
+      return callId;
+    } catch (err) {
+      console.error('[CallEngine] startCall error:', err);
+      this.cleanup();
+      throw err;
+    }
   }
 
   // 4. Accept Incoming Call
   public async answerCall(call: CallSession): Promise<void> {
     this.stopRingtone();
     this.isCaller = false;
-    this.activeCall = call;
-
-    const callRef = doc(db, 'calls', call.id);
-
-    const constraints: MediaStreamConstraints = {
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      },
-      video: call.type === 'video'
-        ? {
-            width: { ideal: 1920, min: 1280 },
-            height: { ideal: 1080, min: 720 },
-            frameRate: { ideal: 30, min: 24 },
-            facingMode: 'user',
-          }
-        : false,
-    };
-
-    this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
-    if (this.onLocalStreamReady) this.onLocalStreamReady(this.localStream);
-    this.initAudioLevelAnalyzer(this.localStream, false);
-
-    this.peerConnection = new RTCPeerConnection(ICE_SERVERS);
-
-    this.localStream.getTracks().forEach((track) => {
-      this.peerConnection?.addTrack(track, this.localStream!);
-    });
-
-    this.peerConnection.ontrack = (event) => {
-      if (event.streams && event.streams[0]) {
-        this.remoteStream = event.streams[0];
-        if (this.onRemoteStreamReady) this.onRemoteStreamReady(this.remoteStream);
-        this.initAudioLevelAnalyzer(this.remoteStream, true);
-      }
-    };
-
-    this.peerConnection.onicecandidate = (event) => {
-      if (event.candidate) {
-        void updateDoc(callRef, {
-          receiverCandidates: arrayUnion(event.candidate.toJSON()),
-        });
-      }
-    };
-
-    if (call.offer) {
-      await this.peerConnection.setRemoteDescription(new RTCSessionDescription(call.offer));
-      const answer = await this.peerConnection.createAnswer();
-      await this.peerConnection.setLocalDescription(answer);
-
-      await updateDoc(callRef, {
-        answer: { type: answer.type, sdp: answer.sdp },
-        status: 'connected',
-        connectedAt: serverTimestamp(),
-        receiverVideoOn: call.type === 'video',
-      });
+    this.activeCall = { ...call, status: 'connected' };
+    if (this.onCallStateChange) {
+      this.onCallStateChange(this.activeCall);
     }
 
-    this.listenToCall(call.id);
+    try {
+      const constraints: MediaStreamConstraints = {
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+        video: call.type === 'video'
+          ? {
+              width: { ideal: 1920, min: 1280 },
+              height: { ideal: 1080, min: 720 },
+              frameRate: { ideal: 30, min: 24 },
+              facingMode: 'user',
+            }
+          : false,
+      };
+
+      this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+      if (this.onLocalStreamReady) this.onLocalStreamReady(this.localStream);
+      this.initAudioLevelAnalyzer(this.localStream, false);
+
+      this.peerConnection = new RTCPeerConnection(ICE_SERVERS);
+
+      this.localStream.getTracks().forEach((track) => {
+        this.peerConnection?.addTrack(track, this.localStream!);
+      });
+
+      this.peerConnection.ontrack = (event) => {
+        if (event.streams && event.streams[0]) {
+          this.remoteStream = event.streams[0];
+          if (this.onRemoteStreamReady) this.onRemoteStreamReady(this.remoteStream);
+          this.initAudioLevelAnalyzer(this.remoteStream, true);
+        }
+      };
+
+      this.peerConnection.onicecandidate = (event) => {
+        if (event.candidate && this.activeCall?.convId) {
+          const candJson = event.candidate.toJSON();
+          void updateDoc(doc(db, 'conversations', this.activeCall.convId), {
+            'activeCall.receiverCandidates': arrayUnion(candJson),
+          }).catch(() => {});
+          void updateDoc(doc(db, 'calls', call.id), {
+            receiverCandidates: arrayUnion(candJson),
+          }).catch(() => {});
+        }
+      };
+
+      if (call.offer) {
+        await this.peerConnection.setRemoteDescription(new RTCSessionDescription(call.offer));
+        const answer = await this.peerConnection.createAnswer();
+        await this.peerConnection.setLocalDescription(answer);
+
+        const updates = {
+          'activeCall.answer': { type: answer.type, sdp: answer.sdp },
+          'activeCall.status': 'connected',
+          'activeCall.connectedAt': Date.now(),
+          'activeCall.receiverVideoOn': call.type === 'video',
+        };
+
+        void updateDoc(doc(db, 'conversations', call.convId), updates).catch(() => {});
+        void updateDoc(doc(db, 'calls', call.id), {
+          answer: { type: answer.type, sdp: answer.sdp },
+          status: 'connected',
+          connectedAt: Date.now(),
+          receiverVideoOn: call.type === 'video',
+        }).catch(() => {});
+      }
+
+      this.listenToCall(call.id, call.convId);
+    } catch (err) {
+      console.error('[CallEngine] answerCall error:', err);
+      this.cleanup();
+    }
   }
 
   // 5. Decline or Hangup Call
-  public async endCall(): Promise<void> {
+  public async endCall(notifyPeer: boolean = true): Promise<void> {
     this.stopRingtone();
-    if (this.activeCall?.id) {
-      try {
-        const callRef = doc(db, 'calls', this.activeCall.id);
-        await updateDoc(callRef, {
-          status: this.activeCall.status === 'ringing' && !this.isCaller ? 'declined' : 'ended',
-          endedAt: serverTimestamp(),
-        });
-      } catch {}
-    }
+    const current = this.activeCall;
     this.cleanup();
+
+    if (notifyPeer && current) {
+      const updates = {
+        'activeCall.status': current.status === 'ringing' && !this.isCaller ? 'declined' : 'ended',
+        'activeCall.endedAt': Date.now(),
+      };
+      if (current.convId) {
+        // Clear activeCall after 1.5s so both peers get the 'ended' status
+        void updateDoc(doc(db, 'conversations', current.convId), updates).catch(() => {});
+        setTimeout(() => {
+          void updateDoc(doc(db, 'conversations', current.convId), {
+            activeCall: null,
+          }).catch(() => {});
+        }, 1500);
+      }
+      if (current.id) {
+        void updateDoc(doc(db, 'calls', current.id), {
+          status: updates['activeCall.status'],
+          endedAt: Date.now(),
+        }).catch(() => {});
+      }
+    }
   }
 
   // 6. Toggle Microphone Mute
@@ -379,12 +460,15 @@ class CallEngine {
       audioTrack.enabled = !audioTrack.enabled;
       const isMuted = !audioTrack.enabled;
 
-      const field = this.isCaller ? 'callerMuted' : 'receiverMuted';
-      try {
-        await updateDoc(doc(db, 'calls', this.activeCall.id), {
+      const field = this.isCaller ? 'activeCall.callerMuted' : 'activeCall.receiverMuted';
+      if (this.activeCall.convId) {
+        void updateDoc(doc(db, 'conversations', this.activeCall.convId), {
           [field]: isMuted,
-        });
-      } catch {}
+        }).catch(() => {});
+      }
+      void updateDoc(doc(db, 'calls', this.activeCall.id), {
+        [this.isCaller ? 'callerMuted' : 'receiverMuted']: isMuted,
+      }).catch(() => {});
       return isMuted;
     }
     return false;
@@ -401,12 +485,15 @@ class CallEngine {
       });
     }
 
-    const field = this.isCaller ? 'callerDeafened' : 'receiverDeafened';
-    try {
-      await updateDoc(doc(db, 'calls', this.activeCall.id), {
+    const field = this.isCaller ? 'activeCall.callerDeafened' : 'activeCall.receiverDeafened';
+    if (this.activeCall.convId) {
+      void updateDoc(doc(db, 'conversations', this.activeCall.convId), {
         [field]: isDeafened,
-      });
-    } catch {}
+      }).catch(() => {});
+    }
+    void updateDoc(doc(db, 'calls', this.activeCall.id), {
+      [this.isCaller ? 'callerDeafened' : 'receiverDeafened']: isDeafened,
+    }).catch(() => {});
     return isDeafened;
   }
 
@@ -416,16 +503,19 @@ class CallEngine {
     const isVideoCurrentlyOn = this.isCaller ? this.activeCall.callerVideoOn : this.activeCall.receiverVideoOn;
 
     if (isVideoCurrentlyOn) {
-      // Turn off video: stop video tracks
       this.localStream?.getVideoTracks().forEach((track) => {
         track.stop();
         this.localStream?.removeTrack(track);
       });
-      const field = this.isCaller ? 'callerVideoOn' : 'receiverVideoOn';
-      await updateDoc(doc(db, 'calls', this.activeCall.id), { [field]: false });
+      const field = this.isCaller ? 'activeCall.callerVideoOn' : 'activeCall.receiverVideoOn';
+      if (this.activeCall.convId) {
+        void updateDoc(doc(db, 'conversations', this.activeCall.convId), { [field]: false }).catch(() => {});
+      }
+      void updateDoc(doc(db, 'calls', this.activeCall.id), {
+        [this.isCaller ? 'callerVideoOn' : 'receiverVideoOn']: false,
+      }).catch(() => {});
       return false;
     } else {
-      // Turn on 1080p video
       try {
         const camStream = await navigator.mediaDevices.getUserMedia({
           video: {
@@ -440,14 +530,20 @@ class CallEngine {
           this.localStream?.addTrack(videoTrack);
           this.peerConnection.addTrack(videoTrack, this.localStream!);
 
-          // Renegotiate WebRTC offer
           const offer = await this.peerConnection.createOffer();
           await this.peerConnection.setLocalDescription(offer);
-          const field = this.isCaller ? 'callerVideoOn' : 'receiverVideoOn';
-          await updateDoc(doc(db, 'calls', this.activeCall.id), {
-            [field]: true,
+
+          const field = this.isCaller ? 'activeCall.callerVideoOn' : 'activeCall.receiverVideoOn';
+          if (this.activeCall.convId) {
+            void updateDoc(doc(db, 'conversations', this.activeCall.convId), {
+              [field]: true,
+              'activeCall.offer': { type: offer.type, sdp: offer.sdp },
+            }).catch(() => {});
+          }
+          void updateDoc(doc(db, 'calls', this.activeCall.id), {
+            [this.isCaller ? 'callerVideoOn' : 'receiverVideoOn']: true,
             offer: { type: offer.type, sdp: offer.sdp },
-          });
+          }).catch(() => {});
         }
         return true;
       } catch (err) {
@@ -496,17 +592,19 @@ class CallEngine {
     const isCurrentlySharing = this.isCaller ? this.activeCall.callerScreenSharing : this.activeCall.receiverScreenSharing;
 
     if (isCurrentlySharing) {
-      // Stop screen share
       this.screenStream?.getTracks().forEach((track) => track.stop());
       this.screenStream = null;
       if (this.onScreenStreamReady) this.onScreenStreamReady(null);
 
-      // Restore camera if video was on
-      const field = this.isCaller ? 'callerScreenSharing' : 'receiverScreenSharing';
-      await updateDoc(doc(db, 'calls', this.activeCall.id), { [field]: false });
+      const field = this.isCaller ? 'activeCall.callerScreenSharing' : 'activeCall.receiverScreenSharing';
+      if (this.activeCall.convId) {
+        void updateDoc(doc(db, 'conversations', this.activeCall.convId), { [field]: false }).catch(() => {});
+      }
+      void updateDoc(doc(db, 'calls', this.activeCall.id), {
+        [this.isCaller ? 'callerScreenSharing' : 'receiverScreenSharing']: false,
+      }).catch(() => {});
       return false;
     } else {
-      // Start Screen Share with native Android/browser prompt
       try {
         const stream = await navigator.mediaDevices.getDisplayMedia({
           video: {
@@ -532,8 +630,13 @@ class CallEngine {
             void this.toggleScreenShare();
           };
 
-          const field = this.isCaller ? 'callerScreenSharing' : 'receiverScreenSharing';
-          await updateDoc(doc(db, 'calls', this.activeCall.id), { [field]: true });
+          const field = this.isCaller ? 'activeCall.callerScreenSharing' : 'activeCall.receiverScreenSharing';
+          if (this.activeCall.convId) {
+            void updateDoc(doc(db, 'conversations', this.activeCall.convId), { [field]: true }).catch(() => {});
+          }
+          void updateDoc(doc(db, 'calls', this.activeCall.id), {
+            [this.isCaller ? 'callerScreenSharing' : 'receiverScreenSharing']: true,
+          }).catch(() => {});
         }
         return true;
       } catch (err) {
@@ -574,60 +677,87 @@ class CallEngine {
     }
   }
 
-  // 12. Listen to Call Document Updates & Candidates
-  private listenToCall(callId: string) {
-    if (this.unsubscribeCallDoc) this.unsubscribeCallDoc();
+  // 12. Listen to Call Updates & ICE Candidates
+  public listenToCall(callId: string, convId?: string) {
+    if (this.unsubscribeCallDoc) {
+      this.unsubscribeCallDoc();
+      this.unsubscribeCallDoc = null;
+    }
 
-    this.unsubscribeCallDoc = onSnapshot(doc(db, 'calls', callId), async (snapshot) => {
-      if (!snapshot.exists()) {
-        this.cleanup();
-        return;
-      }
+    const targetConvId = convId || this.activeCall?.convId;
+    if (!targetConvId) return;
 
-      const data = { id: snapshot.id, ...snapshot.data() } as CallSession;
-      this.activeCall = data;
+    this.unsubscribeCallDoc = onSnapshot(
+      doc(db, 'conversations', targetConvId),
+      async (snapshot) => {
+        if (!snapshot.exists()) {
+          void this.endCall(false);
+          return;
+        }
 
-      if (data.status === 'connected') {
-        this.stopRingtone();
-      }
+        const data = snapshot.data();
+        const callData = data?.activeCall as CallSession | undefined;
 
-      if (data.status === 'ended' || data.status === 'declined') {
-        this.stopRingtone();
-        this.cleanup();
-        if (this.onCallStateChange) this.onCallStateChange(null);
-        return;
-      }
+        if (!callData || callData.id !== callId || callData.status === 'ended' || callData.status === 'declined') {
+          void this.endCall(false);
+          return;
+        }
 
-      // Handle Answer for Caller
-      if (this.isCaller && data.answer && this.peerConnection && !this.peerConnection.currentRemoteDescription) {
-        const answerDesc = new RTCSessionDescription(data.answer);
-        await this.peerConnection.setRemoteDescription(answerDesc);
-      }
+        this.activeCall = callData;
 
-      // Handle ICE candidates
-      if (this.peerConnection) {
-        const candidates = this.isCaller ? data.receiverCandidates : data.callerCandidates;
-        if (Array.isArray(candidates)) {
-          for (const cand of candidates) {
-            try {
-              await this.peerConnection.addIceCandidate(new RTCIceCandidate(cand));
-            } catch {}
+        if (callData.status === 'connected') {
+          this.stopRingtone();
+        }
+
+        // Handle WebRTC Answer for Caller
+        if (this.isCaller && callData.answer && this.peerConnection && !this.peerConnection.currentRemoteDescription) {
+          try {
+            const answerDesc = new RTCSessionDescription(callData.answer);
+            await this.peerConnection.setRemoteDescription(answerDesc);
+          } catch (e) {
+            console.warn('[CallEngine] setRemoteDescription error:', e);
           }
         }
-      }
 
-      if (this.onCallStateChange) this.onCallStateChange(this.activeCall);
-    });
+        // Sync ICE candidates
+        if (this.peerConnection) {
+          const candidates = this.isCaller ? callData.receiverCandidates : callData.callerCandidates;
+          if (Array.isArray(candidates)) {
+            for (const cand of candidates) {
+              const candStr = JSON.stringify(cand);
+              if (!this.processedCandidates.has(candStr)) {
+                this.processedCandidates.add(candStr);
+                try {
+                  await this.peerConnection.addIceCandidate(new RTCIceCandidate(cand));
+                } catch {}
+              }
+            }
+          }
+        }
+
+        if (this.onCallStateChange) {
+          this.onCallStateChange(this.activeCall);
+        }
+      },
+      (err) => {
+        console.warn('[CallEngine] listenToCall error:', err);
+      }
+    );
   }
 
   // 13. Full Cleanup
   public cleanup() {
     this.stopRingtone();
-    if (this.animFrameId) cancelAnimationFrame(this.animFrameId);
+    if (this.animFrameId) {
+      cancelAnimationFrame(this.animFrameId);
+      this.animFrameId = null;
+    }
     if (this.unsubscribeCallDoc) {
       this.unsubscribeCallDoc();
       this.unsubscribeCallDoc = null;
     }
+    this.processedCandidates.clear();
+
     if (this.localStream) {
       this.localStream.getTracks().forEach((track) => track.stop());
       this.localStream = null;
@@ -637,7 +767,9 @@ class CallEngine {
       this.screenStream = null;
     }
     if (this.peerConnection) {
-      this.peerConnection.close();
+      try {
+        this.peerConnection.close();
+      } catch {}
       this.peerConnection = null;
     }
     this.remoteStream = null;

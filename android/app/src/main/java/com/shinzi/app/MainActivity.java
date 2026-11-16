@@ -18,6 +18,9 @@ import android.widget.Toast;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import com.getcapacitor.BridgeActivity;
 import com.google.firebase.messaging.FirebaseMessaging;
 
@@ -87,11 +90,24 @@ public class MainActivity extends BridgeActivity {
             }
         }
 
-        // 3. Request RECORD_AUDIO Permission for Voice Notes
+        // 3. Request RECORD_AUDIO & CAMERA Permission for Calls and Voice Notes
+        List<String> neededPermissions = new ArrayList<>();
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            neededPermissions.add(Manifest.permission.RECORD_AUDIO);
+            neededPermissions.add(Manifest.permission.MODIFY_AUDIO_SETTINGS);
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            neededPermissions.add(Manifest.permission.CAMERA);
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                neededPermissions.add(Manifest.permission.BLUETOOTH_CONNECT);
+            }
+        }
+        if (!neededPermissions.isEmpty()) {
             ActivityCompat.requestPermissions(
                     this,
-                    new String[]{Manifest.permission.RECORD_AUDIO, Manifest.permission.MODIFY_AUDIO_SETTINGS},
+                    neededPermissions.toArray(new String[0]),
                     PERMISSION_REQUEST_AUDIO
             );
         }
