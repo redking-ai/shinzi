@@ -43,6 +43,16 @@
             </intent-filter>
         </receiver>
 
+        <receiver
+            android:name=".CallActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.shinzi.app.ACTION_CALL_HANGUP" />
+                <action android:name="com.shinzi.app.ACTION_CALL_SELF_MUTE" />
+                <action android:name="com.shinzi.app.ACTION_CALL_MUTE_SOUND" />
+            </intent-filter>
+        </receiver>
+
         <!-- Firebase Cloud Messaging for Background & Killed State -->
         <service
             android:name=".ShinziFirebaseMessagingService"

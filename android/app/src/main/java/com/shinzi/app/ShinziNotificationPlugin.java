@@ -47,6 +47,9 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ShinziNotificationPlugin extends Plugin {
     public static final String CHANNEL_ID = "shinzi_messages";
     private static final String CHANNEL_NAME = "Direct Messages";
+    public static final String CALL_CHANNEL_ID = "shinzi_calls";
+    public static final String CALL_CHANNEL_NAME = "Voice & Video Calls";
+    private static final int CALL_NOTIFICATION_ID = 8888;
     private static ShinziNotificationPlugin instance;
 
     // Track app foreground and active conversation
@@ -109,6 +112,99 @@ public class ShinziNotificationPlugin extends Plugin {
                 .putString("current_name", name)
                 .apply();
         call.resolve();
+    }
+
+    public static void notifyCallAction(String action, String callId) {
+        if (instance != null) {
+            JSObject data = new JSObject();
+            data.put("action", action != null ? action : "");
+            data.put("callId", callId != null ? callId : "");
+            instance.notifyListeners("onCallAction", data);
+        }
+    }
+
+    @PluginMethod
+    public void showCallNotification(PluginCall call) {
+        String callerName = call.getString("callerName", "Friend");
+        String callId = call.getString("callId", "call_default");
+        boolean isConnected = Boolean.TRUE.equals(call.getBoolean("isConnected", false));
+        boolean isMuted = Boolean.TRUE.equals(call.getBoolean("isMuted", false));
+        boolean isDeafened = Boolean.TRUE.equals(call.getBoolean("isDeafened", false));
+
+        createCallNotificationChannel(getContext());
+
+        Intent openIntent = new Intent(getContext(), MainActivity.class);
+        openIntent.setAction(Intent.ACTION_VIEW);
+        openIntent.setData(Uri.parse("https://shinzi.vercel.app/call?id=" + callId));
+        openIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            flags |= PendingIntent.FLAG_MUTABLE;
+        }
+
+        PendingIntent openPI = PendingIntent.getActivity(getContext(), CALL_NOTIFICATION_ID, openIntent, flags);
+
+        Intent hangupIntent = new Intent(getContext(), CallActionReceiver.class);
+        hangupIntent.setAction(CallActionReceiver.ACTION_HANG_UP);
+        hangupIntent.putExtra("callId", callId);
+        hangupIntent.putExtra("notificationId", CALL_NOTIFICATION_ID);
+        PendingIntent hangupPI = PendingIntent.getBroadcast(getContext(), 1, hangupIntent, flags);
+
+        Intent muteIntent = new Intent(getContext(), CallActionReceiver.class);
+        muteIntent.setAction(CallActionReceiver.ACTION_SELF_MUTE);
+        muteIntent.putExtra("callId", callId);
+        PendingIntent mutePI = PendingIntent.getBroadcast(getContext(), 2, muteIntent, flags);
+
+        Intent deafenIntent = new Intent(getContext(), CallActionReceiver.class);
+        deafenIntent.setAction(CallActionReceiver.ACTION_MUTE_SOUND);
+        deafenIntent.putExtra("callId", callId);
+        PendingIntent deafenPI = PendingIntent.getBroadcast(getContext(), 3, deafenIntent, flags);
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(getContext(), CALL_CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_stat_shinzi)
+                .setContentTitle(callerName)
+                .setContentText(isConnected ? "Ongoing Call" : "Calling...")
+                .setContentIntent(openPI)
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setCategory(NotificationCompat.CATEGORY_CALL)
+                .setOngoing(true)
+                .setAutoCancel(false)
+                .addAction(0, "Hang up", hangupPI)
+                .addAction(0, isMuted ? "Unmute" : "Self Mute", mutePI)
+                .addAction(0, isDeafened ? "Undeafen" : "Mute", deafenPI);
+
+        if (isConnected) {
+            builder.setUsesChronometer(true);
+        }
+
+        NotificationManagerCompat.from(getContext()).notify(CALL_NOTIFICATION_ID, builder.build());
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void clearCallNotification(PluginCall call) {
+        NotificationManagerCompat.from(getContext()).cancel(CALL_NOTIFICATION_ID);
+        call.resolve();
+    }
+
+    private static void createCallNotificationChannel(Context context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel = new NotificationChannel(
+                    CALL_CHANNEL_ID,
+                    CALL_CHANNEL_NAME,
+                    NotificationManager.IMPORTANCE_HIGH
+            );
+            channel.setDescription("Active voice and video calls");
+            channel.enableVibration(false);
+            channel.setSound(null, null);
+            channel.setLockscreenVisibility(NotificationCompat.VISIBILITY_PUBLIC);
+
+            NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (manager != null) {
+                manager.createNotificationChannel(channel);
+            }
+        }
     }
 
     public static void setPendingNotificationChat(String convId, String senderUid) {

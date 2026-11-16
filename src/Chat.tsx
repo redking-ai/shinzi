@@ -98,6 +98,8 @@ import { DateTimePickerModal } from './DateTimePickerModal';
 import { searchKlipy, getCachedKlipy, type KlipyItem } from './klipyService';
 import { cacheAudioBlob } from './voiceCache';
 import { sendWebPushToUser } from './pushService';
+import { CallOverlay } from './CallOverlay';
+import { callEngine } from './callService';
 import { getUserEffectiveStatus, type EffectiveStatus } from './presenceService';
 import MuiAvatar from '@mui/material/Avatar';
 import {
@@ -4683,8 +4685,27 @@ const handleSearchMessage = async (target: Rec) => {
   };
 
   const startCallUI = (mode: 'voice' | 'video') => {
-    setCallMode(mode);
-    setShowCall(true);
+    const activeConv = selectedConversation || selected;
+    if (!activeConv || !uid) return;
+    const targetUid = otherMemberId(activeConv);
+    if (!targetUid) {
+      notify('Calls', 'Please select a direct conversation to call.');
+      return;
+    }
+    const targetProf = activeConv.memberProfiles?.[targetUid] || userLiveProfiles[targetUid];
+    const targetName = targetProf?.displayName || targetProf?.username || getConversationName(activeConv);
+    const targetAvatar = targetProf?.photoURL || '';
+
+    void callEngine.startCall({
+      convId: activeConv.id,
+      callerId: uid,
+      callerName: profile?.displayName || profile?.username || 'You',
+      callerPhotoURL: profile?.photoURL || '/icon-192.png',
+      receiverId: targetUid,
+      receiverName: targetName,
+      receiverPhotoURL: targetAvatar,
+      type: mode,
+    });
   };
 
   // ----------------------------------------------------------
@@ -6743,57 +6764,12 @@ const handleSearchMessage = async (target: Rec) => {
         </Sheet>
       )}
 
-      {screen === 'conversation' && showCall && (
-        <div className="shc-call" role="dialog" aria-modal="true" aria-label="Call">
-          <header className="shc-subheader">
-            <button
-              type="button"
-              className="shc-icon-btn"
-              onClick={() => setShowCall(false)}
-              aria-label="Close call"
-            >
-              <X size={24} />
-            </button>
-            <h1>{callMode === 'video' ? 'Video call' : 'Voice call'}</h1>
-          </header>
-
-          <div className="shc-call-center">
-            <Avatar name={getConversationName(selectedConversation)} />
-            <h2>{getConversationName(selectedConversation)}</h2>
-            <p>Calls are not connected yet, so this screen only shows the layout.</p>
-          </div>
-
-          <div className="shc-call-controls">
-            <button
-              type="button"
-              className={callMuted ? 'shc-call-btn shc-call-btn-on' : 'shc-call-btn'}
-              onClick={() => setCallMuted((value) => !value)}
-              aria-label={callMuted ? 'Unmute' : 'Mute'}
-            >
-              {callMuted ? <MicOff size={24} /> : <Mic size={24} />}
-            </button>
-
-            <button
-              type="button"
-              className="shc-call-btn shc-call-end"
-              onClick={() => setShowCall(false)}
-              aria-label="End call"
-            >
-              <PhoneOff size={25} />
-            </button>
-
-            {callMode === 'video' && (
-              <button
-                type="button"
-                className="shc-call-btn"
-                onClick={() => notify('Camera', 'Video is not connected yet.')}
-                aria-label="Camera"
-              >
-                <Video size={24} />
-              </button>
-            )}
-          </div>
-        </div>
+      {/* Real-time WebRTC Discord-style Call Overlay */}
+      {uid && (
+        <CallOverlay
+          currentUid={uid}
+          currentProfile={profile}
+        />
       )}
 
       {toastMessage && (
