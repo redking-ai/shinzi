@@ -15,6 +15,7 @@ import android.graphics.Paint;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
+import android.media.AudioAttributes;
 import android.media.RingtoneManager;
 import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
@@ -264,7 +265,7 @@ public class ShinziNotificationPlugin extends Plugin {
         declineIntent.putExtra("notificationId", CALL_NOTIFICATION_ID);
         PendingIntent declinePI = PendingIntent.getBroadcast(context, 11, declineIntent, flags);
 
-        Bitmap avatar = getOrDownloadAvatar(context, convId, callerName, avatarUrl);
+        Bitmap avatar = fetchCircularAvatar(context, avatarUrl, callerName, convId);
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CALL_CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_stat_shinzi)
@@ -327,8 +328,13 @@ public class ShinziNotificationPlugin extends Plugin {
                     NotificationManager.IMPORTANCE_HIGH
             );
             channel.setDescription("Active voice and video calls");
-            channel.enableVibration(false);
-            channel.setSound(null, null);
+            channel.enableVibration(true);
+            channel.setVibrationPattern(new long[]{0, 1000, 1000, 1000, 1000});
+            AudioAttributes audioAttributes = new AudioAttributes.Builder()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                    .build();
+            channel.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE), audioAttributes);
             channel.setLockscreenVisibility(NotificationCompat.VISIBILITY_PUBLIC);
 
             NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
