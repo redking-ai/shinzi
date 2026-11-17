@@ -316,6 +316,21 @@
   height: 100%;
   object-fit: cover;
   border-radius: 14px;
+  background-color: #0b0e14;
+}
+
+.shc-video-feed::-webkit-media-controls,
+.shc-video-feed::-webkit-media-controls-start-playback-button,
+.shc-video-feed::-webkit-media-controls-play-button,
+.shc-video-feed::-webkit-media-controls-enclosure,
+.shc-fullscreen-video::-webkit-media-controls,
+.shc-fullscreen-video::-webkit-media-controls-start-playback-button,
+.shc-fullscreen-video::-webkit-media-controls-play-button,
+.shc-fullscreen-video::-webkit-media-controls-enclosure {
+  display: none !important;
+  -webkit-appearance: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 /* Screen Sharing Box */

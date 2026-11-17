@@ -98,11 +98,31 @@ public class ShinziFirebaseMessagingService extends FirebaseMessagingService {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     piFlags |= PendingIntent.FLAG_MUTABLE;
                 }
-                PendingIntent pi = PendingIntent.getActivity(this, 8888, callIntent, piFlags);
-                try {
-                    pi.send();
-                } catch (Exception piErr) {
-                    startActivity(callIntent);
+
+                android.os.Bundle activityOptionsBundle = null;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    android.app.ActivityOptions options = android.app.ActivityOptions.makeBasic();
+                    options.setPendingIntentBackgroundActivityStartMode(
+                        android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                    );
+                    activityOptionsBundle = options.toBundle();
+                }
+
+                PendingIntent pi;
+                if (activityOptionsBundle != null) {
+                    pi = PendingIntent.getActivity(this, 8888, callIntent, piFlags, activityOptionsBundle);
+                    try {
+                        pi.send(this, 0, null, null, null, null, activityOptionsBundle);
+                    } catch (Exception piErr) {
+                        startActivity(callIntent, activityOptionsBundle);
+                    }
+                } else {
+                    pi = PendingIntent.getActivity(this, 8888, callIntent, piFlags);
+                    try {
+                        pi.send();
+                    } catch (Exception piErr) {
+                        startActivity(callIntent);
+                    }
                 }
             } catch (Exception e) {
                 Log.w(TAG, "Failed to launch incoming call activity: " + e.getMessage());

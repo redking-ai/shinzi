@@ -318,24 +318,45 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
     }
   }, [showAudioPopup]);
 
+  // Helper to safely attach stream to video with playsInline and autoPlay
+  const attachStreamToVideo = (
+    el: HTMLVideoElement | null,
+    stream: MediaStream | null,
+    isMuted: boolean = true
+  ) => {
+    if (!el) return;
+    if (el.srcObject !== stream) {
+      el.srcObject = stream;
+    }
+    el.muted = isMuted;
+    el.defaultMuted = isMuted;
+    el.playsInline = true;
+    el.setAttribute('playsinline', 'true');
+    el.setAttribute('webkit-playsinline', 'true');
+    if (stream) {
+      const playVideo = () => {
+        const p = el.play();
+        if (p !== undefined) {
+          p.catch(() => {});
+        }
+      };
+      el.onloadedmetadata = playVideo;
+      playVideo();
+    }
+  };
+
   // Bind media streams to HTML video elements
   useEffect(() => {
-    if (remoteVideoRef.current && remoteStream) {
-      remoteVideoRef.current.srcObject = remoteStream;
-    }
+    attachStreamToVideo(remoteVideoRef.current, remoteStream, true);
   }, [remoteStream, call?.callerVideoOn, call?.receiverVideoOn]);
 
   useEffect(() => {
-    if (localVideoRef.current && localStream) {
-      localVideoRef.current.srcObject = localStream;
-    }
+    attachStreamToVideo(localVideoRef.current, localStream, true);
   }, [localStream, call?.callerVideoOn, call?.receiverVideoOn]);
 
   useEffect(() => {
-    if (screenShareVideoRef.current && (screenStream || remoteStream)) {
-      const activeScreen = screenStream || remoteStream;
-      screenShareVideoRef.current.srcObject = activeScreen;
-    }
+    const activeScreen = screenStream || remoteStream;
+    attachStreamToVideo(screenShareVideoRef.current, activeScreen, true);
   }, [screenStream, remoteStream, call?.callerScreenSharing, call?.receiverScreenSharing]);
 
   useEffect(() => {
@@ -362,11 +383,28 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   const myName = currentProfile?.displayName || currentProfile?.username || 'You';
   const myAvatar = currentProfile?.photoURL || '/icon-192.png';
 
-  // Video and screen sharing status flags
-  const isOppositeVideoOn = isCaller ? Boolean(call?.receiverVideoOn) : Boolean(call?.callerVideoOn);
-  const isMyVideoOn = isCaller ? Boolean(call?.callerVideoOn) : Boolean(call?.receiverVideoOn);
+  // Video and screen sharing status flags (auto-fallback if video tracks exist)
+  const hasRemoteVideoTracks = Boolean(
+    remoteStream &&
+    remoteStream.getVideoTracks().length > 0 &&
+    remoteStream.getVideoTracks().some((t) => t.enabled)
+  );
+  const isOppositeVideoOn =
+    (isCaller ? Boolean(call?.receiverVideoOn) : Boolean(call?.callerVideoOn)) ||
+    (call?.type === 'video' && hasRemoteVideoTracks);
 
-  const isOppositeScreenSharing = isCaller ? Boolean(call?.receiverScreenSharing) : Boolean(call?.callerScreenSharing);
+  const hasLocalVideoTracks = Boolean(
+    localStream &&
+    localStream.getVideoTracks().length > 0 &&
+    localStream.getVideoTracks().some((t) => t.enabled)
+  );
+  const isMyVideoOn =
+    (isCaller ? Boolean(call?.callerVideoOn) : Boolean(call?.receiverVideoOn)) ||
+    (call?.type === 'video' && hasLocalVideoTracks);
+
+  const isOppositeScreenSharing =
+    (isCaller ? Boolean(call?.receiverScreenSharing) : Boolean(call?.callerScreenSharing)) ||
+    (call?.type === 'voice' && hasRemoteVideoTracks);
   const isMyScreenSharing = isCaller ? Boolean(call?.callerScreenSharing) : Boolean(call?.receiverScreenSharing);
 
   const isOppositeMuted = isCaller ? Boolean(call?.receiverMuted) : Boolean(call?.callerMuted);
@@ -540,9 +578,13 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
           </span>
         </div>
         <video
-          ref={screenShareVideoRef}
+          ref={(el) => {
+            screenShareVideoRef.current = el;
+            attachStreamToVideo(el, screenStream || remoteStream, true);
+          }}
           autoPlay
           playsInline
+          muted
           className="shc-fullscreen-video"
         />
       </div>
@@ -611,10 +653,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
                 <video
                   ref={(el) => {
                     screenShareVideoRef.current = el;
-                    if (el && (screenStream || remoteStream)) {
-                      el.srcObject = screenStream || remoteStream;
-                      el.play().catch(() => {});
-                    }
+                    attachStreamToVideo(el, screenStream || remoteStream, true);
                   }}
                   autoPlay
                   playsInline
@@ -628,10 +667,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
               <video
                 ref={(el) => {
                   remoteVideoRef.current = el;
-                  if (el && remoteStream) {
-                    el.srcObject = remoteStream;
-                    el.play().catch(() => {});
-                  }
+                  attachStreamToVideo(el, remoteStream, true);
                 }}
                 autoPlay
                 playsInline
@@ -689,10 +725,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
               <video
                 ref={(el) => {
                   localVideoRef.current = el;
-                  if (el && localStream) {
-                    el.srcObject = localStream;
-                    el.play().catch(() => {});
-                  }
+                  attachStreamToVideo(el, localStream, true);
                 }}
                 autoPlay
                 playsInline

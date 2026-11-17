@@ -21,6 +21,8 @@ import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.PowerManager;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.provider.Settings;
 import androidx.activity.result.ActivityResult;
 import androidx.core.app.NotificationCompat;
@@ -245,6 +247,7 @@ public class ShinziNotificationPlugin extends Plugin {
     }
 
     public static java.util.Map<String, String> pendingCall = null;
+    public static Vibrator sCallVibrator = null;
 
     @PluginMethod
     public void getPendingCall(PluginCall call) {
@@ -288,6 +291,24 @@ public class ShinziNotificationPlugin extends Plugin {
         pending.put("type", callType != null ? callType : "voice");
         pendingCall = pending;
 
+        // Continuous Non-Stop Looping Vibration until call is answered/declined/hung up
+        try {
+            if (sCallVibrator != null) {
+                sCallVibrator.cancel();
+                sCallVibrator = null;
+            }
+            Vibrator v = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+            if (v != null && v.hasVibrator()) {
+                long[] pattern = new long[]{0, 1000, 1000};
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    v.vibrate(VibrationEffect.createWaveform(pattern, 0)); // 0 repeats indefinitely!
+                } else {
+                    v.vibrate(pattern, 0);
+                }
+                sCallVibrator = v;
+            }
+        } catch (Exception ignored) {}
+
         Intent openIntent = new Intent(context, MainActivity.class);
         openIntent.setAction(Intent.ACTION_VIEW);
         openIntent.setData(Uri.parse("https://shinzi.vercel.app/call?id=" + callId + "&conv=" + convId + "&caller=" + safeCaller + "&avatar=" + safeAvatar + "&type=" + safeType));
@@ -298,9 +319,29 @@ public class ShinziNotificationPlugin extends Plugin {
             flags |= PendingIntent.FLAG_MUTABLE;
         }
 
-        PendingIntent openPI = PendingIntent.getActivity(context, CALL_NOTIFICATION_ID, openIntent, flags);
+        android.os.Bundle activityOptionsBundle = null;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            android.app.ActivityOptions options = android.app.ActivityOptions.makeBasic();
+            options.setPendingIntentBackgroundActivityStartMode(
+                android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+            );
+            activityOptionsBundle = options.toBundle();
+        }
+
+        PendingIntent openPI;
+        if (activityOptionsBundle != null) {
+            openPI = PendingIntent.getActivity(context, CALL_NOTIFICATION_ID, openIntent, flags, activityOptionsBundle);
+        } else {
+            openPI = PendingIntent.getActivity(context, CALL_NOTIFICATION_ID, openIntent, flags);
+        }
 
         Bitmap avatar = fetchCircularAvatar(context, avatarUrl, callerName, convId);
+
+        long[] pattern30s = new long[]{
+            0, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+            1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+            1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000
+        };
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CALL_INCOMING_CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_stat_shinzi)
@@ -313,7 +354,7 @@ public class ShinziNotificationPlugin extends Plugin {
                 .setOngoing(true)
                 .setAutoCancel(false)
                 .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))
-                .setVibrate(new long[]{0, 1000, 1000, 1000, 1000});
+                .setVibrate(pattern30s);
 
         if (avatar != null) {
             builder.setLargeIcon(avatar);
@@ -323,6 +364,16 @@ public class ShinziNotificationPlugin extends Plugin {
     }
 
     public static void clearCallNotificationNative(Context context) {
+        try {
+            if (sCallVibrator != null) {
+                sCallVibrator.cancel();
+                sCallVibrator = null;
+            }
+            Vibrator v = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+            if (v != null) {
+                v.cancel();
+            }
+        } catch (Exception ignored) {}
         NotificationManagerCompat.from(context).cancel(CALL_NOTIFICATION_ID);
     }
 
@@ -369,7 +420,11 @@ public class ShinziNotificationPlugin extends Plugin {
                 );
                 incomingChannel.setDescription("Incoming voice and video calls");
                 incomingChannel.enableVibration(true);
-                incomingChannel.setVibrationPattern(new long[]{0, 1000, 1000, 1000, 1000});
+                incomingChannel.setVibrationPattern(new long[]{
+                    0, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+                    1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+                    1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000
+                });
                 AudioAttributes audioAttributes = new AudioAttributes.Builder()
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)

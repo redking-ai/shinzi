@@ -13,6 +13,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
+import android.webkit.PermissionRequest;
 import android.webkit.URLUtil;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -50,6 +51,20 @@ public class MainActivity extends BridgeActivity {
                 CookieManager cookieManager = CookieManager.getInstance();
                 cookieManager.setAcceptCookie(true);
                 cookieManager.setAcceptThirdPartyCookies(webView, true);
+
+                // Auto-grant WebRTC Camera & Microphone in WebView WebChromeClient
+                webView.setWebChromeClient(new com.getcapacitor.BridgeWebChromeClient(getBridge()) {
+                    @Override
+                    public void onPermissionRequest(final PermissionRequest request) {
+                        runOnUiThread(() -> {
+                            try {
+                                request.grant(request.getResources());
+                            } catch (Exception e) {
+                                super.onPermissionRequest(request);
+                            }
+                        });
+                    }
+                });
 
                 // Native DownloadManager Listener
                 webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
