@@ -25,7 +25,6 @@ import Login from './Login';
 import Chat from './Chat';
 import Servers from './Servers';
 import NotificationManager from './NotificationManager';
-import { CallOverlay } from './CallOverlay';
 import { getCachedProfile, setCachedProfile, navigateTo } from './profileCache';
 import { updateUserPresence } from './presenceService';
 
@@ -478,10 +477,6 @@ useEffect(() => {
   return (
     <>
       <NotificationManager currentUid={user?.uid || null} />
-      <CallOverlay
-        currentUid={user?.uid || getCachedProfile(user?.uid || '')?.id || ''}
-        currentProfile={user?.uid ? getCachedProfile(user.uid) : null}
-      />
       {renderContent()}
     </>
   );

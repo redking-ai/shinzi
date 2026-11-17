@@ -221,7 +221,13 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
               }
               setCall({ ...data });
               callEngine.listenToCall(callId, convId || data.convId);
+            } else {
+              setCall(null);
+              callEngine.cleanup();
             }
+          } else {
+            setCall(null);
+            callEngine.cleanup();
           }
         } catch {}
       }

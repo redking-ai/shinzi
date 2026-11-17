@@ -35,23 +35,8 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(ShinziNotificationPlugin.class);
         super.onCreate(savedInstanceState);
 
-        // Turn screen on and show over lock screen for incoming calls
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-                setShowWhenLocked(true);
-                setTurnScreenOn(true);
-                KeyguardManager km = (KeyguardManager) getSystemService(KEYGUARD_SERVICE);
-                if (km != null) {
-                    km.requestDismissKeyguard(this, null);
-                }
-            }
-            getWindow().addFlags(
-                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
-                    WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD |
-                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON |
-                    WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-            );
-        } catch (Exception ignored) {}
+        // Turn screen on and show over lock screen ONLY for incoming calls
+        applyLockScreenFlagsIfNeeded(getIntent());
 
         // 1. Explicitly enable DomStorage, Database, and CookieManager + DownloadListener
         try {
@@ -132,20 +117,7 @@ public class MainActivity extends BridgeActivity {
             );
         }
 
-        // 4. Request Battery Optimization Exemption so Android OEM never kills background push
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
-                if (pm != null && !pm.isIgnoringBatteryOptimizations(getPackageName())) {
-                    Intent bIntent = new Intent();
-                    bIntent.setAction(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
-                    bIntent.setData(Uri.parse("package:" + getPackageName()));
-                    startActivity(bIntent);
-                }
-            }
-        } catch (Exception ignored) {}
-
-        // 5. Retrieve and cache current FCM Registration Token
+        // 4. Retrieve and cache current FCM Registration Token
         FirebaseMessaging.getInstance().getToken().addOnCompleteListener(task -> {
             if (task.isSuccessful() && task.getResult() != null) {
                 String token = task.getResult();
@@ -159,26 +131,38 @@ public class MainActivity extends BridgeActivity {
             }
         });
 
-        // 6. Handle Intent if app launched directly by tapping notification
+        // 5. Handle Intent if app launched directly by tapping notification or call
         handleChatIntent(getIntent());
+    }
+
+    private void applyLockScreenFlagsIfNeeded(Intent intent) {
+        if (intent == null) return;
+        Uri uri = intent.getData();
+        if (uri != null && uri.getQueryParameter("id") != null && !uri.getQueryParameter("id").isEmpty()) {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                    setShowWhenLocked(true);
+                    setTurnScreenOn(true);
+                    KeyguardManager km = (KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+                    if (km != null) {
+                        km.requestDismissKeyguard(this, null);
+                    }
+                }
+                getWindow().addFlags(
+                        WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
+                        WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD |
+                        WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON |
+                        WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                );
+            } catch (Exception ignored) {}
+        }
     }
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-                setShowWhenLocked(true);
-                setTurnScreenOn(true);
-            }
-            getWindow().addFlags(
-                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
-                    WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD |
-                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON |
-                    WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-            );
-        } catch (Exception ignored) {}
+        applyLockScreenFlagsIfNeeded(intent);
         handleChatIntent(intent);
     }
 

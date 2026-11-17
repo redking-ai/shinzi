@@ -96,6 +96,7 @@ import { DateTimePickerModal } from './DateTimePickerModal';
 import { searchKlipy, getCachedKlipy, type KlipyItem } from './klipyService';
 import { cacheAudioBlob } from './voiceCache';
 import { sendWebPushToUser } from './pushService';
+import { CallOverlay } from './CallOverlay';
 import { callEngine } from './callService';
 import { getUserEffectiveStatus, type EffectiveStatus } from './presenceService';
 import MuiAvatar from '@mui/material/Avatar';
@@ -6761,6 +6762,14 @@ const handleSearchMessage = async (target: Rec) => {
             </div>
           )}
         </Sheet>
+      )}
+
+      {/* Real-time WebRTC Discord-style Call Overlay */}
+      {uid && (
+        <CallOverlay
+          currentUid={uid}
+          currentProfile={profile}
+        />
       )}
 
       {toastMessage && (
