@@ -96,6 +96,7 @@ import { DateTimePickerModal } from './DateTimePickerModal';
 import { searchKlipy, getCachedKlipy, type KlipyItem } from './klipyService';
 import { cacheAudioBlob } from './voiceCache';
 import { sendWebPushToUser } from './pushService';
+import ErrorBoundary from './ErrorBoundary';
 import { CallOverlay } from './CallOverlay';
 import { callEngine } from './callService';
 import { getUserEffectiveStatus, type EffectiveStatus } from './presenceService';
@@ -1509,6 +1510,18 @@ export default function Chat({ onNavigate }: ChatProps) {
       }
     };
   }, [selected?.id]);
+
+  // Request Android battery optimization exemption safely after Chat UI has mounted
+  useEffect(() => {
+    if (!uid || typeof window === 'undefined') return;
+    const cap = (window as any).Capacitor;
+    if (cap?.Plugins?.ShinziNotification?.requestBatteryOptimization) {
+      const timer = window.setTimeout(() => {
+        void cap.Plugins.ShinziNotification.requestBatteryOptimization().catch(() => {});
+      }, 2500);
+      return () => window.clearTimeout(timer);
+    }
+  }, [uid]);
 
   const syncBackdropScroll = () => {
     if (inputRef.current && backdropRef.current) {
@@ -6766,10 +6779,12 @@ const handleSearchMessage = async (target: Rec) => {
 
       {/* Real-time WebRTC Discord-style Call Overlay */}
       {uid && (
-        <CallOverlay
-          currentUid={uid}
-          currentProfile={profile}
-        />
+        <ErrorBoundary name="CallOverlay" fallback={null}>
+          <CallOverlay
+            currentUid={uid}
+            currentProfile={profile}
+          />
+        </ErrorBoundary>
       )}
 
       {toastMessage && (

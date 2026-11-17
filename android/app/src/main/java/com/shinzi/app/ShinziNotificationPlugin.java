@@ -20,6 +20,8 @@ import android.media.RingtoneManager;
 import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.PowerManager;
+import android.provider.Settings;
 import androidx.activity.result.ActivityResult;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
@@ -117,6 +119,37 @@ public class ShinziNotificationPlugin extends Plugin {
                 .putString("current_uid", uid)
                 .putString("current_name", name)
                 .apply();
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void isBatteryOptimizationIgnored(PluginCall call) {
+        JSObject ret = new JSObject();
+        boolean ignored = true;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PowerManager pm = (PowerManager) getContext().getSystemService(Context.POWER_SERVICE);
+            if (pm != null) {
+                ignored = pm.isIgnoringBatteryOptimizations(getContext().getPackageName());
+            }
+        }
+        ret.put("ignored", ignored);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void requestBatteryOptimization(PluginCall call) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            try {
+                PowerManager pm = (PowerManager) getContext().getSystemService(Context.POWER_SERVICE);
+                if (pm != null && !pm.isIgnoringBatteryOptimizations(getContext().getPackageName())) {
+                    Intent intent = new Intent();
+                    intent.setAction(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                    intent.setData(Uri.parse("package:" + getContext().getPackageName()));
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    getContext().startActivity(intent);
+                }
+            } catch (Exception ignored) {}
+        }
         call.resolve();
     }
 

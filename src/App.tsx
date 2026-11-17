@@ -25,6 +25,7 @@ import Login from './Login';
 import Chat from './Chat';
 import Servers from './Servers';
 import NotificationManager from './NotificationManager';
+import ErrorBoundary from './ErrorBoundary';
 import { getCachedProfile, setCachedProfile, navigateTo } from './profileCache';
 import { updateUserPresence } from './presenceService';
 
@@ -140,6 +141,18 @@ useEffect(() => {
   };
 }, [user, signupBusy]);
 
+  // Cleanly sync URL path to /chat when logged in (without causing render-phase state dispatch)
+  useEffect(() => {
+    if (user && !signupBusy && profileExists) {
+      if (currentPath === '/' || currentPath === '/index.html') {
+        if (typeof window !== 'undefined') {
+          window.history.replaceState({}, '', '/chat');
+          setCurrentPath('/chat');
+        }
+      }
+    }
+  }, [user, signupBusy, profileExists, currentPath]);
+
   // Presence heartbeat & online/offline tracker
   useEffect(() => {
     if (!user?.uid) return;
@@ -238,7 +251,11 @@ useEffect(() => {
     // ==========================================================
 
     if (currentPath === '/chat') {
-      return <Chat />;
+      return (
+        <ErrorBoundary name="ChatScreen">
+          <Chat />
+        </ErrorBoundary>
+      );
     }
 
     // ==========================================================
@@ -333,8 +350,11 @@ useEffect(() => {
       }
 
       // Auto-navigate to chat for logged-in users visiting root / other screens
-      navigateTo('/chat');
-      return <Chat />;
+      return (
+        <ErrorBoundary name="ChatScreen">
+          <Chat />
+        </ErrorBoundary>
+      );
     }
 
     // ==========================================================

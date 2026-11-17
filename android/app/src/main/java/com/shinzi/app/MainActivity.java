@@ -117,22 +117,7 @@ public class MainActivity extends BridgeActivity {
             );
         }
 
-        // 4. Request Battery Optimization Exemption so Android never restricts background calls
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
-                    if (pm != null && !pm.isIgnoringBatteryOptimizations(getPackageName())) {
-                        Intent bIntent = new Intent();
-                        bIntent.setAction(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
-                        bIntent.setData(Uri.parse("package:" + getPackageName()));
-                        startActivity(bIntent);
-                    }
-                }
-            } catch (Exception ignored) {}
-        }, 1500);
-
-        // 5. Retrieve and cache current FCM Registration Token
+        // 4. Retrieve and cache current FCM Registration Token
         FirebaseMessaging.getInstance().getToken().addOnCompleteListener(task -> {
             if (task.isSuccessful() && task.getResult() != null) {
                 String token = task.getResult();
@@ -242,6 +227,14 @@ public class MainActivity extends BridgeActivity {
     public void onResume() {
         super.onResume();
         ShinziNotificationPlugin.isAppForeground = true;
+        try {
+            WebView webView = getBridge().getWebView();
+            if (webView != null) {
+                webView.onResume();
+                webView.resumeTimers();
+                webView.postInvalidate();
+            }
+        } catch (Exception ignored) {}
     }
 
     @Override
