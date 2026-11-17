@@ -46,7 +46,7 @@ export const downloadToDevice = async (url: string, fileName: string): Promise<b
   // 1. If running inside native Android Shinzi APK, use native Android DownloadManager
   try {
     const cap = (window as any).Capacitor;
-    if (cap?.Plugins?.ShinziNotification?.downloadFile) {
+    if (typeof cap?.Plugins?.ShinziNotification?.downloadFile === 'function') {
       const fullUrl = url.startsWith('http')
         ? url
         : new URL(url, (typeof window !== 'undefined' ? window.location.origin : 'https://shinzi.vercel.app')).href;

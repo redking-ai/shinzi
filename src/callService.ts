@@ -723,7 +723,7 @@ class CallEngine {
       try {
         const cap = (window as any).Capacitor;
         // In Android APK, trigger native MediaProjection permission dialog first!
-        if (cap?.Plugins?.ShinziNotification?.requestScreenCapture) {
+        if (typeof cap?.Plugins?.ShinziNotification?.requestScreenCapture === 'function') {
           try {
             await cap.Plugins.ShinziNotification.requestScreenCapture();
           } catch (nativeErr) {

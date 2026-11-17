@@ -178,7 +178,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
     // 2. Query pending native call if app was woken up from killed / locked state
     try {
       const cap = (window as any).Capacitor;
-      if (cap?.Plugins?.ShinziNotification?.getPendingCall) {
+      if (typeof cap?.Plugins?.ShinziNotification?.getPendingCall === 'function') {
         cap.Plugins.ShinziNotification.getPendingCall().then((res: any) => {
           if (res?.callId) {
             window.dispatchEvent(new CustomEvent('shinzi:incomingCall', { detail: res }));
@@ -244,25 +244,29 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
     if (call && (call.status === 'connected' || call.status === 'ringing')) {
       const isIncoming = call.status === 'ringing' && !isCaller;
       const callerTitle = isCaller ? (call.receiverName || 'Friend') : (call.callerName || 'Friend');
-      void cap.Plugins.ShinziNotification.showCallNotification({
-        callerName: callerTitle,
-        callId: call.id,
-        convId: call.convId,
-        callType: call.type,
-        isConnected: call.status === 'connected',
-        isIncoming,
-        isMuted: isSelfMuted,
-        isDeafened: isDeafened,
-      }).catch(() => {});
+      if (typeof cap?.Plugins?.ShinziNotification?.showCallNotification === 'function') {
+        void cap.Plugins.ShinziNotification.showCallNotification({
+          callerName: callerTitle,
+          callId: call.id,
+          convId: call.convId,
+          callType: call.type,
+          isConnected: call.status === 'connected',
+          isIncoming,
+          isMuted: isSelfMuted,
+          isDeafened: isDeafened,
+        }).catch(() => {});
+      }
     } else {
-      void cap.Plugins.ShinziNotification.clearCallNotification().catch(() => {});
+      if (typeof cap?.Plugins?.ShinziNotification?.clearCallNotification === 'function') {
+        void cap.Plugins.ShinziNotification.clearCallNotification().catch(() => {});
+      }
     }
   }, [call?.status, isSelfMuted, isDeafened, isCaller, call?.receiverName, call?.callerName, call?.id, call?.convId, call?.type]);
 
   // Native notification actions listener (Pickup, Decline, Hangup, Self Mute, Mute Sound)
   useEffect(() => {
     const cap = (window as any).Capacitor;
-    if (!cap?.Plugins?.ShinziNotification?.addListener) return;
+    if (typeof cap?.Plugins?.ShinziNotification?.addListener !== 'function') return;
 
     const handle = cap.Plugins.ShinziNotification.addListener(
       'onCallAction',

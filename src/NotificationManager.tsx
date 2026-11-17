@@ -110,13 +110,15 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
       };
 
       const fetchAndSync = () => {
-        cap.Plugins.ShinziNotification.getFcmToken()
-          .then((res: any) => {
-            if (res?.token) {
-              void syncToken(res.token);
-            }
-          })
-          .catch(() => {});
+        if (typeof cap?.Plugins?.ShinziNotification?.getFcmToken === 'function') {
+          cap.Plugins.ShinziNotification.getFcmToken()
+            .then((res: any) => {
+              if (res?.token) {
+                void syncToken(res.token);
+              }
+            })
+            .catch(() => {});
+        }
       };
 
       // Attempt immediately
@@ -263,7 +265,7 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
     // Inline reply listener from Android notification
     const cap = (window as any).Capacitor;
     let replyListenerHandle: any = null;
-    if (cap?.Plugins?.ShinziNotification?.addListener) {
+    if (typeof cap?.Plugins?.ShinziNotification?.addListener === 'function') {
       replyListenerHandle = cap.Plugins.ShinziNotification.addListener(
         'onNotificationReply',
         (data: { convId: string; replyText: string }) => {

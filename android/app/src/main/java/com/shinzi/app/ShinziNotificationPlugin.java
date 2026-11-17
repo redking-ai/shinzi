@@ -260,6 +260,7 @@ public class ShinziNotificationPlugin extends Plugin {
         }
     }
 
+    @PluginMethod
     public void clearCallNotification(PluginCall call) {
         clearCallNotificationNative(getContext());
         call.resolve();

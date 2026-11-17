@@ -1493,10 +1493,10 @@ export default function Chat({ onNavigate }: ChatProps) {
     if (typeof window !== 'undefined') {
       (window as any).__activeConversationId = selected?.id || null;
       const cap = (window as any).Capacitor;
-      if (cap?.Plugins?.ShinziNotification?.setActiveConversation) {
+      if (typeof cap?.Plugins?.ShinziNotification?.setActiveConversation === 'function') {
         void cap.Plugins.ShinziNotification.setActiveConversation({ convId: selected?.id || null }).catch(() => {});
       }
-      if (selected?.id && cap?.Plugins?.ShinziNotification?.clearConversationNotification) {
+      if (selected?.id && typeof cap?.Plugins?.ShinziNotification?.clearConversationNotification === 'function') {
         void cap.Plugins.ShinziNotification.clearConversationNotification({ convId: selected.id }).catch(() => {});
       }
     }
@@ -1504,7 +1504,7 @@ export default function Chat({ onNavigate }: ChatProps) {
       if (typeof window !== 'undefined') {
         (window as any).__activeConversationId = null;
         const cap = (window as any).Capacitor;
-        if (cap?.Plugins?.ShinziNotification?.setActiveConversation) {
+        if (typeof cap?.Plugins?.ShinziNotification?.setActiveConversation === 'function') {
           void cap.Plugins.ShinziNotification.setActiveConversation({ convId: null }).catch(() => {});
         }
       }
@@ -1515,7 +1515,7 @@ export default function Chat({ onNavigate }: ChatProps) {
   useEffect(() => {
     if (!uid || typeof window === 'undefined') return;
     const cap = (window as any).Capacitor;
-    if (cap?.Plugins?.ShinziNotification?.requestBatteryOptimization) {
+    if (typeof cap?.Plugins?.ShinziNotification?.requestBatteryOptimization === 'function') {
       const timer = window.setTimeout(() => {
         void cap.Plugins.ShinziNotification.requestBatteryOptimization().catch(() => {});
       }, 2500);
