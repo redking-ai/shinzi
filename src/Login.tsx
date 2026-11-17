@@ -1,4 +1,3 @@
-import { useDriveStore } from './driveStore';
 import {
   useState,
   type CSSProperties,
@@ -16,7 +15,6 @@ interface LoginProps {
 export default function Login({
   onBack,
 }: LoginProps) {
-  const { connectDrive } = useDriveStore();
   const [identity, setIdentity] = useState('');
   const [password, setPassword] = useState('');
 
@@ -94,11 +92,6 @@ export default function Login({
        * Once Firebase authentication succeeds,
        * App.tsx automatically changes the screen.
        */
-
-// Start Google Drive authorization after login.
-      // Force Google account selection and permission consent.
-      await connectDrive(true);
-
     } catch (error: unknown) {
       console.error(
         'Login error:',
