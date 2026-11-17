@@ -24,6 +24,7 @@ public class CallActionReceiver extends BroadcastReceiver {
 
         switch (action) {
             case ACTION_CALL_PICKUP:
+                ShinziNotificationPlugin.clearCallNotificationNative(context);
                 if (nm != null) nm.cancel(notifId);
                 ShinziNotificationPlugin.notifyCallAction("pickup", callId);
                 try {
@@ -38,11 +39,13 @@ public class CallActionReceiver extends BroadcastReceiver {
                 break;
 
             case ACTION_CALL_DECLINE:
+                ShinziNotificationPlugin.clearCallNotificationNative(context);
                 if (nm != null) nm.cancel(notifId);
                 ShinziNotificationPlugin.notifyCallAction("decline", callId);
                 break;
 
             case ACTION_HANG_UP:
+                ShinziNotificationPlugin.clearCallNotificationNative(context);
                 if (nm != null) nm.cancel(notifId);
                 ShinziNotificationPlugin.notifyCallAction("hangup", callId);
                 break;

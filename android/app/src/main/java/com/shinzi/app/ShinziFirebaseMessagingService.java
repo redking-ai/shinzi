@@ -36,6 +36,13 @@ public class ShinziFirebaseMessagingService extends FirebaseMessagingService {
 
         // 1. Handle incoming voice/video calls even when the app is completely DEAD or closed!
         if ("incoming_call".equals(type) || "call".equals(type)) {
+            // If the app is already in the foreground, CallOverlay in the webview handles the incoming call directly.
+            // Returning here prevents duplicate ringing, double vibration, and duplicate activity launches!
+            if (ShinziNotificationPlugin.isAppForeground) {
+                Log.d(TAG, "App in foreground: letting in-app CallOverlay handle incoming call.");
+                return;
+            }
+
             String senderName = data.get("senderName");
             if (senderName == null || senderName.isEmpty()) {
                 if (remoteMessage.getNotification() != null && remoteMessage.getNotification().getTitle() != null) {

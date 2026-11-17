@@ -113,6 +113,27 @@ class CallEngine {
     }
   }
 
+  // Create silent 2x2 dummy video track to pre-negotiate active sendrecv video m-line for seamless camera toggling
+  private createSilentVideoTrack(): MediaStreamTrack | null {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 2;
+      canvas.height = 2;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, 2, 2);
+      }
+      const stream = (canvas as any).captureStream ? (canvas as any).captureStream(1) : null;
+      if (stream && stream.getVideoTracks().length > 0) {
+        const track = stream.getVideoTracks()[0];
+        track.enabled = false;
+        return track;
+      }
+    } catch {}
+    return null;
+  }
+
   // 1. Audio Level Analyzer (Levels 0 to 4)
   private initAudioLevelAnalyzer(stream: MediaStream, isRemote: boolean) {
     try {
@@ -174,6 +195,11 @@ class CallEngine {
   // 2. Play Realistic Ringtones via Web Audio
   public playRingtone(type: 'incoming' | 'outgoing') {
     this.stopRingtone();
+    // On native Android APK, incoming calls ring with the native Android device ringtone
+    const isNative = typeof (window as any).Capacitor !== 'undefined' && Boolean((window as any).Capacitor?.isNativePlatform?.());
+    if (type === 'incoming' && isNative) {
+      return;
+    }
     try {
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioContextClass) return;
@@ -323,8 +349,8 @@ class CallEngine {
         this.peerConnection.addTransceiver('audio', { direction: 'sendrecv' });
       }
 
-      // Add local video track or reserve video transceiver
-      const videoTrack = this.localStream.getVideoTracks()[0];
+      // Add local video track or pre-negotiate with silent dummy track
+      const videoTrack = this.localStream.getVideoTracks()[0] || this.createSilentVideoTrack();
       if (videoTrack) {
         this.videoSender = this.peerConnection.addTrack(videoTrack, this.localStream);
       } else {
@@ -332,28 +358,30 @@ class CallEngine {
         this.videoSender = trans.sender;
       }
 
-      // Handle remote tracks with active unmute/track listener
+      // Handle remote tracks with stable stream handling
       this.peerConnection.ontrack = (event) => {
-        const updateRemote = () => {
-          if (event.streams && event.streams[0]) {
+        let streamChanged = false;
+        if (event.streams && event.streams[0]) {
+          if (this.remoteStream !== event.streams[0]) {
             this.remoteStream = event.streams[0];
-          } else if (event.track) {
-            if (!this.remoteStream) this.remoteStream = new MediaStream();
-            if (!this.remoteStream.getTracks().includes(event.track)) {
-              this.remoteStream.addTrack(event.track);
-            }
+            streamChanged = true;
           }
-          if (this.remoteStream && this.onRemoteStreamReady) {
-            this.onRemoteStreamReady(new MediaStream(this.remoteStream.getTracks()));
+        } else if (event.track) {
+          if (!this.remoteStream) {
+            this.remoteStream = new MediaStream();
+            streamChanged = true;
           }
-          if (event.track.kind === 'audio' && this.remoteStream) {
-            this.initAudioLevelAnalyzer(this.remoteStream, true);
+          if (!this.remoteStream.getTracks().includes(event.track)) {
+            this.remoteStream.addTrack(event.track);
+            streamChanged = true;
           }
-        };
-
-        updateRemote();
-        event.track.onunmute = () => updateRemote();
-        event.track.onended = () => updateRemote();
+        }
+        if (streamChanged && this.remoteStream && this.onRemoteStreamReady) {
+          this.onRemoteStreamReady(this.remoteStream);
+        }
+        if (event.track.kind === 'audio' && this.remoteStream) {
+          this.initAudioLevelAnalyzer(this.remoteStream, true);
+        }
       };
 
       // ICE Candidate gathering
@@ -444,8 +472,8 @@ class CallEngine {
         this.peerConnection.addTransceiver('audio', { direction: 'sendrecv' });
       }
 
-      // Add local video track or reserve video transceiver
-      const videoTrack = this.localStream.getVideoTracks()[0];
+      // Add local video track or pre-negotiate with silent dummy track
+      const videoTrack = this.localStream.getVideoTracks()[0] || this.createSilentVideoTrack();
       if (videoTrack) {
         this.videoSender = this.peerConnection.addTrack(videoTrack, this.localStream);
       } else {
@@ -454,26 +482,28 @@ class CallEngine {
       }
 
       this.peerConnection.ontrack = (event) => {
-        const updateRemote = () => {
-          if (event.streams && event.streams[0]) {
+        let streamChanged = false;
+        if (event.streams && event.streams[0]) {
+          if (this.remoteStream !== event.streams[0]) {
             this.remoteStream = event.streams[0];
-          } else if (event.track) {
-            if (!this.remoteStream) this.remoteStream = new MediaStream();
-            if (!this.remoteStream.getTracks().includes(event.track)) {
-              this.remoteStream.addTrack(event.track);
-            }
+            streamChanged = true;
           }
-          if (this.remoteStream && this.onRemoteStreamReady) {
-            this.onRemoteStreamReady(new MediaStream(this.remoteStream.getTracks()));
+        } else if (event.track) {
+          if (!this.remoteStream) {
+            this.remoteStream = new MediaStream();
+            streamChanged = true;
           }
-          if (event.track.kind === 'audio' && this.remoteStream) {
-            this.initAudioLevelAnalyzer(this.remoteStream, true);
+          if (!this.remoteStream.getTracks().includes(event.track)) {
+            this.remoteStream.addTrack(event.track);
+            streamChanged = true;
           }
-        };
-
-        updateRemote();
-        event.track.onunmute = () => updateRemote();
-        event.track.onended = () => updateRemote();
+        }
+        if (streamChanged && this.remoteStream && this.onRemoteStreamReady) {
+          this.onRemoteStreamReady(this.remoteStream);
+        }
+        if (event.track.kind === 'audio' && this.remoteStream) {
+          this.initAudioLevelAnalyzer(this.remoteStream, true);
+        }
       };
 
       this.peerConnection.onicecandidate = (event) => {
@@ -622,9 +652,14 @@ class CallEngine {
         track.stop();
         this.localStream?.removeTrack(track);
       });
-      // Replace with null on WebRTC video sender so remote sees camera turned off
+      // Replace with silent dummy track on WebRTC video sender so remote sees camera turned off
       if (this.videoSender) {
-        await this.videoSender.replaceTrack(null).catch(() => {});
+        const dummy = this.createSilentVideoTrack();
+        if (dummy) {
+          await this.videoSender.replaceTrack(dummy).catch(() => {});
+        } else {
+          await this.videoSender.replaceTrack(null).catch(() => {});
+        }
       }
       const field = this.isCaller ? 'activeCall.callerVideoOn' : 'activeCall.receiverVideoOn';
       if (this.activeCall.convId) {
@@ -764,87 +799,15 @@ class CallEngine {
         let stream: MediaStream | null = null;
         if (navigator.mediaDevices && typeof navigator.mediaDevices.getDisplayMedia === 'function') {
           try {
-            stream = await navigator.mediaDevices.getDisplayMedia({
-              video: {
-                cursor: 'always',
-                frameRate: { ideal: 60, min: 30 },
-              } as any,
-              audio: false,
-            });
+            stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
           } catch (displayErr) {
             console.warn('[CallEngine] getDisplayMedia error:', displayErr);
           }
         }
 
-        // Webview / Mobile Fallback: Active animated screen canvas capture (continuous 30fps)
         if (!stream) {
-          const canvas = document.createElement('canvas');
-          canvas.width = 1280;
-          canvas.height = 720;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            let frameCount = 0;
-            const drawScreenFallback = () => {
-              frameCount++;
-              // Background gradient
-              const grad = ctx.createLinearGradient(0, 0, 1280, 720);
-              grad.addColorStop(0, '#0b0e14');
-              grad.addColorStop(1, '#1e1f29');
-              ctx.fillStyle = grad;
-              ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-              // Pulsing circle
-              const pulse = Math.sin(frameCount * 0.08) * 15;
-              ctx.fillStyle = 'rgba(88, 101, 242, 0.2)';
-              ctx.beginPath();
-              ctx.arc(640, 300, 95 + pulse, 0, Math.PI * 2);
-              ctx.fill();
-
-              ctx.fillStyle = '#5865f2';
-              ctx.beginPath();
-              ctx.arc(640, 300, 75, 0, Math.PI * 2);
-              ctx.fill();
-
-              // Icon / Text
-              ctx.fillStyle = '#ffffff';
-              ctx.font = 'bold 36px sans-serif';
-              ctx.textAlign = 'center';
-              ctx.fillText('Shinzi Screen Share', 640, 440);
-
-              ctx.font = '20px sans-serif';
-              ctx.fillStyle = '#949ba4';
-              const now = new Date();
-              const timeStr = now.toLocaleTimeString();
-              ctx.fillText(`Live Stream Active • ${timeStr}`, 640, 480);
-
-              // Animated wave bar at the bottom
-              ctx.fillStyle = '#5865f2';
-              const barWidth = 400;
-              const barX = 640 - barWidth / 2;
-              const fillWidth = ((frameCount * 3) % barWidth);
-              ctx.fillRect(barX, 520, fillWidth, 4);
-            };
-
-            drawScreenFallback();
-            try {
-              stream = (canvas as any).captureStream ? (canvas as any).captureStream(30) : null;
-            } catch {}
-
-            // Keep redrawing at 30fps so WebRTC continuously receives live frames!
-            if (this.screenAnimInterval) {
-              clearInterval(this.screenAnimInterval);
-            }
-            this.screenAnimInterval = setInterval(() => {
-              if (!this.screenStream) {
-                if (this.screenAnimInterval) {
-                  clearInterval(this.screenAnimInterval);
-                  this.screenAnimInterval = null;
-                }
-                return;
-              }
-              drawScreenFallback();
-            }, 1000 / 30);
-          }
+          console.warn('[CallEngine] Display media stream not available.');
+          return false;
         }
 
         this.screenStream = stream;

@@ -361,7 +361,9 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
 
   useEffect(() => {
     if (remoteAudioRef.current && remoteStream) {
-      remoteAudioRef.current.srcObject = remoteStream;
+      if (remoteAudioRef.current.srcObject !== remoteStream) {
+        remoteAudioRef.current.srcObject = remoteStream;
+      }
       remoteAudioRef.current.play().catch(() => {});
     }
   }, [remoteStream]);
@@ -383,28 +385,11 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   const myName = currentProfile?.displayName || currentProfile?.username || 'You';
   const myAvatar = currentProfile?.photoURL || '/icon-192.png';
 
-  // Video and screen sharing status flags (auto-fallback if video tracks exist)
-  const hasRemoteVideoTracks = Boolean(
-    remoteStream &&
-    remoteStream.getVideoTracks().length > 0 &&
-    remoteStream.getVideoTracks().some((t) => t.enabled)
-  );
-  const isOppositeVideoOn =
-    (isCaller ? Boolean(call?.receiverVideoOn) : Boolean(call?.callerVideoOn)) ||
-    (call?.type === 'video' && hasRemoteVideoTracks);
+  // Video and screen sharing status flags (strictly driven by actual user state)
+  const isOppositeVideoOn = isCaller ? Boolean(call?.receiverVideoOn) : Boolean(call?.callerVideoOn);
+  const isMyVideoOn = isCaller ? Boolean(call?.callerVideoOn) : Boolean(call?.receiverVideoOn);
 
-  const hasLocalVideoTracks = Boolean(
-    localStream &&
-    localStream.getVideoTracks().length > 0 &&
-    localStream.getVideoTracks().some((t) => t.enabled)
-  );
-  const isMyVideoOn =
-    (isCaller ? Boolean(call?.callerVideoOn) : Boolean(call?.receiverVideoOn)) ||
-    (call?.type === 'video' && hasLocalVideoTracks);
-
-  const isOppositeScreenSharing =
-    (isCaller ? Boolean(call?.receiverScreenSharing) : Boolean(call?.callerScreenSharing)) ||
-    (call?.type === 'voice' && hasRemoteVideoTracks);
+  const isOppositeScreenSharing = isCaller ? Boolean(call?.receiverScreenSharing) : Boolean(call?.callerScreenSharing);
   const isMyScreenSharing = isCaller ? Boolean(call?.callerScreenSharing) : Boolean(call?.receiverScreenSharing);
 
   const isOppositeMuted = isCaller ? Boolean(call?.receiverMuted) : Boolean(call?.callerMuted);

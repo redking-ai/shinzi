@@ -200,11 +200,9 @@ public class ShinziNotificationPlugin extends Plugin {
                 .setAutoCancel(false);
 
         if (isIncoming) {
-            // Incoming Call Screen Notification (No spammy action buttons; directly opens incoming call screen)
-            builder.setContentText("video".equals(callType) ? "Incoming Video Call..." : "Incoming Voice Call...")
-                    .setFullScreenIntent(openPI, true)
-                    .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))
-                    .setVibrate(new long[]{0, 1000, 1000, 1000, 1000});
+            showIncomingCallNotificationNative(getContext(), callerName, "", convId, callId, callType);
+            call.resolve();
+            return;
         } else if (isConnected) {
             // Ongoing Active Call
             builder.setContentText("Ongoing Call")
@@ -337,6 +335,35 @@ public class ShinziNotificationPlugin extends Plugin {
 
         Bitmap avatar = fetchCircularAvatar(context, avatarUrl, callerName, convId);
 
+        Intent declineIntent = new Intent(context, CallActionReceiver.class);
+        declineIntent.setAction(CallActionReceiver.ACTION_CALL_DECLINE);
+        declineIntent.putExtra("callId", callId);
+        declineIntent.putExtra("notificationId", CALL_NOTIFICATION_ID);
+        PendingIntent declinePI = PendingIntent.getBroadcast(context, 10, declineIntent, flags);
+
+        Intent answerIntent = new Intent(context, MainActivity.class);
+        answerIntent.setAction(Intent.ACTION_VIEW);
+        answerIntent.setData(openIntent.getData());
+        answerIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent answerPI;
+        if (activityOptionsBundle != null) {
+            answerPI = PendingIntent.getActivity(context, 20, answerIntent, flags, activityOptionsBundle);
+        } else {
+            answerPI = PendingIntent.getActivity(context, 20, answerIntent, flags);
+        }
+
+        Person.Builder personBuilder = new Person.Builder().setName(callerName);
+        if (avatar != null) {
+            personBuilder.setIcon(IconCompat.createWithBitmap(avatar));
+        }
+        Person callerPerson = personBuilder.build();
+
+        NotificationCompat.CallStyle callStyle = NotificationCompat.CallStyle.forIncomingCall(
+                callerPerson,
+                declinePI,
+                answerPI
+        );
+
         long[] pattern30s = new long[]{
             0, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
             1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
@@ -349,10 +376,12 @@ public class ShinziNotificationPlugin extends Plugin {
                 .setContentText("video".equals(callType) ? "Incoming Video Call..." : "Incoming Voice Call...")
                 .setContentIntent(openPI)
                 .setFullScreenIntent(openPI, true)
+                .setStyle(callStyle)
                 .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setCategory(NotificationCompat.CATEGORY_CALL)
                 .setOngoing(true)
                 .setAutoCancel(false)
+                .setTimeoutAfter(35000)
                 .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))
                 .setVibrate(pattern30s);
 
