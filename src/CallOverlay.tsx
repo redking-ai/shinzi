@@ -153,14 +153,14 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
       const urlAvatar = sp.get('avatar');
       const urlType = (sp.get('type') || 'voice') as 'voice' | 'video';
 
-      if (urlCallId && urlCaller && (!call || call.id !== urlCallId)) {
+      if (urlCallId && (!call || call.id !== urlCallId)) {
         const immediateCall: CallSession = {
           id: urlCallId,
           convId: urlConvId || 'default',
           callerId: 'remote',
-          callerName: urlCaller,
+          callerName: urlCaller || 'Incoming Call',
           callerPhotoURL: urlAvatar || '/icon-192.png',
-          receiverId: currentUid,
+          receiverId: currentUid || 'self',
           receiverName: currentProfile?.displayName || 'You',
           receiverPhotoURL: currentProfile?.photoURL || '/icon-192.png',
           type: urlType,
@@ -175,29 +175,39 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
       }
     } catch {}
 
+    // 2. Query pending native call if app was woken up from killed / locked state
+    try {
+      const cap = (window as any).Capacitor;
+      if (cap?.Plugins?.ShinziNotification?.getPendingCall) {
+        cap.Plugins.ShinziNotification.getPendingCall().then((res: any) => {
+          if (res?.callId) {
+            window.dispatchEvent(new CustomEvent('shinzi:incomingCall', { detail: res }));
+          }
+        }).catch(() => {});
+      }
+    } catch {}
+
     const handleIncomingCallEvent = async (e: any) => {
       const { callId, convId, caller, avatar, type } = e.detail || {};
       if (callId && (!call || call.id !== callId)) {
-        if (caller) {
-          const immediateCall: CallSession = {
-            id: callId,
-            convId: convId || 'default',
-            callerId: 'remote',
-            callerName: caller,
-            callerPhotoURL: avatar || '/icon-192.png',
-            receiverId: currentUid,
-            receiverName: currentProfile?.displayName || 'You',
-            receiverPhotoURL: currentProfile?.photoURL || '/icon-192.png',
-            type: type || 'voice',
-            status: 'ringing',
-            startedAt: Date.now(),
-          };
-          callEngine.activeCall = immediateCall;
-          callEngine.isCaller = false;
-          callEngine.playRingtone('incoming');
-          setCall(immediateCall);
-          callEngine.listenToCall(callId, convId || undefined);
-        }
+        const immediateCall: CallSession = {
+          id: callId,
+          convId: convId || 'default',
+          callerId: 'remote',
+          callerName: caller || 'Incoming Call',
+          callerPhotoURL: avatar || '/icon-192.png',
+          receiverId: currentUid || 'self',
+          receiverName: currentProfile?.displayName || 'You',
+          receiverPhotoURL: currentProfile?.photoURL || '/icon-192.png',
+          type: type || 'voice',
+          status: 'ringing',
+          startedAt: Date.now(),
+        };
+        callEngine.activeCall = immediateCall;
+        callEngine.isCaller = false;
+        callEngine.playRingtone('incoming');
+        setCall(immediateCall);
+        callEngine.listenToCall(callId, convId || undefined);
 
         try {
           const callSnap = await getDoc(doc(db, 'calls', callId));

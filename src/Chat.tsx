@@ -96,7 +96,6 @@ import { DateTimePickerModal } from './DateTimePickerModal';
 import { searchKlipy, getCachedKlipy, type KlipyItem } from './klipyService';
 import { cacheAudioBlob } from './voiceCache';
 import { sendWebPushToUser } from './pushService';
-import { CallOverlay } from './CallOverlay';
 import { callEngine } from './callService';
 import { getUserEffectiveStatus, type EffectiveStatus } from './presenceService';
 import MuiAvatar from '@mui/material/Avatar';
@@ -4677,6 +4676,11 @@ const handleSearchMessage = async (target: Rec) => {
   };
 
   const startCallUI = (mode: 'voice' | 'video') => {
+    const isNativeApp = !!(window as any).Capacitor?.isNativePlatform?.();
+    if (!isNativeApp) {
+      notify('Shinzi Calls', 'Voice and Video calling is exclusively available in the Shinzi Android App. Please download the APK to make calls!');
+      return;
+    }
     const activeConv = selectedConversation || selected;
     if (!activeConv || !uid) return;
     const targetUid = otherMemberId(activeConv);
@@ -6757,14 +6761,6 @@ const handleSearchMessage = async (target: Rec) => {
             </div>
           )}
         </Sheet>
-      )}
-
-      {/* Real-time WebRTC Discord-style Call Overlay */}
-      {uid && (
-        <CallOverlay
-          currentUid={uid}
-          currentProfile={profile}
-        />
       )}
 
       {toastMessage && (

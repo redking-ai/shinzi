@@ -73,6 +73,15 @@ public class ShinziFirebaseMessagingService extends FirebaseMessagingService {
                 String safeCaller = senderName != null ? URLEncoder.encode(senderName, "UTF-8") : "Friend";
                 String safeAvatar = avatarUrl != null ? URLEncoder.encode(avatarUrl, "UTF-8") : "";
                 String safeType = callType != null ? URLEncoder.encode(callType, "UTF-8") : "voice";
+
+                java.util.Map<String, String> pending = new java.util.HashMap<>();
+                pending.put("callId", effectiveCallId);
+                pending.put("convId", effectiveConvId);
+                pending.put("caller", senderName != null ? senderName : "Friend");
+                pending.put("avatar", avatarUrl != null ? avatarUrl : "");
+                pending.put("type", callType != null ? callType : "voice");
+                ShinziNotificationPlugin.pendingCall = pending;
+
                 Uri callUri = Uri.parse("https://shinzi.vercel.app/call?id=" + effectiveCallId + "&conv=" + effectiveConvId + "&caller=" + safeCaller + "&avatar=" + safeAvatar + "&type=" + safeType);
 
                 Intent callIntent = new Intent(this, MainActivity.class);

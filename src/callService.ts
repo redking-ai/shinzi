@@ -61,6 +61,7 @@ class CallEngine {
 
   public activeCall: CallSession | null = null;
   public isCaller: boolean = false;
+  private videoSender: RTCRtpSender | null = null;
 
   private ringtoneInterval: number | null = null;
   private ringtoneCtx: AudioContext | null = null;
@@ -312,9 +313,10 @@ class CallEngine {
       // Add local video track or reserve video transceiver
       const videoTrack = this.localStream.getVideoTracks()[0];
       if (videoTrack) {
-        this.peerConnection.addTrack(videoTrack, this.localStream);
+        this.videoSender = this.peerConnection.addTrack(videoTrack, this.localStream);
       } else {
-        this.peerConnection.addTransceiver('video', { direction: 'sendrecv' });
+        const trans = this.peerConnection.addTransceiver('video', { direction: 'sendrecv' });
+        this.videoSender = trans.sender;
       }
 
       // Handle remote tracks
@@ -440,9 +442,10 @@ class CallEngine {
       // Add local video track or reserve video transceiver
       const videoTrack = this.localStream.getVideoTracks()[0];
       if (videoTrack) {
-        this.peerConnection.addTrack(videoTrack, this.localStream);
+        this.videoSender = this.peerConnection.addTrack(videoTrack, this.localStream);
       } else {
-        this.peerConnection.addTransceiver('video', { direction: 'sendrecv' });
+        const trans = this.peerConnection.addTransceiver('video', { direction: 'sendrecv' });
+        this.videoSender = trans.sender;
       }
 
       this.peerConnection.ontrack = (event) => {
@@ -607,11 +610,8 @@ class CallEngine {
         this.localStream?.removeTrack(track);
       });
       // Replace with null on WebRTC video sender so remote sees camera turned off
-      if (this.peerConnection) {
-        const videoSender = this.peerConnection.getSenders().find((s) => s.track?.kind === 'video' || (s.transport && !s.track));
-        if (videoSender) {
-          await videoSender.replaceTrack(null).catch(() => {});
-        }
+      if (this.videoSender) {
+        await this.videoSender.replaceTrack(null).catch(() => {});
       }
       const field = this.isCaller ? 'activeCall.callerVideoOn' : 'activeCall.receiverVideoOn';
       if (this.activeCall.convId) {
@@ -640,13 +640,10 @@ class CallEngine {
           this.localStream?.addTrack(videoTrack);
           if (this.onLocalStreamReady) this.onLocalStreamReady(this.localStream);
 
-          if (this.peerConnection) {
-            const videoSender = this.peerConnection.getSenders().find((s) => s.track?.kind === 'video' || (s.transport && !s.track));
-            if (videoSender) {
-              await videoSender.replaceTrack(videoTrack).catch(() => {});
-            } else {
-              this.peerConnection.addTrack(videoTrack, this.localStream!);
-            }
+          if (this.videoSender) {
+            await this.videoSender.replaceTrack(videoTrack).catch(() => {});
+          } else if (this.peerConnection) {
+            this.videoSender = this.peerConnection.addTrack(videoTrack, this.localStream!);
           }
 
           const field = this.isCaller ? 'activeCall.callerVideoOn' : 'activeCall.receiverVideoOn';
@@ -687,11 +684,10 @@ class CallEngine {
       if (newTrack) {
         this.localStream.addTrack(newTrack);
         if (this.onLocalStreamReady) this.onLocalStreamReady(this.localStream);
-        const sender = this.peerConnection.getSenders().find((s) => s.track?.kind === 'video' || (s.transport && !s.track));
-        if (sender) {
-          await sender.replaceTrack(newTrack);
-        } else {
-          this.peerConnection.addTrack(newTrack, this.localStream);
+        if (this.videoSender) {
+          await this.videoSender.replaceTrack(newTrack).catch(() => {});
+        } else if (this.peerConnection) {
+          this.videoSender = this.peerConnection.addTrack(newTrack, this.localStream);
         }
       }
     } catch (e) {
@@ -711,11 +707,8 @@ class CallEngine {
 
       // Revert video sender to active camera track or null
       const camTrack = this.localStream?.getVideoTracks()[0] || null;
-      if (this.peerConnection) {
-        const videoSender = this.peerConnection.getSenders().find((s) => s.track?.kind === 'video' || (s.transport && !s.track));
-        if (videoSender) {
-          await videoSender.replaceTrack(camTrack).catch(() => {});
-        }
+      if (this.videoSender) {
+        await this.videoSender.replaceTrack(camTrack).catch(() => {});
       }
 
       const field = this.isCaller ? 'activeCall.callerScreenSharing' : 'activeCall.receiverScreenSharing';
@@ -787,12 +780,11 @@ class CallEngine {
         if (this.onScreenStreamReady) this.onScreenStreamReady(this.screenStream);
 
         const videoTrack = stream?.getVideoTracks()[0];
-        if (videoTrack && this.peerConnection) {
-          const videoSender = this.peerConnection.getSenders().find((s) => s.track?.kind === 'video' || (s.transport && !s.track));
-          if (videoSender) {
-            await videoSender.replaceTrack(videoTrack).catch(() => {});
-          } else {
-            this.peerConnection.addTrack(videoTrack, stream!);
+        if (videoTrack) {
+          if (this.videoSender) {
+            await this.videoSender.replaceTrack(videoTrack).catch(() => {});
+          } else if (this.peerConnection) {
+            this.videoSender = this.peerConnection.addTrack(videoTrack, stream!);
           }
 
           videoTrack.onended = () => {
@@ -936,6 +928,7 @@ class CallEngine {
       this.ringTimeoutId = null;
     }
     this.candidateQueue = [];
+    this.videoSender = null;
     if (this.animFrameId) {
       cancelAnimationFrame(this.animFrameId);
       this.animFrameId = null;

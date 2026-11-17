@@ -44,14 +44,13 @@ public class MainActivity extends BridgeActivity {
                 if (km != null) {
                     km.requestDismissKeyguard(this, null);
                 }
-            } else {
-                getWindow().addFlags(
-                        WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
-                        WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD |
-                        WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON |
-                        WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-                );
             }
+            getWindow().addFlags(
+                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
+                    WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD |
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON |
+                    WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+            );
         } catch (Exception ignored) {}
 
         // 1. Explicitly enable DomStorage, Database, and CookieManager + DownloadListener
@@ -168,6 +167,18 @@ public class MainActivity extends BridgeActivity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                setShowWhenLocked(true);
+                setTurnScreenOn(true);
+            }
+            getWindow().addFlags(
+                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
+                    WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD |
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON |
+                    WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+            );
+        } catch (Exception ignored) {}
         handleChatIntent(intent);
     }
 
@@ -183,20 +194,32 @@ public class MainActivity extends BridgeActivity {
                 String caller = uri.getQueryParameter("caller");
                 String avatar = uri.getQueryParameter("avatar");
                 String type = uri.getQueryParameter("type");
-                new Handler(Looper.getMainLooper()).post(() -> {
-                    try {
-                        WebView webView = getBridge().getWebView();
-                        if (webView != null) {
-                            String safeCall = callId.replace("'", "\\'");
-                            String safeConv = convId != null ? convId.replace("'", "\\'") : "";
-                            String safeCaller = caller != null ? caller.replace("'", "\\'") : "Friend";
-                            String safeAvatar = avatar != null ? avatar.replace("'", "\\'") : "";
-                            String safeType = type != null ? type.replace("'", "\\'") : "voice";
-                            String js = "window.dispatchEvent(new CustomEvent('shinzi:incomingCall', { detail: { callId: '" + safeCall + "', convId: '" + safeConv + "', caller: '" + safeCaller + "', avatar: '" + safeAvatar + "', type: '" + safeType + "' } }));";
-                            webView.evaluateJavascript(js, null);
-                        }
-                    } catch (Exception ignored) {}
-                });
+
+                java.util.Map<String, String> pending = new java.util.HashMap<>();
+                pending.put("callId", callId);
+                pending.put("convId", convId != null ? convId : "");
+                pending.put("caller", caller != null ? caller : "Friend");
+                pending.put("avatar", avatar != null ? avatar : "");
+                pending.put("type", type != null ? type : "voice");
+                ShinziNotificationPlugin.pendingCall = pending;
+
+                Handler handler = new Handler(Looper.getMainLooper());
+                for (int delay : new int[]{0, 500, 1200, 2500}) {
+                    handler.postDelayed(() -> {
+                        try {
+                            WebView webView = getBridge().getWebView();
+                            if (webView != null) {
+                                String safeCall = callId.replace("'", "\\'");
+                                String safeConv = convId != null ? convId.replace("'", "\\'") : "";
+                                String safeCaller = caller != null ? caller.replace("'", "\\'") : "Friend";
+                                String safeAvatar = avatar != null ? avatar.replace("'", "\\'") : "";
+                                String safeType = type != null ? type.replace("'", "\\'") : "voice";
+                                String js = "window.dispatchEvent(new CustomEvent('shinzi:incomingCall', { detail: { callId: '" + safeCall + "', convId: '" + safeConv + "', caller: '" + safeCaller + "', avatar: '" + safeAvatar + "', type: '" + safeType + "' } }));";
+                                webView.evaluateJavascript(js, null);
+                            }
+                        } catch (Exception ignored) {}
+                    }, delay);
+                }
             } else if ((convId != null && !convId.isEmpty()) || (userUid != null && !userUid.isEmpty())) {
                 ShinziNotificationPlugin.setPendingNotificationChat(convId, userUid);
 

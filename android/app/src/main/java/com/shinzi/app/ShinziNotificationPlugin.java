@@ -211,7 +211,22 @@ public class ShinziNotificationPlugin extends Plugin {
         call.resolve();
     }
 
+    public static java.util.Map<String, String> pendingCall = null;
+
     @PluginMethod
+    public void getPendingCall(PluginCall call) {
+        if (pendingCall != null) {
+            JSObject ret = new JSObject();
+            for (java.util.Map.Entry<String, String> entry : pendingCall.entrySet()) {
+                ret.put(entry.getKey(), entry.getValue());
+            }
+            pendingCall = null;
+            call.resolve(ret);
+        } else {
+            call.resolve();
+        }
+    }
+
     public void clearCallNotification(PluginCall call) {
         clearCallNotificationNative(getContext());
         call.resolve();
@@ -227,9 +242,21 @@ public class ShinziNotificationPlugin extends Plugin {
     ) {
         createCallNotificationChannel(context);
 
+        String safeCaller = callerName != null ? Uri.encode(callerName) : "Friend";
+        String safeAvatar = avatarUrl != null ? Uri.encode(avatarUrl) : "";
+        String safeType = callType != null ? Uri.encode(callType) : "voice";
+
+        java.util.Map<String, String> pending = new java.util.HashMap<>();
+        pending.put("callId", callId);
+        pending.put("convId", convId != null ? convId : "");
+        pending.put("caller", callerName != null ? callerName : "Friend");
+        pending.put("avatar", avatarUrl != null ? avatarUrl : "");
+        pending.put("type", callType != null ? callType : "voice");
+        pendingCall = pending;
+
         Intent openIntent = new Intent(context, MainActivity.class);
         openIntent.setAction(Intent.ACTION_VIEW);
-        openIntent.setData(Uri.parse("https://shinzi.vercel.app/call?id=" + callId + "&conv=" + convId));
+        openIntent.setData(Uri.parse("https://shinzi.vercel.app/call?id=" + callId + "&conv=" + convId + "&caller=" + safeCaller + "&avatar=" + safeAvatar + "&type=" + safeType));
         openIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
         int flags = PendingIntent.FLAG_UPDATE_CURRENT;
