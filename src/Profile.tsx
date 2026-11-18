@@ -28,6 +28,7 @@ import {
   setCachedAssetMeta,
   navigateTo,
 } from './profileCache';
+import { getAbsoluteApiUrl } from './apiUtils';
 import { updateUserPresence, type OnlineStatusMode } from './presenceService';
 import { applyTextStyles, validateTextStyleSyntax, renderStyledContent } from './textStyleService';
 import './Profile.css';
@@ -443,36 +444,6 @@ useEffect(() => {
             return '';
           }
 
-          if (asset.provider !== 'google_drive') {
-            console.error(
-              `[PROFILE IMAGE] Unexpected ${kind} provider:`,
-              asset.provider,
-            );
-            return '';
-          }
-
-          if (
-            typeof asset.providerFileId !== 'string' ||
-            !asset.providerFileId.trim()
-          ) {
-            console.error(
-              `[PROFILE IMAGE] ${kind} asset has no providerFileId.`,
-            );
-            return '';
-          }
-
-          if (
-            asset.mimeType &&
-            !String(asset.mimeType).startsWith('image/') &&
-            !String(asset.mimeType).startsWith('video/')
-          ) {
-            console.error(
-              `[PROFILE IMAGE] ${kind} file is not an image or video:`,
-              asset.mimeType,
-            );
-            return '';
-          }
-
           if (
             (asset.mimeType && String(asset.mimeType).startsWith('video/')) ||
             isMediaVideo(asset.mediaUrl) ||
@@ -483,29 +454,27 @@ useEffect(() => {
           }
 
           if (asset.mediaUrl && typeof asset.mediaUrl === 'string') {
-            return asset.mediaUrl;
+            return getAbsoluteApiUrl(asset.mediaUrl);
           }
 
-          const dataUri = await drive.getFileDataUri(
-            asset.providerFileId,
-          );
-
-          if (drive.hasActiveSession) {
-            void drive.makeFilePublic(asset.providerFileId);
+          if (asset.provider === 'google_drive' && asset.providerFileId) {
+            try {
+              const dataUri = await drive.getFileDataUri(
+                asset.providerFileId,
+              );
+              if (drive.hasActiveSession) {
+                void drive.makeFilePublic(asset.providerFileId);
+              }
+              if (
+                dataUri.startsWith('data:image/') ||
+                dataUri.startsWith('https://')
+              ) {
+                return dataUri;
+              }
+            } catch {}
           }
 
-          if (
-            !dataUri.startsWith('data:image/') &&
-            !dataUri.startsWith('data:video/') &&
-            !dataUri.startsWith('https://')
-          ) {
-            console.error(
-              `[PROFILE IMAGE] ${kind} download did not return a valid data URI.`,
-            );
-            return '';
-          }
-
-          return dataUri;
+          return getAbsoluteApiUrl(`/api/avatar?assetId=${encodeURIComponent(assetId)}`);
         } catch (e) {
           console.error(
             `[PROFILE IMAGE] Failed to load ${kind} asset "${assetId}":`,

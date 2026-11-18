@@ -344,12 +344,9 @@ export default function OtherProfile({
 
           if (
             data.status !== 'active' ||
-            data.provider !== 'google_drive' ||
-            !data.providerFileId ||
             (
               data.mimeType &&
-              !String(data.mimeType).startsWith('image/') &&
-              !String(data.mimeType).startsWith('video/')
+              !String(data.mimeType).startsWith('image/')
             )
           ) {
             return '';
@@ -367,17 +364,19 @@ export default function OtherProfile({
           }
 
           if (data.mediaUrl && typeof data.mediaUrl === 'string') {
-            return data.mediaUrl;
+            return getAbsoluteApiUrl(data.mediaUrl);
           }
 
           // Backend proxy endpoint with server-side caching & public header
           const apiAvatarUrl = getAbsoluteApiUrl(`/api/avatar?assetId=${encodeURIComponent(trimmedId)}`);
-          try {
-            const dataUri = await drive.getFileDataUri(
-              String(data.providerFileId)
-            );
-            if (dataUri) return dataUri;
-          } catch {}
+          if (data.provider === 'google_drive' && data.providerFileId) {
+            try {
+              const dataUri = await drive.getFileDataUri(
+                String(data.providerFileId)
+              );
+              if (dataUri) return dataUri;
+            } catch {}
+          }
 
           // Fallback to backend avatar proxy or Google Drive CDN
           return apiAvatarUrl;

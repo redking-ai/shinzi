@@ -591,15 +591,34 @@ const formatDuration = (seconds: number) =>
 
 const avatarMemoryCache = new Map<string, string>();
 
-const testImageLoad = (url: string): Promise<boolean> =>
+const testImageLoad = (url: string, timeoutMs = 2500): Promise<boolean> =>
   new Promise((resolve) => {
     if (typeof window === 'undefined') {
       resolve(false);
       return;
     }
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        resolve(false);
+      }
+    }, timeoutMs);
     const img = new Image();
-    img.onload = () => resolve(true);
-    img.onerror = () => resolve(false);
+    img.onload = () => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        resolve(true);
+      }
+    };
+    img.onerror = () => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        resolve(false);
+      }
+    };
     img.src = url;
   });
 
@@ -882,7 +901,7 @@ function useResolvedAvatarUri(
 
         if (!cancelled) {
           if (profileAssetId) {
-            setImageUri(`https://lh3.googleusercontent.com/d/${encodeURIComponent(profileAssetId)}=s400`);
+            setImageUri(getAbsoluteApiUrl(`/api/avatar?assetId=${encodeURIComponent(profileAssetId)}`));
           } else {
             setImageUri(null);
           }
@@ -891,7 +910,7 @@ function useResolvedAvatarUri(
       } catch {
         if (!cancelled) {
           if (profileAssetId) {
-            setImageUri(`https://lh3.googleusercontent.com/d/${encodeURIComponent(profileAssetId)}=s400`);
+            setImageUri(getAbsoluteApiUrl(`/api/avatar?assetId=${encodeURIComponent(profileAssetId)}`));
           } else {
             setImageUri(null);
           }
@@ -958,9 +977,7 @@ function UserAvatar({
           alt={name || 'Avatar'}
           className="shc-avatar-img"
           onError={() => {
-            if (profileAssetId && !imageUri.includes(String(profileAssetId))) {
-              setImageUri(`https://lh3.googleusercontent.com/d/${encodeURIComponent(String(profileAssetId))}=s400`);
-            } else if (photoURL && imageUri !== photoURL) {
+            if (photoURL && imageUri !== photoURL) {
               setImageUri(photoURL);
             } else {
               setImageUri(null);

@@ -2,6 +2,17 @@
 import { adminDb } from "./_lib/firebaseAdmin.js";
 import { decryptRefreshToken } from "./_lib/driveOAuth.js";
 
+const avatarMemoryCache = new Map<string, { buffer: Buffer; mimeType: string }>();
+
+function withTimeout<T>(promise: Promise<T>, ms = 2500): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error("Firestore timeout")), ms)
+    ),
+  ]);
+}
+
 export default {
   async fetch(request: Request): Promise<Response> {
     if (request.method === "OPTIONS") {
@@ -31,13 +42,29 @@ export default {
       targetUid = uid;
       targetAssetId = assetId;
 
+      // Instant RAM return if already assembled
+      if (targetAssetId && avatarMemoryCache.has(targetAssetId)) {
+        const cached = avatarMemoryCache.get(targetAssetId)!;
+        return new Response(cached.buffer, {
+          status: 200,
+          headers: {
+            "Content-Type": cached.mimeType,
+            "Content-Length": String(cached.buffer.length),
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "Access-Control-Allow-Origin": "*",
+          },
+        });
+      }
+
       if (!targetUid && username) {
         try {
-          const snap = await adminDb
-            .collection("users")
-            .where("username", "==", username.toLowerCase().trim())
-            .limit(1)
-            .get();
+          const snap = await withTimeout(
+            adminDb
+              .collection("users")
+              .where("username", "==", username.toLowerCase().trim())
+              .limit(1)
+              .get()
+          );
           if (!snap.empty) {
             targetUid = snap.docs[0].id;
             targetAssetId = snap.docs[0].data()?.profileAssetId;
@@ -47,6 +74,19 @@ export default {
         }
       }
 
+      if (targetAssetId && avatarMemoryCache.has(targetAssetId)) {
+        const cached = avatarMemoryCache.get(targetAssetId)!;
+        return new Response(cached.buffer, {
+          status: 200,
+          headers: {
+            "Content-Type": cached.mimeType,
+            "Content-Length": String(cached.buffer.length),
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "Access-Control-Allow-Origin": "*",
+          },
+        });
+      }
+
       if (!targetUid && !targetAssetId) {
         return Response.redirect("https://shinzi.vercel.app/icon-192.png", 302);
       }
@@ -54,7 +94,7 @@ export default {
       // Check if user has a direct photoURL in firestore
       if (targetUid && !targetAssetId) {
         try {
-          const userDoc = await adminDb.collection("users").doc(targetUid).get();
+          const userDoc = await withTimeout(adminDb.collection("users").doc(targetUid).get());
           if (userDoc.exists) {
             const udata = userDoc.data();
             if (udata?.photoURL && typeof udata.photoURL === "string") {
@@ -77,9 +117,6 @@ export default {
           }
         } catch (userErr) {
           console.warn("User doc lookup failed (quota or network):", userErr);
-          if (targetAssetId) {
-            return Response.redirect(`https://lh3.googleusercontent.com/d/${encodeURIComponent(targetAssetId)}=s800`, 302);
-          }
         }
       }
 
@@ -87,16 +124,28 @@ export default {
         return Response.redirect("https://shinzi.vercel.app/icon-192.png", 302);
       }
 
+      if (avatarMemoryCache.has(targetAssetId)) {
+        const cached = avatarMemoryCache.get(targetAssetId)!;
+        return new Response(cached.buffer, {
+          status: 200,
+          headers: {
+            "Content-Type": cached.mimeType,
+            "Content-Length": String(cached.buffer.length),
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "Access-Control-Allow-Origin": "*",
+          },
+        });
+      }
+
       let assetDoc;
       try {
-        assetDoc = await adminDb.collection("assets").doc(targetAssetId).get();
+        assetDoc = await withTimeout(adminDb.collection("assets").doc(targetAssetId).get());
       } catch (assetErr) {
-        // If Firestore quota exceeded or error, immediately redirect to Google Drive CDN
-        return Response.redirect(`https://lh3.googleusercontent.com/d/${encodeURIComponent(targetAssetId)}=s800`, 302);
+        return Response.redirect("https://shinzi.vercel.app/icon-192.png", 302);
       }
 
       if (!assetDoc || !assetDoc.exists) {
-        return Response.redirect(`https://lh3.googleusercontent.com/d/${encodeURIComponent(targetAssetId)}=s800`, 302);
+        return Response.redirect("https://shinzi.vercel.app/icon-192.png", 302);
       }
 
       const asset = assetDoc.data();
@@ -106,24 +155,40 @@ export default {
 
       // 1. If media is stored via Firestore chunks (supports GIFs / media up to 10MB)
       if (asset?.chunkCount && typeof asset.chunkCount === "number" && asset.chunkCount > 0) {
-        const chunkCount = asset.chunkCount;
-        const chunkDocs = await Promise.all(
-          Array.from({ length: chunkCount }, (_, i) =>
-            adminDb.collection("mediaChunks").doc(`${targetAssetId}_${i}`).get()
-          )
-        );
+        let fullBuffer: Buffer = Buffer.alloc(0);
+        try {
+          const chunkCount = asset.chunkCount;
+          const chunkDocs = await withTimeout(
+            Promise.all(
+              Array.from({ length: chunkCount }, (_, i) =>
+                adminDb.collection("mediaChunks").doc(`${targetAssetId}_${i}`).get()
+              )
+            ),
+            3000
+          );
 
-        const buffers = chunkDocs.map((doc) => {
-          const raw = doc.data()?.data;
-          if (Buffer.isBuffer(raw)) return raw;
-          if (raw && typeof (raw as any).toBuffer === "function") return (raw as any).toBuffer();
-          if (raw instanceof Uint8Array) return Buffer.from(raw);
-          if (typeof raw === "string") return Buffer.from(raw, "base64");
-          return Buffer.alloc(0);
-        });
+          const buffers = chunkDocs.map((doc) => {
+            const raw = doc.data()?.data;
+            if (Buffer.isBuffer(raw)) return raw;
+            if (raw && typeof (raw as any).toBuffer === "function") return (raw as any).toBuffer();
+            if (raw instanceof Uint8Array) return Buffer.from(raw);
+            if (typeof raw === "string") return Buffer.from(raw, "base64");
+            return Buffer.alloc(0);
+          });
 
-        const fullBuffer = Buffer.concat(buffers);
+          fullBuffer = Buffer.concat(buffers);
+          if (fullBuffer.length > 0) {
+            avatarMemoryCache.set(targetAssetId, { buffer: fullBuffer, mimeType });
+          }
+        } catch (cErr) {
+          console.warn("Failed to read chunks within timeout:", cErr);
+          return Response.redirect("https://shinzi.vercel.app/icon-192.png", 302);
+        }
+
         const totalLength = fullBuffer.length;
+        if (totalLength === 0) {
+          return Response.redirect("https://shinzi.vercel.app/icon-192.png", 302);
+        }
         const rangeHeader = request.headers.get("Range") || request.headers.get("range");
 
         if (rangeHeader && rangeHeader.startsWith("bytes=")) {
@@ -291,8 +356,17 @@ export default {
       });
     } catch (e: any) {
       console.error("Avatar endpoint error:", e);
-      if (targetAssetId) {
-        return Response.redirect(`https://lh3.googleusercontent.com/d/${encodeURIComponent(targetAssetId)}=s800`, 302);
+      if (targetAssetId && avatarMemoryCache.has(targetAssetId)) {
+        const cached = avatarMemoryCache.get(targetAssetId)!;
+        return new Response(cached.buffer, {
+          status: 200,
+          headers: {
+            "Content-Type": cached.mimeType,
+            "Content-Length": String(cached.buffer.length),
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "Access-Control-Allow-Origin": "*",
+          },
+        });
       }
       return Response.redirect("https://shinzi.vercel.app/icon-192.png", 302);
     }
