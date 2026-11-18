@@ -374,7 +374,20 @@ export default function OtherProfile({
               const dataUri = await drive.getFileDataUri(
                 String(data.providerFileId)
               );
-              if (dataUri) return dataUri;
+              if (dataUri) {
+                if (targetUid && typeof window !== 'undefined') {
+                  try {
+                    localStorage.setItem(`shinzi_avatar_${targetUid}`, dataUri);
+                  } catch {}
+                }
+                return dataUri;
+              }
+            } catch {}
+          }
+
+          if (targetUid && typeof window !== 'undefined') {
+            try {
+              localStorage.setItem(`shinzi_avatar_${targetUid}`, apiAvatarUrl);
             } catch {}
           }
 
@@ -385,6 +398,12 @@ export default function OtherProfile({
             'Unable to load other profile asset:',
             e
           );
+          if (targetUid && typeof window !== 'undefined') {
+            try {
+              const local = localStorage.getItem(`shinzi_avatar_${targetUid}`);
+              if (local) return local;
+            } catch {}
+          }
           return getAbsoluteApiUrl(`/api/avatar?assetId=${encodeURIComponent(trimmedId)}`);
         }
       };

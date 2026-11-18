@@ -132,6 +132,12 @@ useEffect(() => {
 }, [assetError]);
   const [profileImageUri, setProfileImageUri] = useState<string>(() => {
     const user = auth.currentUser;
+    if (user && typeof window !== 'undefined') {
+      try {
+        const local = localStorage.getItem(`shinzi_avatar_${user.uid}`);
+        if (local) return local;
+      } catch {}
+    }
     const cached = user ? getCachedProfile(user.uid) : null;
     if (cached?.profileAssetId) {
       const meta = getCachedAssetMeta(cached.profileAssetId);
@@ -474,12 +480,25 @@ useEffect(() => {
             } catch {}
           }
 
-          return getAbsoluteApiUrl(`/api/avatar?assetId=${encodeURIComponent(assetId)}`);
+          const finalUrl = getAbsoluteApiUrl(`/api/avatar?assetId=${encodeURIComponent(assetId)}`);
+          if (kind === 'profile' && currentUser?.uid && typeof window !== 'undefined') {
+            try {
+              localStorage.setItem(`shinzi_avatar_${currentUser.uid}`, finalUrl);
+            } catch {}
+          }
+          return finalUrl;
         } catch (e) {
           console.error(
             `[PROFILE IMAGE] Failed to load ${kind} asset "${assetId}":`,
             e,
           );
+
+          if (kind === 'profile' && currentUser?.uid && typeof window !== 'undefined') {
+            try {
+              const local = localStorage.getItem(`shinzi_avatar_${currentUser.uid}`);
+              if (local) return local;
+            } catch {}
+          }
 
           if (!cancelled) {
             setAssetError(
