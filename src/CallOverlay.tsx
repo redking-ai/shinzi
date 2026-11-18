@@ -21,6 +21,7 @@ import {
 import { callEngine, type CallSession } from './callService';
 import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { db } from './firebaseConfig';
+import { getAbsoluteApiUrl } from './apiUtils';
 import './CallOverlay.css';
 
 interface CallOverlayProps {
@@ -60,8 +61,9 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
 
   // Audio output popup
   const [showAudioPopup, setShowAudioPopup] = useState<boolean>(false);
-  const [selectedAudioOutput, setSelectedAudioOutput] = useState<'speaker' | 'mobile' | 'device'>('mobile');
+  const [selectedAudioOutput, setSelectedAudioOutput] = useState<'speaker' | 'mobile' | 'device'>('speaker');
   const [hasBluetoothDevice, setHasBluetoothDevice] = useState<boolean>(false);
+  const pendingAutoAnswerRef = useRef<boolean>(false);
 
   // Draggable floating box coordinates
   const [floatingPos, setFloatingPos] = useState<{ x: number; y: number }>({
@@ -188,7 +190,10 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
     } catch {}
 
     const handleIncomingCallEvent = async (e: any) => {
-      const { callId, convId, caller, avatar, type } = e.detail || {};
+      const { callId, convId, caller, avatar, type, autoAnswer } = e.detail || {};
+      if (autoAnswer) {
+        pendingAutoAnswerRef.current = true;
+      }
       if (callId && (!call || call.id !== callId)) {
         const immediateCall: CallSession = {
           id: callId,
@@ -205,9 +210,15 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
         };
         callEngine.activeCall = immediateCall;
         callEngine.isCaller = false;
-        callEngine.playRingtone('incoming');
         setCall(immediateCall);
         callEngine.listenToCall(callId, convId || undefined);
+
+        if (pendingAutoAnswerRef.current) {
+          pendingAutoAnswerRef.current = false;
+          void callEngine.answerCall(immediateCall);
+        } else {
+          callEngine.playRingtone('incoming');
+        }
 
         try {
           const callSnap = await getDoc(doc(db, 'calls', callId));
@@ -216,11 +227,16 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
             if (data.status === 'ringing') {
               callEngine.activeCall = data;
               callEngine.isCaller = data.callerId === currentUid;
-              if (!callEngine.isCaller) {
-                callEngine.playRingtone('incoming');
-              }
               setCall({ ...data });
               callEngine.listenToCall(callId, convId || data.convId);
+              if (pendingAutoAnswerRef.current && !callEngine.isCaller) {
+                pendingAutoAnswerRef.current = false;
+                void callEngine.answerCall(data);
+              } else if (!callEngine.isCaller && data.status === 'ringing') {
+                callEngine.playRingtone('incoming');
+              }
+            } else if (data.status === 'connected') {
+              setCall({ ...data });
             } else {
               setCall(null);
               callEngine.cleanup();
@@ -283,6 +299,8 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
         } else if (data.action === 'pickup') {
           if (call && !isCaller && call.status === 'ringing') {
             void callEngine.answerCall(call);
+          } else {
+            pendingAutoAnswerRef.current = true;
           }
         } else if (data.action === 'self_mute') {
           void callEngine.toggleMute().then((muted) => setIsSelfMuted(muted));
@@ -297,9 +315,10 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
     };
   }, [call, isCaller]);
 
-  // Duration timer for connected calls
+  // Duration timer & audio routing for connected calls
   useEffect(() => {
     if (call?.status === 'connected') {
+      void callEngine.setAudioOutputDevice(selectedAudioOutput || 'speaker');
       const timer = setInterval(() => {
         setDurationSeconds((sec) => sec + 1);
       }, 1000);
@@ -386,10 +405,10 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   const isOutgoingRinging = call?.status === 'ringing' && isCaller;
 
   const oppositeName = isCaller ? call?.receiverName : call?.callerName;
-  const oppositeAvatar = isCaller ? call?.receiverPhotoURL : call?.callerPhotoURL;
+  const oppositeAvatar = getAbsoluteApiUrl(isCaller ? call?.receiverPhotoURL : call?.callerPhotoURL) || '/icon-192.png';
 
   const myName = currentProfile?.displayName || currentProfile?.username || 'You';
-  const myAvatar = currentProfile?.photoURL || '/icon-192.png';
+  const myAvatar = getAbsoluteApiUrl(currentProfile?.photoURL || '/icon-192.png');
 
   // Video and screen sharing status flags (strictly driven by actual user state)
   const isOppositeVideoOn = isCaller ? Boolean(call?.receiverVideoOn) : Boolean(call?.callerVideoOn);

@@ -12,6 +12,7 @@ import {
 import { ArrowLeft, Ban, Clock3, Ellipsis, MessageCircle, Phone, UserPlus, UserRound, VolumeX } from 'lucide-react';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { auth, db } from './firebaseConfig';
+import { getAbsoluteApiUrl } from './apiUtils';
 import { useDriveStore } from './driveStore';
 import {
   getCachedProfile,
@@ -110,15 +111,15 @@ export default function OtherProfile({
     }
     const cached = targetUid ? getCachedProfile(targetUid) : null;
     const url = String(cached?.photoURL ?? '').trim();
-    if (url && !isMediaVideo(url)) return url;
-    if (cached?.profileAssetId) return `/api/avatar?assetId=${cached.profileAssetId}`;
-    return targetUid ? `/api/avatar?uid=${targetUid}` : '';
+    if (url && !isMediaVideo(url)) return getAbsoluteApiUrl(url);
+    if (cached?.profileAssetId) return getAbsoluteApiUrl(`/api/avatar?assetId=${cached.profileAssetId}`);
+    return targetUid ? getAbsoluteApiUrl(`/api/avatar?uid=${targetUid}`) : '';
   });
   const [banner, setBanner] = useState<string>(() => {
     const cached = targetUid ? getCachedProfile(targetUid) : null;
     const url = String(cached?.bannerUrl ?? '').trim();
-    if (url && !isMediaVideo(url)) return url;
-    if (cached?.bannerAssetId) return `/api/avatar?assetId=${cached.bannerAssetId}`;
+    if (url && !isMediaVideo(url)) return getAbsoluteApiUrl(url);
+    if (cached?.bannerAssetId) return getAbsoluteApiUrl(`/api/avatar?assetId=${cached.bannerAssetId}`);
     return '';
   });
   const [menuOpen, setMenuOpen] = useState(false);
@@ -207,22 +208,22 @@ export default function OtherProfile({
       }
       if (!resolvedPhoto && (data.profileAssetId || targetUid)) {
         resolvedPhoto = data.profileAssetId
-          ? `/api/avatar?assetId=${encodeURIComponent(String(data.profileAssetId))}`
-          : `/api/avatar?uid=${encodeURIComponent(targetUid)}`;
+          ? getAbsoluteApiUrl(`/api/avatar?assetId=${encodeURIComponent(String(data.profileAssetId))}`)
+          : getAbsoluteApiUrl(`/api/avatar?uid=${encodeURIComponent(targetUid)}`);
       }
       if (resolvedPhoto) {
-        setAvatar(resolvedPhoto);
+        setAvatar(getAbsoluteApiUrl(resolvedPhoto));
       }
 
       const freshBanner = String(data.bannerUrl ?? '').trim();
       let resolvedBanner = '';
       if (freshBanner && !isMediaVideo(freshBanner)) {
-        resolvedBanner = freshBanner;
+        resolvedBanner = getAbsoluteApiUrl(freshBanner);
       } else if (data.bannerAssetId) {
-        resolvedBanner = `/api/avatar?assetId=${encodeURIComponent(String(data.bannerAssetId))}`;
+        resolvedBanner = getAbsoluteApiUrl(`/api/avatar?assetId=${encodeURIComponent(String(data.bannerAssetId))}`);
       }
       if (resolvedBanner) {
-        setBanner(resolvedBanner);
+        setBanner(getAbsoluteApiUrl(resolvedBanner));
       }
       setLoading(false); // Reveal profile immediately
 
@@ -370,7 +371,7 @@ export default function OtherProfile({
           }
 
           // Backend proxy endpoint with server-side caching & public header
-          const apiAvatarUrl = `/api/avatar?assetId=${encodeURIComponent(trimmedId)}`;
+          const apiAvatarUrl = getAbsoluteApiUrl(`/api/avatar?assetId=${encodeURIComponent(trimmedId)}`);
           try {
             const dataUri = await drive.getFileDataUri(
               String(data.providerFileId)
@@ -385,7 +386,7 @@ export default function OtherProfile({
             'Unable to load other profile asset:',
             e
           );
-          return `/api/avatar?assetId=${encodeURIComponent(trimmedId)}`;
+          return getAbsoluteApiUrl(`/api/avatar?assetId=${encodeURIComponent(trimmedId)}`);
         }
       };
 
@@ -397,16 +398,16 @@ export default function OtherProfile({
       if (!cancelled) {
         const fallbackPhoto = userData?.photoURL && !isMediaVideo(userData.photoURL) ? String(userData.photoURL) : '';
         const resolvedAvatar = (avatarUri && !isMediaVideo(avatarUri))
-          ? avatarUri
-          : (fallbackPhoto || (userData?.profileAssetId ? `/api/avatar?uid=${encodeURIComponent(targetUid)}` : ''));
+          ? getAbsoluteApiUrl(avatarUri)
+          : (fallbackPhoto || (userData?.profileAssetId ? getAbsoluteApiUrl(`/api/avatar?uid=${encodeURIComponent(targetUid)}`) : ''));
         if (resolvedAvatar) {
           setAvatar(resolvedAvatar);
         }
 
         const fallbackBanner = userData?.bannerUrl && !isMediaVideo(userData.bannerUrl) ? String(userData.bannerUrl) : '';
         const resolvedBanner = (bannerUri && !isMediaVideo(bannerUri))
-          ? bannerUri
-          : (fallbackBanner || (userData?.bannerAssetId ? `/api/avatar?assetId=${encodeURIComponent(String(userData.bannerAssetId))}` : ''));
+          ? getAbsoluteApiUrl(bannerUri)
+          : (fallbackBanner || (userData?.bannerAssetId ? getAbsoluteApiUrl(`/api/avatar?assetId=${encodeURIComponent(String(userData.bannerAssetId))}`) : ''));
         if (resolvedBanner) {
           setBanner(resolvedBanner);
         }
@@ -666,17 +667,18 @@ export default function OtherProfile({
                   loading="eager"
                   decoding="async"
                   onError={() => {
-                    if (targetUid && !avatar.includes('/api/avatar?uid=')) {
-                      setAvatar(`/api/avatar?uid=${encodeURIComponent(targetUid)}`);
+                    const profileAsset = userData?.profileAssetId;
+                    if (profileAsset && !avatar.includes(String(profileAsset))) {
+                      setAvatar(`https://lh3.googleusercontent.com/d/${encodeURIComponent(String(profileAsset))}=s800`);
                     } else if (typeof window !== 'undefined' && targetUid && localStorage.getItem(`shinzi_avatar_${targetUid}`)) {
                       const localAvatar = localStorage.getItem(`shinzi_avatar_${targetUid}`)!;
-                      if (localAvatar !== avatar) {
+                      if (localAvatar && localAvatar !== avatar) {
                         setAvatar(localAvatar);
                         return;
                       }
-                      setAvatar('');
+                      setAvatar(userData?.photoURL ? String(userData.photoURL) : '/icon-192.png');
                     } else {
-                      setAvatar('');
+                      setAvatar(userData?.photoURL ? String(userData.photoURL) : '/icon-192.png');
                     }
                   }}
                 />

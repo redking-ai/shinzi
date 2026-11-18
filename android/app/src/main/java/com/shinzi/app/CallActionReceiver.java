@@ -42,6 +42,21 @@ public class CallActionReceiver extends BroadcastReceiver {
                         conv != null ? conv : "default",
                         callId != null ? callId : ""
                 );
+
+                // 4. Launch/resume MainActivity with autoAnswer=true so WebRTC connects immediately
+                try {
+                    Intent openApp = new Intent(context, MainActivity.class);
+                    openApp.setAction(Intent.ACTION_VIEW);
+                    String safeCaller = caller != null ? Uri.encode(caller) : "Friend";
+                    String safeAvatar = avatar != null ? Uri.encode(avatar) : "";
+                    String safeConv = conv != null ? Uri.encode(conv) : "default";
+                    String safeCallId = callId != null ? Uri.encode(callId) : "";
+                    String callType = intent.getStringExtra("callType");
+                    String safeType = callType != null ? Uri.encode(callType) : "voice";
+                    openApp.setData(Uri.parse("https://shinzi.vercel.app/call?id=" + safeCallId + "&conv=" + safeConv + "&caller=" + safeCaller + "&avatar=" + safeAvatar + "&type=" + safeType + "&autoAnswer=true"));
+                    openApp.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                    context.startActivity(openApp);
+                } catch (Exception ignored) {}
                 break;
 
             case ACTION_CALL_DECLINE:

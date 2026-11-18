@@ -74,21 +74,7 @@ public class ShinziNotificationPlugin extends Plugin {
     public static volatile String activeCallId = "";
 
     public static boolean isAppInForeground(Context context) {
-        if (isAppForeground) return true;
-        try {
-            android.app.ActivityManager am = (android.app.ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
-            if (am != null) {
-                List<android.app.ActivityManager.RunningAppProcessInfo> processes = am.getRunningAppProcesses();
-                if (processes != null) {
-                    for (android.app.ActivityManager.RunningAppProcessInfo p : processes) {
-                        if (p.processName.equals(context.getPackageName())) {
-                            return p.importance == android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND;
-                        }
-                    }
-                }
-            }
-        } catch (Exception ignored) {}
-        return false;
+        return isAppForeground;
     }
 
     // Track pending notification chat opened by tap
@@ -320,6 +306,28 @@ public class ShinziNotificationPlugin extends Plugin {
             activeCallAvatarUrl = "";
             activeCallConvId = "";
             activeCallId = "";
+        }
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void setAudioRoute(PluginCall call) {
+        String route = call.getString("route", "speaker"); // "speaker", "earpiece"
+        try {
+            Context context = getContext();
+            if (context != null) {
+                android.media.AudioManager audioManager = (android.media.AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+                if (audioManager != null) {
+                    audioManager.setMode(android.media.AudioManager.MODE_IN_COMMUNICATION);
+                    boolean isSpeaker = "speaker".equalsIgnoreCase(route);
+                    audioManager.setSpeakerphoneOn(isSpeaker);
+                    call.resolve();
+                    return;
+                }
+            }
+        } catch (Exception e) {
+            call.reject("Failed to set audio route: " + e.getMessage());
+            return;
         }
         call.resolve();
     }

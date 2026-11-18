@@ -269,6 +269,11 @@ class CallEngine {
     receiverPhotoURL: string;
     type: 'voice' | 'video';
   }): Promise<string> {
+    const cap = (window as any).Capacitor;
+    if (typeof cap?.Plugins?.ShinziNotification?.requestBatteryOptimization === 'function') {
+      void cap.Plugins.ShinziNotification.requestBatteryOptimization().catch(() => {});
+    }
+
     this.cleanup();
     this.isCaller = true;
 
@@ -440,6 +445,11 @@ class CallEngine {
 
   // 4. Accept Incoming Call
   public async answerCall(call: CallSession): Promise<void> {
+    const cap = (window as any).Capacitor;
+    if (typeof cap?.Plugins?.ShinziNotification?.requestBatteryOptimization === 'function') {
+      void cap.Plugins.ShinziNotification.requestBatteryOptimization().catch(() => {});
+    }
+
     this.stopRingtone();
     this.isCaller = false;
     this.activeCall = { ...call, status: 'connected' };
@@ -951,6 +961,13 @@ class CallEngine {
   // 11. Audio Routing (Speaker vs Earpiece vs Bluetooth)
   public async setAudioOutputDevice(deviceType: 'speaker' | 'mobile' | 'device'): Promise<void> {
     try {
+      const cap = (window as any).Capacitor;
+      if (typeof cap?.Plugins?.ShinziNotification?.setAudioRoute === 'function') {
+        void cap.Plugins.ShinziNotification.setAudioRoute({
+          route: deviceType === 'mobile' ? 'earpiece' : 'speaker',
+        }).catch(() => {});
+      }
+
       const audioElements = document.querySelectorAll('audio');
       const devices = await navigator.mediaDevices.enumerateDevices();
       const audioOutputs = devices.filter((d) => d.kind === 'audiooutput');

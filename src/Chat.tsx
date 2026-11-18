@@ -72,6 +72,7 @@ import {
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import type { CategoryButtonRenderProps } from 'emoji-picker-react';
 import { auth, db } from './firebaseConfig';
+import { getAbsoluteApiUrl } from './apiUtils';
 import { useDriveStore } from './driveStore';
 import { navigateTo as navigateToUrl, setCachedProfile } from './profileCache';
 import {
@@ -642,8 +643,9 @@ function useResolvedAvatarUri(
     if (typeof window !== 'undefined') {
       if (targetUid) {
         try {
-          const localStored = localStorage.getItem(`shinzi_avatar_${targetUid}`);
+          let localStored = localStorage.getItem(`shinzi_avatar_${targetUid}`);
           if (localStored) {
+            localStored = getAbsoluteApiUrl(localStored);
             avatarMemoryCache.set(targetUid, localStored);
             return localStored;
           }
@@ -710,8 +712,9 @@ function useResolvedAvatarUri(
 
     if (typeof window !== 'undefined' && targetUid) {
       try {
-        const localStored = localStorage.getItem(`shinzi_avatar_${targetUid}`);
+        let localStored = localStorage.getItem(`shinzi_avatar_${targetUid}`);
         if (localStored) {
+          localStored = getAbsoluteApiUrl(localStored);
           avatarMemoryCache.set(targetUid, localStored);
           setImageUri(localStored);
           setLoading(false);
@@ -781,7 +784,7 @@ function useResolvedAvatarUri(
 
         // Try backend /api/avatar endpoint only if user has an assetId or avatar attached
         if (targetUid && assetId) {
-          const apiAvatarUrl = `/api/avatar?uid=${encodeURIComponent(targetUid)}`;
+          const apiAvatarUrl = getAbsoluteApiUrl(`/api/avatar?uid=${encodeURIComponent(targetUid)}`);
           const canLoadFromApi = await testImageLoad(apiAvatarUrl);
           if (canLoadFromApi && !cancelled) {
             setImageUri(apiAvatarUrl);
@@ -878,12 +881,20 @@ function useResolvedAvatarUri(
         }
 
         if (!cancelled) {
-          setImageUri(null);
+          if (profileAssetId) {
+            setImageUri(`https://lh3.googleusercontent.com/d/${encodeURIComponent(profileAssetId)}=s400`);
+          } else {
+            setImageUri(null);
+          }
           setLoading(false);
         }
       } catch {
         if (!cancelled) {
-          setImageUri(null);
+          if (profileAssetId) {
+            setImageUri(`https://lh3.googleusercontent.com/d/${encodeURIComponent(profileAssetId)}=s400`);
+          } else {
+            setImageUri(null);
+          }
           setLoading(false);
         }
       }
@@ -946,7 +957,15 @@ function UserAvatar({
           src={imageUri}
           alt={name || 'Avatar'}
           className="shc-avatar-img"
-          onError={() => setImageUri(null)}
+          onError={() => {
+            if (profileAssetId && !imageUri.includes(String(profileAssetId))) {
+              setImageUri(`https://lh3.googleusercontent.com/d/${encodeURIComponent(String(profileAssetId))}=s400`);
+            } else if (photoURL && imageUri !== photoURL) {
+              setImageUri(photoURL);
+            } else {
+              setImageUri(null);
+            }
+          }}
         />
       ) : group ? (
         <Users size={effectiveSize === 'sm' || effectiveSize === 'xs' ? 15 : 20} />
@@ -6475,7 +6494,7 @@ const handleSearchMessage = async (target: Rec) => {
                 <Smile size={21} />
               </button>
 
-              {!messageText.trim() && stagedMedia.length === 0 && (
+              {!messageText.trim() && stagedMedia.length === 0 ? (
                 <button
                   type="button"
                   className={`shc-composer-icon-btn shc-composer-voice-btn ${recording ? 'shc-rec-on' : ''}`}
@@ -6484,26 +6503,26 @@ const handleSearchMessage = async (target: Rec) => {
                 >
                   {recording ? <Square size={20} /> : <Mic size={21} />}
                 </button>
+              ) : (
+                <button
+                  type="button"
+                  className="shc-composer-icon-btn shc-composer-send-btn shc-send-active"
+                  disabled={sending || (Boolean(targetUid) && dmRequestState === 'incoming')}
+                  onPointerDown={(e) => {
+                    // Crucial for mobile virtual keyboards:
+                    // Calling preventDefault on pointerdown stops the button tap from blurring the textarea,
+                    // keeping the mobile keyboard open.
+                    e.preventDefault();
+                  }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                  }}
+                  onClick={() => void sendMessage()}
+                  aria-label="Send"
+                >
+                  {sending ? <span className="shc-spinner shc-spinner-sm" /> : <Send size={20} />}
+                </button>
               )}
-
-              <button
-                type="button"
-                className={`shc-composer-icon-btn shc-composer-send-btn ${(messageText.trim() || stagedMedia.length > 0) ? 'shc-send-active' : ''}`}
-                disabled={(!messageText.trim() && stagedMedia.length === 0) || sending || (Boolean(targetUid) && dmRequestState === 'incoming')}
-                onPointerDown={(e) => {
-                  // Crucial for mobile virtual keyboards:
-                  // Calling preventDefault on pointerdown stops the button tap from blurring the textarea,
-                  // keeping the mobile keyboard open.
-                  e.preventDefault();
-                }}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                }}
-                onClick={() => void sendMessage()}
-                aria-label="Send"
-              >
-                {sending ? <span className="shc-spinner shc-spinner-sm" /> : <Send size={20} />}
-              </button>
             </div>
           </div>
 

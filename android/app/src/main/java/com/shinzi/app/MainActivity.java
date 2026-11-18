@@ -193,6 +193,8 @@ public class MainActivity extends BridgeActivity {
                 String caller = uri.getQueryParameter("caller");
                 String avatar = uri.getQueryParameter("avatar");
                 String type = uri.getQueryParameter("type");
+                String autoAnswer = uri.getQueryParameter("autoAnswer");
+                boolean isAutoAnswer = "true".equalsIgnoreCase(autoAnswer);
 
                 java.util.Map<String, String> pending = new java.util.HashMap<>();
                 pending.put("callId", callId);
@@ -200,6 +202,9 @@ public class MainActivity extends BridgeActivity {
                 pending.put("caller", caller != null ? caller : "Friend");
                 pending.put("avatar", avatar != null ? avatar : "");
                 pending.put("type", type != null ? type : "voice");
+                if (isAutoAnswer) {
+                    pending.put("autoAnswer", "true");
+                }
                 ShinziNotificationPlugin.pendingCall = pending;
 
                 Handler handler = new Handler(Looper.getMainLooper());
@@ -213,7 +218,7 @@ public class MainActivity extends BridgeActivity {
                                 String safeCaller = caller != null ? caller.replace("'", "\\'") : "Friend";
                                 String safeAvatar = avatar != null ? avatar.replace("'", "\\'") : "";
                                 String safeType = type != null ? type.replace("'", "\\'") : "voice";
-                                String js = "window.dispatchEvent(new CustomEvent('shinzi:incomingCall', { detail: { callId: '" + safeCall + "', convId: '" + safeConv + "', caller: '" + safeCaller + "', avatar: '" + safeAvatar + "', type: '" + safeType + "' } }));";
+                                String js = "window.dispatchEvent(new CustomEvent('shinzi:incomingCall', { detail: { callId: '" + safeCall + "', convId: '" + safeConv + "', caller: '" + safeCaller + "', avatar: '" + safeAvatar + "', type: '" + safeType + "', autoAnswer: " + isAutoAnswer + " } }));";
                                 webView.evaluateJavascript(js, null);
                             }
                         } catch (Exception ignored) {}

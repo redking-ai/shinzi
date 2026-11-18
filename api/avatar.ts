@@ -19,63 +19,84 @@ export default {
       return new Response("Method not allowed", { status: 405 });
     }
 
+    let targetUid: string | null = null;
+    let targetAssetId: string | null = null;
+
     try {
       const url = new URL(request.url);
       const uid = url.searchParams.get("uid");
       const username = url.searchParams.get("u");
       const assetId = url.searchParams.get("assetId");
 
-      let targetUid = uid;
-      let targetAssetId = assetId;
+      targetUid = uid;
+      targetAssetId = assetId;
 
       if (!targetUid && username) {
-        const snap = await adminDb
-          .collection("users")
-          .where("username", "==", username.toLowerCase().trim())
-          .limit(1)
-          .get();
-        if (!snap.empty) {
-          targetUid = snap.docs[0].id;
-          targetAssetId = snap.docs[0].data()?.profileAssetId;
+        try {
+          const snap = await adminDb
+            .collection("users")
+            .where("username", "==", username.toLowerCase().trim())
+            .limit(1)
+            .get();
+          if (!snap.empty) {
+            targetUid = snap.docs[0].id;
+            targetAssetId = snap.docs[0].data()?.profileAssetId;
+          }
+        } catch (uErr) {
+          console.warn("Username lookup failed:", uErr);
         }
       }
 
       if (!targetUid && !targetAssetId) {
-        return new Response("User ID or asset ID required", { status: 400 });
+        return Response.redirect("https://shinzi.vercel.app/icon-192.png", 302);
       }
 
       // Check if user has a direct photoURL in firestore
       if (targetUid && !targetAssetId) {
-        const userDoc = await adminDb.collection("users").doc(targetUid).get();
-        if (userDoc.exists) {
-          const udata = userDoc.data();
-          if (udata?.photoURL && typeof udata.photoURL === "string") {
-            if (udata.photoURL.startsWith("http")) {
-              return Response.redirect(udata.photoURL, 302);
+        try {
+          const userDoc = await adminDb.collection("users").doc(targetUid).get();
+          if (userDoc.exists) {
+            const udata = userDoc.data();
+            if (udata?.photoURL && typeof udata.photoURL === "string") {
+              if (udata.photoURL.startsWith("http")) {
+                return Response.redirect(udata.photoURL, 302);
+              }
+              if (udata.photoURL.startsWith("data:")) {
+                const [header, b64] = udata.photoURL.split(",");
+                const mime = header.split(";")[0].replace("data:", "") || "image/jpeg";
+                return new Response(Buffer.from(b64, "base64"), {
+                  headers: {
+                    "Content-Type": mime,
+                    "Cache-Control": "public, max-age=86400, s-maxage=604800",
+                    "Access-Control-Allow-Origin": "*",
+                  },
+                });
+              }
             }
-            if (udata.photoURL.startsWith("data:")) {
-              const [header, b64] = udata.photoURL.split(",");
-              const mime = header.split(";")[0].replace("data:", "") || "image/jpeg";
-              return new Response(Buffer.from(b64, "base64"), {
-                headers: {
-                  "Content-Type": mime,
-                  "Cache-Control": "public, max-age=86400, s-maxage=604800",
-                  "Access-Control-Allow-Origin": "*",
-                },
-              });
-            }
+            targetAssetId = udata?.profileAssetId;
           }
-          targetAssetId = udata?.profileAssetId;
+        } catch (userErr) {
+          console.warn("User doc lookup failed (quota or network):", userErr);
+          if (targetAssetId) {
+            return Response.redirect(`https://lh3.googleusercontent.com/d/${encodeURIComponent(targetAssetId)}=s800`, 302);
+          }
         }
       }
 
       if (!targetAssetId) {
-        return new Response("No profile asset associated with user", { status: 404 });
+        return Response.redirect("https://shinzi.vercel.app/icon-192.png", 302);
       }
 
-      const assetDoc = await adminDb.collection("assets").doc(targetAssetId).get();
-      if (!assetDoc.exists) {
-        return new Response("Asset document not found", { status: 404 });
+      let assetDoc;
+      try {
+        assetDoc = await adminDb.collection("assets").doc(targetAssetId).get();
+      } catch (assetErr) {
+        // If Firestore quota exceeded or error, immediately redirect to Google Drive CDN
+        return Response.redirect(`https://lh3.googleusercontent.com/d/${encodeURIComponent(targetAssetId)}=s800`, 302);
+      }
+
+      if (!assetDoc || !assetDoc.exists) {
+        return Response.redirect(`https://lh3.googleusercontent.com/d/${encodeURIComponent(targetAssetId)}=s800`, 302);
       }
 
       const asset = assetDoc.data();
@@ -270,7 +291,10 @@ export default {
       });
     } catch (e: any) {
       console.error("Avatar endpoint error:", e);
-      return new Response(`Server error: ${e?.message || e}`, { status: 500 });
+      if (targetAssetId) {
+        return Response.redirect(`https://lh3.googleusercontent.com/d/${encodeURIComponent(targetAssetId)}=s800`, 302);
+      }
+      return Response.redirect("https://shinzi.vercel.app/icon-192.png", 302);
     }
   },
 };
