@@ -2253,22 +2253,51 @@ export default function Chat({ onNavigate }: ChatProps) {
     let rows = [...conversations];
 
     // Merge any outgoing or incoming DM requests into the chats list (Discord style)
-    const existingOtherUids = new Set(
-      rows.map((r) => (r.memberIds || []).find((m: string) => m !== uid)).filter(Boolean)
-    );
+    const existingOtherUids = new Map<string, Rec>();
+    rows.forEach((r) => {
+      const other = (r.memberIds || []).find((m: string) => m !== uid);
+      if (other) existingOtherUids.set(other, r);
+    });
 
     [...sentDMRequests, ...dmRequests].forEach((req) => {
       const otherUid = req.fromUid === uid ? req.toUid : req.fromUid;
-      if (!otherUid || otherUid === uid || existingOtherUids.has(otherUid)) return;
-      existingOtherUids.add(otherUid);
+      if (!otherUid || otherUid === uid) return;
 
       const otherProfile = req.fromUid === uid ? req.toProfile : req.fromProfile;
       const lastMsg = Array.isArray(req.messages) && req.messages.length > 0
         ? req.messages[req.messages.length - 1]
         : null;
 
+      const reqMessageText = lastMsg?.text || req.message || 'Started a conversation';
+      const reqMessageAt = lastMsg?.createdAt || req.updatedAt || req.createdAt;
+      const reqSenderId = lastMsg?.senderId || req.fromUid;
+      const reqSenderName = lastMsg?.senderName || (req.fromUid === uid ? 'You' : (otherProfile?.displayName || otherProfile?.username || 'User'));
+
+      if (existingOtherUids.has(otherUid)) {
+        const existingRow = existingOtherUids.get(otherUid)!;
+        if (!existingRow.lastMessageText || millis(reqMessageAt) >= millis(existingRow.lastMessageAt)) {
+          existingRow.lastMessageText = reqMessageText;
+          existingRow.lastMessageAt = reqMessageAt;
+          existingRow.lastSenderId = reqSenderId;
+          existingRow.lastSenderName = reqSenderName;
+        }
+        if (!existingRow.requestStatus) {
+          existingRow.requestStatus = req.status || 'pending';
+        }
+        if (!existingRow.memberProfiles?.[otherUid] && otherProfile) {
+          existingRow.memberProfiles = {
+            ...(existingRow.memberProfiles || {}),
+            [otherUid]: otherProfile,
+          };
+        }
+        return;
+      }
+
+      const convId = directId(me, otherUid);
+      existingOtherUids.set(otherUid, { id: convId });
+
       rows.push({
-        id: directId(me, otherUid),
+        id: convId,
         type: 'direct',
         memberIds: [me, otherUid],
         memberProfiles: {
@@ -2285,10 +2314,10 @@ export default function Chat({ onNavigate }: ChatProps) {
             profileAssetId: otherProfile?.profileAssetId || '',
           },
         },
-        lastMessageText: lastMsg?.text || req.message || 'Started a conversation',
-        lastMessageAt: lastMsg?.createdAt || req.updatedAt || req.createdAt,
-        lastSenderId: lastMsg?.senderId || req.fromUid,
-        lastSenderName: lastMsg?.senderName || (req.fromUid === uid ? 'You' : otherProfile?.displayName),
+        lastMessageText: reqMessageText,
+        lastMessageAt: reqMessageAt,
+        lastSenderId: reqSenderId,
+        lastSenderName: reqSenderName,
         updatedAt: req.updatedAt || req.createdAt,
         requestStatus: req.status || 'pending',
         messages: req.messages || (req.message ? [{
@@ -2333,7 +2362,7 @@ export default function Chat({ onNavigate }: ChatProps) {
     });
 
     return rows;
-  }, [conversations, chatFilter, uid]);
+  }, [conversations, sentDMRequests, dmRequests, chatFilter, uid, me, profile]);
 
   // ----------------------------------------------------------
   // CONVERSATION ACTIONS
@@ -3131,12 +3160,33 @@ const handleSearchMessage = async (target: Rec) => {
             updatedAt: serverTimestamp(),
           });
           const conversationId = directId(uid, directTargetUid);
+          const otherProfile = activeConv?.memberProfiles?.[directTargetUid] || {};
           void setDoc(doc(db, 'conversations', conversationId), {
+            type: 'direct',
+            memberIds: [uid, directTargetUid],
+            memberProfiles: {
+              [uid]: {
+                displayName: profile?.displayName || user?.displayName || 'User',
+                username: profile?.username || '',
+                photoURL: profile?.photoURL || '',
+                profileAssetId: profile?.profileAssetId || '',
+              },
+              [directTargetUid]: {
+                displayName: otherProfile.displayName || getConversationName(activeConv),
+                username: otherProfile.username || getConversationUsername(activeConv),
+                photoURL: otherProfile.photoURL || '',
+                profileAssetId: otherProfile.profileAssetId || '',
+              },
+            },
+            favoriteBy: { [uid]: false, [directTargetUid]: false },
+            urgentFor: { [uid]: false, [directTargetUid]: false },
+            lastReadAt: { [uid]: serverTimestamp() },
             lastMessageText: text,
             lastMessageAt: serverTimestamp(),
             lastSenderId: uid,
+            lastSenderName: profile?.displayName || profile?.username || 'You',
             updatedAt: serverTimestamp(),
-          }, { merge: true }).catch(() => {});
+          }, { merge: true }).catch((err) => console.error('Mirror pending DM failed:', err));
           setPendingDmMessages((previous) => [...previous, queuedMessage]);
           setMessageText('');
           setReplyTarget(null);
@@ -3403,11 +3453,19 @@ const handleSearchMessage = async (target: Rec) => {
       }
 
       if (isAlreadyPending) {
-        if (kind === 'friendRequests') notify('Already sent', `A ${label} is already pending.`);
         if (kind === 'friendRequests') {
+          notify('Already sent', `A ${label} is already pending.`);
           setSentRequestUids((prev) => new Set(prev).add(target.id));
-        }
           return false;
+        } else if (kind === 'dmRequests') {
+          if (queuedMessage) {
+            await updateDoc(requestRef, {
+              messages: arrayUnion(queuedMessage),
+              updatedAt: serverTimestamp(),
+            });
+          }
+          return true;
+        }
       }
 
       await setDoc(requestRef, {
