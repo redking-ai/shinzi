@@ -172,7 +172,7 @@ export default {
         .get();
 
       if (!tokenDoc.exists) {
-        return new Response("User Google Drive token not found", { status: 404 });
+        return Response.redirect(`https://lh3.googleusercontent.com/d/${encodeURIComponent(String(providerFileId))}=s800`, 302);
       }
 
       const encryptedToken = tokenDoc.data()?.encryptedRefreshToken;

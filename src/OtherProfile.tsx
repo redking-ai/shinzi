@@ -102,14 +102,24 @@ export default function OtherProfile({
     return targetUid ? !getCachedProfile(targetUid) : true;
   });
   const [avatar, setAvatar] = useState<string>(() => {
+    if (typeof window !== 'undefined' && targetUid) {
+      try {
+        const stored = localStorage.getItem(`shinzi_avatar_${targetUid}`);
+        if (stored) return stored;
+      } catch {}
+    }
     const cached = targetUid ? getCachedProfile(targetUid) : null;
-    const url = String(cached?.photoURL ?? '');
-    return isMediaVideo(url) ? '' : url;
+    const url = String(cached?.photoURL ?? '').trim();
+    if (url && !isMediaVideo(url)) return url;
+    if (cached?.profileAssetId) return `/api/avatar?assetId=${cached.profileAssetId}`;
+    return targetUid ? `/api/avatar?uid=${targetUid}` : '';
   });
   const [banner, setBanner] = useState<string>(() => {
     const cached = targetUid ? getCachedProfile(targetUid) : null;
-    const url = String(cached?.bannerUrl ?? '');
-    return isMediaVideo(url) ? '' : url;
+    const url = String(cached?.bannerUrl ?? '').trim();
+    if (url && !isMediaVideo(url)) return url;
+    if (cached?.bannerAssetId) return `/api/avatar?assetId=${cached.bannerAssetId}`;
+    return '';
   });
   const [menuOpen, setMenuOpen] = useState(false);
   const [friendState, setFriendState] = useState({
@@ -186,10 +196,34 @@ export default function OtherProfile({
 
       setUserData(data);
       setCachedProfile(targetUid, data);
-      const freshPhoto = String(data.photoURL ?? '');
-      setAvatar(isMediaVideo(freshPhoto) ? '' : freshPhoto);
-      const freshBanner = String(data.bannerUrl ?? '');
-      setBanner(isMediaVideo(freshBanner) ? '' : freshBanner);
+      const freshPhoto = String(data.photoURL ?? '').trim();
+      let resolvedPhoto = '';
+      if (freshPhoto && !isMediaVideo(freshPhoto)) {
+        resolvedPhoto = freshPhoto;
+      } else if (typeof window !== 'undefined' && targetUid) {
+        try {
+          resolvedPhoto = localStorage.getItem(`shinzi_avatar_${targetUid}`) || '';
+        } catch {}
+      }
+      if (!resolvedPhoto && (data.profileAssetId || targetUid)) {
+        resolvedPhoto = data.profileAssetId
+          ? `/api/avatar?assetId=${encodeURIComponent(String(data.profileAssetId))}`
+          : `/api/avatar?uid=${encodeURIComponent(targetUid)}`;
+      }
+      if (resolvedPhoto) {
+        setAvatar(resolvedPhoto);
+      }
+
+      const freshBanner = String(data.bannerUrl ?? '').trim();
+      let resolvedBanner = '';
+      if (freshBanner && !isMediaVideo(freshBanner)) {
+        resolvedBanner = freshBanner;
+      } else if (data.bannerAssetId) {
+        resolvedBanner = `/api/avatar?assetId=${encodeURIComponent(String(data.bannerAssetId))}`;
+      }
+      if (resolvedBanner) {
+        setBanner(resolvedBanner);
+      }
       setLoading(false); // Reveal profile immediately
 
       if (currentUser) {
@@ -632,10 +666,15 @@ export default function OtherProfile({
                   loading="eager"
                   decoding="async"
                   onError={() => {
-                    if (targetUid && !avatar.includes('/api/avatar')) {
+                    if (targetUid && !avatar.includes('/api/avatar?uid=')) {
                       setAvatar(`/api/avatar?uid=${encodeURIComponent(targetUid)}`);
-                    } else if (userData?.photoURL && avatar !== userData.photoURL) {
-                      setAvatar(String(userData.photoURL));
+                    } else if (typeof window !== 'undefined' && targetUid && localStorage.getItem(`shinzi_avatar_${targetUid}`)) {
+                      const localAvatar = localStorage.getItem(`shinzi_avatar_${targetUid}`)!;
+                      if (localAvatar !== avatar) {
+                        setAvatar(localAvatar);
+                        return;
+                      }
+                      setAvatar('');
                     } else {
                       setAvatar('');
                     }
