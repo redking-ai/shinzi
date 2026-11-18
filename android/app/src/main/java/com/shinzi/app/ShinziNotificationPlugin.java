@@ -66,6 +66,31 @@ public class ShinziNotificationPlugin extends Plugin {
     public static volatile boolean isAppForeground = false;
     public static volatile String activeConversationId = null;
 
+    // Track ongoing active call for status bar sync
+    public static volatile boolean hasActiveCall = false;
+    public static volatile String activeCallCallerName = "";
+    public static volatile String activeCallAvatarUrl = "";
+    public static volatile String activeCallConvId = "";
+    public static volatile String activeCallId = "";
+
+    public static boolean isAppInForeground(Context context) {
+        if (isAppForeground) return true;
+        try {
+            android.app.ActivityManager am = (android.app.ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+            if (am != null) {
+                List<android.app.ActivityManager.RunningAppProcessInfo> processes = am.getRunningAppProcesses();
+                if (processes != null) {
+                    for (android.app.ActivityManager.RunningAppProcessInfo p : processes) {
+                        if (p.processName.equals(context.getPackageName())) {
+                            return p.importance == android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND;
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
     // Track pending notification chat opened by tap
     private static volatile String pendingConvId = null;
     private static volatile String pendingSenderUid = null;
@@ -200,7 +225,9 @@ public class ShinziNotificationPlugin extends Plugin {
                 .setAutoCancel(false);
 
         if (isIncoming) {
-            showIncomingCallNotificationNative(getContext(), callerName, "", convId, callId, callType);
+            if (!isAppInForeground(getContext())) {
+                showIncomingCallNotificationNative(getContext(), callerName, "", convId, callId, callType);
+            }
             call.resolve();
             return;
         } else if (isConnected) {
@@ -267,6 +294,118 @@ public class ShinziNotificationPlugin extends Plugin {
         call.resolve();
     }
 
+    @PluginMethod
+    public void startCallVibration(PluginCall call) {
+        startCallVibrationNative(getContext());
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void stopCallVibration(PluginCall call) {
+        stopCallVibrationNative(getContext());
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void setCallActiveState(PluginCall call) {
+        boolean active = Boolean.TRUE.equals(call.getBoolean("active", false));
+        hasActiveCall = active;
+        if (active) {
+            activeCallCallerName = call.getString("callerName", "Friend");
+            activeCallAvatarUrl = call.getString("avatarUrl", "");
+            activeCallConvId = call.getString("convId", "default");
+            activeCallId = call.getString("callId", "");
+        } else {
+            activeCallCallerName = "";
+            activeCallAvatarUrl = "";
+            activeCallConvId = "";
+            activeCallId = "";
+        }
+        call.resolve();
+    }
+
+    public static void startCallVibrationNative(Context context) {
+        try {
+            stopCallVibrationNative(context);
+            Vibrator v = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+            if (v != null && v.hasVibrator()) {
+                long[] pattern = new long[]{0, 1000, 1000};
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    v.vibrate(VibrationEffect.createWaveform(pattern, 0));
+                } else {
+                    v.vibrate(pattern, 0);
+                }
+                sCallVibrator = v;
+            }
+        } catch (Exception ignored) {}
+    }
+
+    public static void stopCallVibrationNative(Context context) {
+        try {
+            if (sCallVibrator != null) {
+                sCallVibrator.cancel();
+                sCallVibrator = null;
+            }
+            Vibrator v = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+            if (v != null) {
+                v.cancel();
+            }
+        } catch (Exception ignored) {}
+    }
+
+    public static void showOngoingCallNotificationNative(
+            Context context,
+            String callerName,
+            String avatarUrl,
+            String convId,
+            String callId
+    ) {
+        createCallNotificationChannel(context);
+        hasActiveCall = true;
+        activeCallCallerName = callerName != null ? callerName : "Friend";
+        activeCallAvatarUrl = avatarUrl != null ? avatarUrl : "";
+        activeCallConvId = convId != null ? convId : "default";
+        activeCallId = callId != null ? callId : "";
+
+        Intent openIntent = new Intent(context, MainActivity.class);
+        openIntent.setAction(Intent.ACTION_VIEW);
+        openIntent.setData(Uri.parse("https://shinzi.vercel.app/call?id=" + callId + "&conv=" + convId));
+        openIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            flags |= PendingIntent.FLAG_MUTABLE;
+        }
+
+        PendingIntent openPI = PendingIntent.getActivity(context, CALL_NOTIFICATION_ID, openIntent, flags);
+
+        Intent hangupIntent = new Intent(context, CallActionReceiver.class);
+        hangupIntent.setAction(CallActionReceiver.ACTION_HANG_UP);
+        hangupIntent.putExtra("callId", callId);
+        hangupIntent.putExtra("notificationId", CALL_NOTIFICATION_ID);
+        PendingIntent hangupPI = PendingIntent.getBroadcast(context, 1, hangupIntent, flags);
+
+        Bitmap avatar = fetchCircularAvatar(context, avatarUrl, callerName, convId);
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CALL_ONGOING_CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_stat_shinzi)
+                .setContentTitle(callerName != null && !callerName.isEmpty() ? callerName : "Ongoing Call")
+                .setContentText("Call in progress")
+                .setUsesChronometer(true)
+                .setContentIntent(openPI)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setCategory(NotificationCompat.CATEGORY_CALL)
+                .setOngoing(true)
+                .setAutoCancel(false)
+                .addAction(0, "Hang up", hangupPI);
+
+        if (avatar != null) {
+            builder.setLargeIcon(avatar);
+        }
+
+        NotificationManagerCompat.from(context).notify(CALL_NOTIFICATION_ID, builder.build());
+    }
+
     public static void showIncomingCallNotificationNative(
             Context context,
             String callerName,
@@ -289,23 +428,8 @@ public class ShinziNotificationPlugin extends Plugin {
         pending.put("type", callType != null ? callType : "voice");
         pendingCall = pending;
 
-        // Continuous Non-Stop Looping Vibration until call is answered/declined/hung up
-        try {
-            if (sCallVibrator != null) {
-                sCallVibrator.cancel();
-                sCallVibrator = null;
-            }
-            Vibrator v = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
-            if (v != null && v.hasVibrator()) {
-                long[] pattern = new long[]{0, 1000, 1000};
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    v.vibrate(VibrationEffect.createWaveform(pattern, 0)); // 0 repeats indefinitely!
-                } else {
-                    v.vibrate(pattern, 0);
-                }
-                sCallVibrator = v;
-            }
-        } catch (Exception ignored) {}
+        // Continuous Non-Stop Looping Vibration
+        startCallVibrationNative(context);
 
         Intent openIntent = new Intent(context, MainActivity.class);
         openIntent.setAction(Intent.ACTION_VIEW);
@@ -341,16 +465,16 @@ public class ShinziNotificationPlugin extends Plugin {
         declineIntent.putExtra("notificationId", CALL_NOTIFICATION_ID);
         PendingIntent declinePI = PendingIntent.getBroadcast(context, 10, declineIntent, flags);
 
-        Intent answerIntent = new Intent(context, MainActivity.class);
-        answerIntent.setAction(Intent.ACTION_VIEW);
-        answerIntent.setData(openIntent.getData());
-        answerIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        PendingIntent answerPI;
-        if (activityOptionsBundle != null) {
-            answerPI = PendingIntent.getActivity(context, 20, answerIntent, flags, activityOptionsBundle);
-        } else {
-            answerPI = PendingIntent.getActivity(context, 20, answerIntent, flags);
-        }
+        // Outside app Answer button: directly answers the call functionally in background
+        Intent answerIntent = new Intent(context, CallActionReceiver.class);
+        answerIntent.setAction(CallActionReceiver.ACTION_CALL_PICKUP);
+        answerIntent.putExtra("callId", callId);
+        answerIntent.putExtra("convId", convId);
+        answerIntent.putExtra("callerName", callerName);
+        answerIntent.putExtra("avatarUrl", avatarUrl);
+        answerIntent.putExtra("callType", callType);
+        answerIntent.putExtra("notificationId", CALL_NOTIFICATION_ID);
+        PendingIntent answerPI = PendingIntent.getBroadcast(context, 20, answerIntent, flags);
 
         Person.Builder personBuilder = new Person.Builder().setName(callerName);
         if (avatar != null) {
@@ -393,17 +517,10 @@ public class ShinziNotificationPlugin extends Plugin {
     }
 
     public static void clearCallNotificationNative(Context context) {
+        stopCallVibrationNative(context);
         try {
-            if (sCallVibrator != null) {
-                sCallVibrator.cancel();
-                sCallVibrator = null;
-            }
-            Vibrator v = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
-            if (v != null) {
-                v.cancel();
-            }
+            NotificationManagerCompat.from(context).cancel(CALL_NOTIFICATION_ID);
         } catch (Exception ignored) {}
-        NotificationManagerCompat.from(context).cancel(CALL_NOTIFICATION_ID);
     }
 
     @PluginMethod

@@ -236,7 +236,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
     return () => window.removeEventListener('shinzi:incomingCall', handleIncomingCallEvent);
   }, [currentUid, call, currentProfile]);
 
-  // Sync Native Ongoing Notification in Android StatusBar
+  // Sync Native Ongoing Notification & Vibration in Android
   useEffect(() => {
     const cap = (window as any).Capacitor;
     if (!cap?.Plugins?.ShinziNotification) return;
@@ -244,24 +244,30 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
     if (call && (call.status === 'connected' || call.status === 'ringing')) {
       const isIncoming = call.status === 'ringing' && !isCaller;
       const callerTitle = isCaller ? (call.receiverName || 'Friend') : (call.callerName || 'Friend');
-      if (typeof cap?.Plugins?.ShinziNotification?.showCallNotification === 'function') {
-        void cap.Plugins.ShinziNotification.showCallNotification({
+      const callerAvatar = isCaller ? (call.receiverPhotoURL || '') : (call.callerPhotoURL || '');
+
+      if (isIncoming) {
+        // IN-APP INCOMING CALL: Continuous non-stop vibration, NO duplicate heads-up notification!
+        void cap.Plugins.ShinziNotification.startCallVibration?.().catch(() => {});
+        void cap.Plugins.ShinziNotification.clearCallNotification?.().catch(() => {});
+      } else if (call.status === 'connected') {
+        // Connected call: stop vibration immediately
+        void cap.Plugins.ShinziNotification.stopCallVibration?.().catch(() => {});
+        // Inform native plugin that call is active (for background ongoing notification onPause)
+        void cap.Plugins.ShinziNotification.setCallActiveState?.({
+          active: true,
           callerName: callerTitle,
+          avatarUrl: callerAvatar,
+          convId: call.convId || '',
           callId: call.id,
-          convId: call.convId,
-          callType: call.type,
-          isConnected: call.status === 'connected',
-          isIncoming,
-          isMuted: isSelfMuted,
-          isDeafened: isDeafened,
         }).catch(() => {});
       }
     } else {
-      if (typeof cap?.Plugins?.ShinziNotification?.clearCallNotification === 'function') {
-        void cap.Plugins.ShinziNotification.clearCallNotification().catch(() => {});
-      }
+      void cap.Plugins.ShinziNotification.stopCallVibration?.().catch(() => {});
+      void cap.Plugins.ShinziNotification.clearCallNotification?.().catch(() => {});
+      void cap.Plugins.ShinziNotification.setCallActiveState?.({ active: false }).catch(() => {});
     }
-  }, [call?.status, isSelfMuted, isDeafened, isCaller, call?.receiverName, call?.callerName, call?.id, call?.convId, call?.type]);
+  }, [call?.status, isSelfMuted, isDeafened, isCaller, call?.receiverName, call?.callerName, call?.id, call?.convId, call?.type, call?.callerPhotoURL, call?.receiverPhotoURL]);
 
   // Native notification actions listener (Pickup, Decline, Hangup, Self Mute, Mute Sound)
   useEffect(() => {
@@ -485,7 +491,11 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
             <button
               type="button"
               className="shc-incoming-btn shc-incoming-pickup"
-              onClick={() => void callEngine.answerCall(call)}
+              onClick={() => {
+                const cap = (window as any).Capacitor;
+                void cap?.Plugins?.ShinziNotification?.stopCallVibration?.().catch(() => {});
+                void callEngine.answerCall(call);
+              }}
               title="Pick up"
               aria-label="Pick up call"
             >
@@ -496,7 +506,12 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
             <button
               type="button"
               className="shc-incoming-btn shc-incoming-decline"
-              onClick={() => void callEngine.endCall()}
+              onClick={() => {
+                const cap = (window as any).Capacitor;
+                void cap?.Plugins?.ShinziNotification?.stopCallVibration?.().catch(() => {});
+                void cap?.Plugins?.ShinziNotification?.clearCallNotification?.().catch(() => {});
+                void callEngine.endCall();
+              }}
               title="Decline"
               aria-label="Decline call"
             >
@@ -881,7 +896,12 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
             <button
               type="button"
               className="shc-control-btn end-btn"
-              onClick={() => void callEngine.endCall()}
+              onClick={() => {
+                const cap = (window as any).Capacitor;
+                void cap?.Plugins?.ShinziNotification?.stopCallVibration?.().catch(() => {});
+                void cap?.Plugins?.ShinziNotification?.clearCallNotification?.().catch(() => {});
+                void callEngine.endCall();
+              }}
               title="End Call"
               aria-label="End call"
             >

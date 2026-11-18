@@ -24,27 +24,35 @@ public class CallActionReceiver extends BroadcastReceiver {
 
         switch (action) {
             case ACTION_CALL_PICKUP:
+                // 1. Immediately cancel incoming ringing notification & stop phone vibration
                 ShinziNotificationPlugin.clearCallNotificationNative(context);
                 if (nm != null) nm.cancel(notifId);
+
+                // 2. Notify webview call engine to functionally answer and stream audio
                 ShinziNotificationPlugin.notifyCallAction("pickup", callId);
-                try {
-                    Intent launchIntent = new Intent(context, MainActivity.class);
-                    launchIntent.setAction(Intent.ACTION_VIEW);
-                    launchIntent.setData(Uri.parse("https://shinzi.vercel.app/call?id=" + (callId != null ? callId : "") + "&action=answer"));
-                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                    context.startActivity(launchIntent);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
+
+                // 3. Post ongoing active call notification with live chronometer timer and "Hang up" button
+                String caller = intent.getStringExtra("callerName");
+                String avatar = intent.getStringExtra("avatarUrl");
+                String conv = intent.getStringExtra("convId");
+                ShinziNotificationPlugin.showOngoingCallNotificationNative(
+                        context,
+                        caller != null ? caller : "Friend",
+                        avatar != null ? avatar : "",
+                        conv != null ? conv : "default",
+                        callId != null ? callId : ""
+                );
                 break;
 
             case ACTION_CALL_DECLINE:
+                ShinziNotificationPlugin.hasActiveCall = false;
                 ShinziNotificationPlugin.clearCallNotificationNative(context);
                 if (nm != null) nm.cancel(notifId);
                 ShinziNotificationPlugin.notifyCallAction("decline", callId);
                 break;
 
             case ACTION_HANG_UP:
+                ShinziNotificationPlugin.hasActiveCall = false;
                 ShinziNotificationPlugin.clearCallNotificationNative(context);
                 if (nm != null) nm.cancel(notifId);
                 ShinziNotificationPlugin.notifyCallAction("hangup", callId);

@@ -242,6 +242,11 @@ public class MainActivity extends BridgeActivity {
     public void onResume() {
         super.onResume();
         ShinziNotificationPlugin.isAppForeground = true;
+        // When user is inside the app during an active call, dismiss status bar notification
+        // so it doesn't duplicate over the active in-app screen
+        if (ShinziNotificationPlugin.hasActiveCall) {
+            ShinziNotificationPlugin.clearCallNotificationNative(this);
+        }
         try {
             WebView webView = getBridge().getWebView();
             if (webView != null) {
@@ -256,5 +261,15 @@ public class MainActivity extends BridgeActivity {
     public void onPause() {
         super.onPause();
         ShinziNotificationPlugin.isAppForeground = false;
+        // When user exits/minimizes app during active call, display ongoing call notification with Hang Up button
+        if (ShinziNotificationPlugin.hasActiveCall) {
+            ShinziNotificationPlugin.showOngoingCallNotificationNative(
+                    this,
+                    ShinziNotificationPlugin.activeCallCallerName,
+                    ShinziNotificationPlugin.activeCallAvatarUrl,
+                    ShinziNotificationPlugin.activeCallConvId,
+                    ShinziNotificationPlugin.activeCallId
+            );
+        }
     }
 }

@@ -38,7 +38,7 @@ public class ShinziFirebaseMessagingService extends FirebaseMessagingService {
         if ("incoming_call".equals(type) || "call".equals(type)) {
             // If the app is already in the foreground, CallOverlay in the webview handles the incoming call directly.
             // Returning here prevents duplicate ringing, double vibration, and duplicate activity launches!
-            if (ShinziNotificationPlugin.isAppForeground) {
+            if (ShinziNotificationPlugin.isAppInForeground(this)) {
                 Log.d(TAG, "App in foreground: letting in-app CallOverlay handle incoming call.");
                 return;
             }
@@ -59,9 +59,12 @@ public class ShinziFirebaseMessagingService extends FirebaseMessagingService {
             String effectiveCallId = callId != null ? callId : "call_default";
             String effectiveConvId = convId != null ? convId : "default";
 
+            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+            android.app.KeyguardManager km = (android.app.KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+            boolean isScreenLockedOrOff = (km != null && km.isKeyguardLocked()) || (pm != null && !pm.isInteractive());
+
             // 1. Acquire WakeLock to turn on device screen immediately
             try {
-                PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
                 if (pm != null) {
                     PowerManager.WakeLock wakeLock = pm.newWakeLock(
                             PowerManager.FULL_WAKE_LOCK |
@@ -75,64 +78,66 @@ public class ShinziFirebaseMessagingService extends FirebaseMessagingService {
                 Log.w(TAG, "Failed to acquire call wakelock: " + e.getMessage());
             }
 
-            // 2. Launch full-screen call activity over lock screen / home screen immediately
-            try {
-                String safeCaller = senderName != null ? URLEncoder.encode(senderName, "UTF-8") : "Friend";
-                String safeAvatar = avatarUrl != null ? URLEncoder.encode(avatarUrl, "UTF-8") : "";
-                String safeType = callType != null ? URLEncoder.encode(callType, "UTF-8") : "voice";
+            // 2. If screen is locked or off, launch full-screen call activity over lock screen
+            if (isScreenLockedOrOff) {
+                try {
+                    String safeCaller = senderName != null ? URLEncoder.encode(senderName, "UTF-8") : "Friend";
+                    String safeAvatar = avatarUrl != null ? URLEncoder.encode(avatarUrl, "UTF-8") : "";
+                    String safeType = callType != null ? URLEncoder.encode(callType, "UTF-8") : "voice";
 
-                java.util.Map<String, String> pending = new java.util.HashMap<>();
-                pending.put("callId", effectiveCallId);
-                pending.put("convId", effectiveConvId);
-                pending.put("caller", senderName != null ? senderName : "Friend");
-                pending.put("avatar", avatarUrl != null ? avatarUrl : "");
-                pending.put("type", callType != null ? callType : "voice");
-                ShinziNotificationPlugin.pendingCall = pending;
+                    java.util.Map<String, String> pending = new java.util.HashMap<>();
+                    pending.put("callId", effectiveCallId);
+                    pending.put("convId", effectiveConvId);
+                    pending.put("caller", senderName != null ? senderName : "Friend");
+                    pending.put("avatar", avatarUrl != null ? avatarUrl : "");
+                    pending.put("type", callType != null ? callType : "voice");
+                    ShinziNotificationPlugin.pendingCall = pending;
 
-                Uri callUri = Uri.parse("https://shinzi.vercel.app/call?id=" + effectiveCallId + "&conv=" + effectiveConvId + "&caller=" + safeCaller + "&avatar=" + safeAvatar + "&type=" + safeType);
+                    Uri callUri = Uri.parse("https://shinzi.vercel.app/call?id=" + effectiveCallId + "&conv=" + effectiveConvId + "&caller=" + safeCaller + "&avatar=" + safeAvatar + "&type=" + safeType);
 
-                Intent callIntent = new Intent(this, MainActivity.class);
-                callIntent.setAction(Intent.ACTION_VIEW);
-                callIntent.setData(callUri);
-                callIntent.addFlags(
-                        Intent.FLAG_ACTIVITY_NEW_TASK |
-                        Intent.FLAG_ACTIVITY_SINGLE_TOP |
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP |
-                        Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-                );
-
-                int piFlags = PendingIntent.FLAG_UPDATE_CURRENT;
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    piFlags |= PendingIntent.FLAG_MUTABLE;
-                }
-
-                android.os.Bundle activityOptionsBundle = null;
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    android.app.ActivityOptions options = android.app.ActivityOptions.makeBasic();
-                    options.setPendingIntentBackgroundActivityStartMode(
-                        android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                    Intent callIntent = new Intent(this, MainActivity.class);
+                    callIntent.setAction(Intent.ACTION_VIEW);
+                    callIntent.setData(callUri);
+                    callIntent.addFlags(
+                            Intent.FLAG_ACTIVITY_NEW_TASK |
+                            Intent.FLAG_ACTIVITY_SINGLE_TOP |
+                            Intent.FLAG_ACTIVITY_CLEAR_TOP |
+                            Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
                     );
-                    activityOptionsBundle = options.toBundle();
-                }
 
-                PendingIntent pi;
-                if (activityOptionsBundle != null) {
-                    pi = PendingIntent.getActivity(this, 8888, callIntent, piFlags, activityOptionsBundle);
-                    try {
-                        pi.send(this, 0, null, null, null, null, activityOptionsBundle);
-                    } catch (Exception piErr) {
-                        startActivity(callIntent, activityOptionsBundle);
+                    int piFlags = PendingIntent.FLAG_UPDATE_CURRENT;
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        piFlags |= PendingIntent.FLAG_MUTABLE;
                     }
-                } else {
-                    pi = PendingIntent.getActivity(this, 8888, callIntent, piFlags);
-                    try {
-                        pi.send();
-                    } catch (Exception piErr) {
-                        startActivity(callIntent);
+
+                    android.os.Bundle activityOptionsBundle = null;
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                        android.app.ActivityOptions options = android.app.ActivityOptions.makeBasic();
+                        options.setPendingIntentBackgroundActivityStartMode(
+                            android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                        );
+                        activityOptionsBundle = options.toBundle();
                     }
+
+                    PendingIntent pi;
+                    if (activityOptionsBundle != null) {
+                        pi = PendingIntent.getActivity(this, 8888, callIntent, piFlags, activityOptionsBundle);
+                        try {
+                            pi.send(this, 0, null, null, null, null, activityOptionsBundle);
+                        } catch (Exception piErr) {
+                            startActivity(callIntent, activityOptionsBundle);
+                        }
+                    } else {
+                        pi = PendingIntent.getActivity(this, 8888, callIntent, piFlags);
+                        try {
+                            pi.send();
+                        } catch (Exception piErr) {
+                            startActivity(callIntent);
+                        }
+                    }
+                } catch (Exception e) {
+                    Log.w(TAG, "Failed to launch incoming call activity: " + e.getMessage());
                 }
-            } catch (Exception e) {
-                Log.w(TAG, "Failed to launch incoming call activity: " + e.getMessage());
             }
 
             // 3. Post full-screen incoming call notification with ringtone & answer/decline actions
