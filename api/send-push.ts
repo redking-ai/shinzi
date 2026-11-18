@@ -92,7 +92,8 @@ export default {
           let replyAvatar = '';
           try {
             const senderDoc = await adminDb.collection('users').doc(senderUid).get();
-            replyAvatar = senderDoc.data()?.photoURL || '';
+            const sData = senderDoc.data();
+            replyAvatar = sData?.photoURL || (sData?.profileAssetId ? `/api/avatar?assetId=${sData.profileAssetId}` : `/api/avatar?uid=${senderUid}`);
             if (replyAvatar && replyAvatar.startsWith('/')) {
               replyAvatar = 'https://shinzi.vercel.app' + replyAvatar;
             }
@@ -127,10 +128,18 @@ export default {
       let fcmSentCount = 0;
       try {
         let pushAvatar = icon || '';
-        if (!pushAvatar && senderUid) {
+        if (senderUid) {
           try {
             const senderDoc = await adminDb.collection('users').doc(senderUid).get();
-            pushAvatar = senderDoc.data()?.photoURL || '';
+            const senderData = senderDoc.data();
+            const photo = senderData?.photoURL;
+            if (photo && typeof photo === 'string' && photo.trim()) {
+              pushAvatar = photo.trim();
+            } else if (senderData?.profileAssetId) {
+              pushAvatar = `/api/avatar?assetId=${senderData.profileAssetId}`;
+            } else {
+              pushAvatar = `/api/avatar?uid=${senderUid}`;
+            }
           } catch {}
         }
         if (pushAvatar && pushAvatar.startsWith('/')) {
@@ -204,9 +213,9 @@ export default {
       }
 
       const payload = JSON.stringify({
-        title: title || 'Shinzi',
+        title: title || senderName || 'Shinzi',
         body: text || 'You received a new message',
-        icon: icon || '/icon-192.png',
+        icon: pushAvatar || icon || '/icon-192.png',
         badge: '/icon-192.png',
         url: url || '/',
         tag: tag || `shinzi-${Date.now()}`,

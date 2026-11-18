@@ -335,6 +335,8 @@ export default function OtherProfile({
             return data.mediaUrl;
           }
 
+          // Backend proxy endpoint with server-side caching & public header
+          const apiAvatarUrl = `/api/avatar?assetId=${encodeURIComponent(trimmedId)}`;
           try {
             const dataUri = await drive.getFileDataUri(
               String(data.providerFileId)
@@ -342,14 +344,14 @@ export default function OtherProfile({
             if (dataUri) return dataUri;
           } catch {}
 
-          // Fallback to Google Drive public image CDN for static images only
-          return `https://lh3.googleusercontent.com/d/${encodeURIComponent(String(data.providerFileId))}=s800`;
+          // Fallback to backend avatar proxy or Google Drive CDN
+          return apiAvatarUrl;
         } catch (e) {
           console.warn(
             'Unable to load other profile asset:',
             e
           );
-          return '';
+          return `/api/avatar?assetId=${encodeURIComponent(trimmedId)}`;
         }
       };
 
@@ -359,21 +361,20 @@ export default function OtherProfile({
       ]);
 
       if (!cancelled) {
-        if (avatarUri && !isMediaVideo(avatarUri)) {
-          setAvatar(avatarUri);
-        } else if (userData?.photoURL && !isMediaVideo(userData.photoURL)) {
-          setAvatar(String(userData.photoURL));
-        } else {
-          setAvatar('');
+        const fallbackPhoto = userData?.photoURL && !isMediaVideo(userData.photoURL) ? String(userData.photoURL) : '';
+        const resolvedAvatar = (avatarUri && !isMediaVideo(avatarUri))
+          ? avatarUri
+          : (fallbackPhoto || (userData?.profileAssetId ? `/api/avatar?uid=${encodeURIComponent(targetUid)}` : ''));
+        if (resolvedAvatar) {
+          setAvatar(resolvedAvatar);
         }
 
-        // Only set banner if it is a valid image/GIF, otherwise clear to default glow
-        if (bannerUri && !isMediaVideo(bannerUri)) {
-          setBanner(bannerUri);
-        } else if (userData?.bannerUrl && !isMediaVideo(userData.bannerUrl)) {
-          setBanner(String(userData.bannerUrl));
-        } else {
-          setBanner('');
+        const fallbackBanner = userData?.bannerUrl && !isMediaVideo(userData.bannerUrl) ? String(userData.bannerUrl) : '';
+        const resolvedBanner = (bannerUri && !isMediaVideo(bannerUri))
+          ? bannerUri
+          : (fallbackBanner || (userData?.bannerAssetId ? `/api/avatar?assetId=${encodeURIComponent(String(userData.bannerAssetId))}` : ''));
+        if (resolvedBanner) {
+          setBanner(resolvedBanner);
         }
       }
     };
@@ -630,7 +631,15 @@ export default function OtherProfile({
                   alt={`${userData.displayName || 'User'} profile`}
                   loading="eager"
                   decoding="async"
-                  onError={() => setAvatar('')}
+                  onError={() => {
+                    if (targetUid && !avatar.includes('/api/avatar')) {
+                      setAvatar(`/api/avatar?uid=${encodeURIComponent(targetUid)}`);
+                    } else if (userData?.photoURL && avatar !== userData.photoURL) {
+                      setAvatar(String(userData.photoURL));
+                    } else {
+                      setAvatar('');
+                    }
+                  }}
                 />
               ) : (
                 <div className="sh-avatar sh-avatar-fallback">

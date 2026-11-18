@@ -14,6 +14,7 @@ export interface MediaItem {
   width?: number | null;
   height?: number | null;
   duration?: number | null;
+  isUploading?: boolean;
 }
 
 interface MediaGridProps {
@@ -166,8 +167,16 @@ export const MediaGrid: React.FC<MediaGridProps> = ({
                 />
               )}
 
+              {/* Discord-style Uploading Spinner Overlay */}
+              {it.isUploading && (
+                <div className="shc-media-uploading-overlay">
+                  <Loader2 size={18} className="shc-spin" />
+                  <span>Sending…</span>
+                </div>
+              )}
+
               {/* WhatsApp-style Download Pill when not downloaded */}
-              {!isDownloaded && (
+              {!isDownloaded && !it.isUploading && (
                 <div
                   className="shc-media-dl-pill"
                   onClick={(e) => void handleDownloadItem(e, it, idx)}

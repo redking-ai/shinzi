@@ -4119,10 +4119,40 @@ const handleSearchMessage = async (target: Rec) => {
   };
 
   async function uploadAndSendStagedMedia(items: StagedAttachment[], caption: string) {
-    if (!selected?.id || sendingRef.current) return;
+    if (!selected?.id) return;
     const initiatedAt = Timestamp.now();
-    sendingRef.current = true;
-    setSending(true);
+
+    // Discord-style optimistic message: media appears in chat immediately with "Sending..." overlay
+    const tempMsgId = `opt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const optimisticMedia: MediaItem[] = items.map((it, idx) => ({
+      id: `${tempMsgId}_${idx}`,
+      type: it.type,
+      mediaUrl: it.previewUrl,
+      originalUrl: it.previewUrl,
+      fileName: it.file.name,
+      sizeBytes: it.file.size,
+      isUploading: true,
+    }));
+
+    const optimisticMessage: Rec = {
+      id: tempMsgId,
+      senderId: uid,
+      senderName: profile?.displayName || profile?.username || 'You',
+      senderUsername: profile?.username || '',
+      senderPhotoURL: profile?.photoURL || '',
+      createdAt: initiatedAt,
+      text: caption,
+      type: 'media',
+      mediaItems: optimisticMedia,
+      mediaUrl: optimisticMedia[0]?.mediaUrl,
+      isUploading: true,
+    };
+
+    setMessages((prev) => [...prev, optimisticMessage]);
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      isNearBottomRef.current = true;
+    }
 
     // 1. Optimize images (compress to fast WebP in parallel, in milliseconds)
     const processedItems: Array<{
@@ -4185,9 +4215,8 @@ const handleSearchMessage = async (target: Rec) => {
           await sendMediaMessage({ mediaItems, text: caption, initiatedAt });
         } catch (err) {
           notify('Upload failed', messageOf(err));
-          sendingRef.current = false;
-          setSending(false);
         } finally {
+          setMessages((prev) => prev.filter((m) => m.id !== tempMsgId));
           items.forEach((it) => {
             try {
               URL.revokeObjectURL(it.previewUrl);
@@ -4200,8 +4229,7 @@ const handleSearchMessage = async (target: Rec) => {
         'Google Drive Required',
         'Connect Google Drive in settings to send high-res photos and videos.',
       );
-      sendingRef.current = false;
-      setSending(false);
+      setMessages((prev) => prev.filter((m) => m.id !== tempMsgId));
       return;
     }
 
@@ -4234,7 +4262,7 @@ const handleSearchMessage = async (target: Rec) => {
           : await getMediaDimensions(file);
 
         const previewUrl = isImage
-          ? `https://lh3.googleusercontent.com/d/${uploaded.fileId}=s1600`
+          ? `https://lh3.googleusercontent.com/d/${uploaded.fileId}=s800`
           : `/api/media?fileId=${uploaded.fileId}`;
         const originalUrl = isImage
           ? `https://lh3.googleusercontent.com/d/${uploaded.fileId}=s0`
@@ -4256,8 +4284,7 @@ const handleSearchMessage = async (target: Rec) => {
 
       if (!mediaItems.length) {
         notify('Upload failed', 'No valid image or video files selected.');
-        sendingRef.current = false;
-        setSending(false);
+        setMessages((prev) => prev.filter((m) => m.id !== tempMsgId));
         return;
       }
 
@@ -4274,9 +4301,8 @@ const handleSearchMessage = async (target: Rec) => {
     } catch (err) {
       console.error('Drive gallery upload error:', err);
       notify('Upload failed', messageOf(err));
-      sendingRef.current = false;
-      setSending(false);
     } finally {
+      setMessages((prev) => prev.filter((m) => m.id !== tempMsgId));
       items.forEach((it) => {
         try {
           URL.revokeObjectURL(it.previewUrl);
@@ -5084,13 +5110,13 @@ const handleSearchMessage = async (target: Rec) => {
       let original = '';
       const fileId = msg.driveFileId || msg.fileId;
       if (fileId) {
-        preview = `https://lh3.googleusercontent.com/d/${fileId}=s1600`;
+        preview = `https://lh3.googleusercontent.com/d/${fileId}=s800`;
         original = `https://lh3.googleusercontent.com/d/${fileId}=s0`;
       } else if (msg.mediaUrl || msg.imageUrl) {
         const raw = String(msg.mediaUrl || msg.imageUrl);
         const driveMatch = raw.match(/lh3\.googleusercontent\.com\/d\/([a-zA-Z0-9_-]+)/);
         if (driveMatch && driveMatch[1]) {
-          preview = `https://lh3.googleusercontent.com/d/${driveMatch[1]}=s1600`;
+          preview = `https://lh3.googleusercontent.com/d/${driveMatch[1]}=s800`;
           original = `https://lh3.googleusercontent.com/d/${driveMatch[1]}=s0`;
         } else {
           preview = raw;
