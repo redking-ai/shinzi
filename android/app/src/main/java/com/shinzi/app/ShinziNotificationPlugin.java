@@ -532,7 +532,7 @@ public class ShinziNotificationPlugin extends Plugin {
     }
 
     @PluginMethod
-    public void requestScreenCapture(PluginCall call) {
+    public void startNativeScreenCapture(PluginCall call) {
         Activity activity = getActivity();
         if (activity == null) {
             call.reject("Activity not available");
@@ -544,18 +544,56 @@ public class ShinziNotificationPlugin extends Plugin {
             return;
         }
         Intent intent = mpm.createScreenCaptureIntent();
-        startActivityForResult(call, intent, "screenCaptureCallback");
+        startActivityForResult(call, intent, "nativeScreenCaptureCallback");
     }
 
     @ActivityCallback
-    private void screenCaptureCallback(PluginCall call, ActivityResult result) {
-        if (result != null && result.getResultCode() == Activity.RESULT_OK) {
+    private void nativeScreenCaptureCallback(PluginCall call, ActivityResult result) {
+        if (result != null && result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
+            Context context = getContext();
+            if (context != null) {
+                Intent serviceIntent = new Intent(context, ScreenCaptureService.class);
+                serviceIntent.setAction(ScreenCaptureService.ACTION_START);
+                serviceIntent.putExtra("resultCode", result.getResultCode());
+                serviceIntent.putExtra("resultData", result.getData());
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(serviceIntent);
+                } else {
+                    context.startService(serviceIntent);
+                }
+            }
             JSObject ret = new JSObject();
-            ret.put("granted", true);
+            ret.put("success", true);
             call.resolve(ret);
         } else {
             call.reject("User cancelled screen capture");
         }
+    }
+
+    @PluginMethod
+    public void stopNativeScreenCapture(PluginCall call) {
+        Context context = getContext();
+        if (context != null) {
+            Intent intent = new Intent(context, ScreenCaptureService.class);
+            intent.setAction(ScreenCaptureService.ACTION_STOP);
+            context.startService(intent);
+        }
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void getLatestScreenFrame(PluginCall call) {
+        byte[] frame = ScreenCaptureService.latestJpegFrame;
+        boolean capturing = ScreenCaptureService.isCapturing;
+        JSObject ret = new JSObject();
+        ret.put("capturing", capturing);
+        if (frame != null && frame.length > 0) {
+            String b64 = android.util.Base64.encodeToString(frame, android.util.Base64.NO_WRAP);
+            ret.put("frame", "data:image/jpeg;base64," + b64);
+        } else {
+            ret.put("frame", "");
+        }
+        call.resolve(ret);
     }
 
     private static void createCallNotificationChannel(Context context) {

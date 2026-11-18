@@ -771,6 +771,10 @@ class CallEngine {
     const isCurrentlySharing = this.isCaller ? this.activeCall.callerScreenSharing : this.activeCall.receiverScreenSharing;
 
     if (isCurrentlySharing) {
+      const cap = (window as any).Capacitor;
+      if (typeof cap?.Plugins?.ShinziNotification?.stopNativeScreenCapture === 'function') {
+        void cap.Plugins.ShinziNotification.stopNativeScreenCapture().catch(() => {});
+      }
       if (this.screenAnimInterval) {
         clearInterval(this.screenAnimInterval);
         this.screenAnimInterval = null;
@@ -796,10 +800,12 @@ class CallEngine {
     } else {
       try {
         const cap = (window as any).Capacitor;
-        // In Android APK, trigger native MediaProjection permission dialog
-        if (typeof cap?.Plugins?.ShinziNotification?.requestScreenCapture === 'function') {
+        let isNativeAndroid = false;
+        // In Android APK, trigger native MediaProjection service
+        if (typeof cap?.Plugins?.ShinziNotification?.startNativeScreenCapture === 'function') {
           try {
-            await cap.Plugins.ShinziNotification.requestScreenCapture();
+            await cap.Plugins.ShinziNotification.startNativeScreenCapture();
+            isNativeAndroid = true;
           } catch (nativeErr) {
             console.warn('[CallEngine] Native MediaProjection cancelled/denied:', nativeErr);
             return false;
@@ -807,7 +813,7 @@ class CallEngine {
         }
 
         let stream: MediaStream | null = null;
-        if (navigator.mediaDevices && typeof navigator.mediaDevices.getDisplayMedia === 'function') {
+        if (!isNativeAndroid && navigator.mediaDevices && typeof navigator.mediaDevices.getDisplayMedia === 'function') {
           try {
             stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
           } catch (displayErr) {
@@ -818,88 +824,84 @@ class CallEngine {
         // Active animated screen canvas capture stream (continuous 30fps) for WebView / mobile
         if (!stream) {
           const canvas = document.createElement('canvas');
-          canvas.width = 1280;
-          canvas.height = 720;
+          canvas.width = 720;
+          canvas.height = 1280;
           const ctx = canvas.getContext('2d');
           if (ctx) {
             let frameCount = 0;
             const myName = this.isCaller ? (this.activeCall.callerName || 'Shinzi') : (this.activeCall.receiverName || 'Shinzi');
-            const drawScreenFallback = () => {
+            const screenImg = new Image();
+
+            const drawScreen = async () => {
               frameCount++;
-              // Sleek dark gradient background
-              const grad = ctx.createLinearGradient(0, 0, 1280, 720);
+
+              // 1. If native Android MediaProjection screen capture is active, paint the real device screen
+              if (isNativeAndroid && typeof cap?.Plugins?.ShinziNotification?.getLatestScreenFrame === 'function') {
+                try {
+                  const res = await cap.Plugins.ShinziNotification.getLatestScreenFrame();
+                  if (res?.frame) {
+                    screenImg.onload = () => {
+                      if (screenImg.naturalWidth > 0 && canvas.width !== screenImg.naturalWidth) {
+                        canvas.width = screenImg.naturalWidth;
+                        canvas.height = screenImg.naturalHeight;
+                      }
+                      ctx.drawImage(screenImg, 0, 0);
+                    };
+                    screenImg.src = res.frame;
+                    return;
+                  }
+                } catch {}
+              }
+
+              // 2. Fallback visualizer if native frame is not yet available
+              const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
               grad.addColorStop(0, '#0a0d14');
               grad.addColorStop(0.5, '#121520');
               grad.addColorStop(1, '#1b1d2a');
               ctx.fillStyle = grad;
-              ctx.fillRect(0, 0, 1280, 720);
-
-              // Grid pattern
-              ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
-              ctx.lineWidth = 1;
-              for (let x = 0; x < 1280; x += 40) {
-                ctx.beginPath();
-                ctx.moveTo(x, 0);
-                ctx.lineTo(x, 720);
-                ctx.stroke();
-              }
-              for (let y = 0; y < 720; y += 40) {
-                ctx.beginPath();
-                ctx.moveTo(0, y);
-                ctx.lineTo(1280, y);
-                ctx.stroke();
-              }
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
 
               // Pulsing glow circle in center
+              const centerX = canvas.width / 2;
+              const centerY = canvas.height / 2 - 80;
               const pulse = Math.sin(frameCount * 0.06) * 12;
               ctx.fillStyle = 'rgba(88, 101, 242, 0.15)';
               ctx.beginPath();
-              ctx.arc(640, 290, 90 + pulse, 0, Math.PI * 2);
+              ctx.arc(centerX, centerY, 90 + pulse, 0, Math.PI * 2);
               ctx.fill();
 
               ctx.fillStyle = '#5865f2';
               ctx.beginPath();
-              ctx.arc(640, 290, 70, 0, Math.PI * 2);
+              ctx.arc(centerX, centerY, 70, 0, Math.PI * 2);
               ctx.fill();
 
               // Screen Share Icon drawn on canvas
               ctx.strokeStyle = '#ffffff';
               ctx.lineWidth = 4;
-              ctx.strokeRect(615, 268, 50, 34);
+              ctx.strokeRect(centerX - 25, centerY - 22, 50, 34);
               ctx.beginPath();
-              ctx.moveTo(630, 302);
-              ctx.lineTo(650, 302);
-              ctx.moveTo(640, 302);
-              ctx.lineTo(640, 312);
-              ctx.moveTo(625, 312);
-              ctx.lineTo(655, 312);
+              ctx.moveTo(centerX - 10, centerY + 12);
+              ctx.lineTo(centerX + 10, centerY + 12);
+              ctx.moveTo(centerX, centerY + 12);
+              ctx.lineTo(centerX, centerY + 22);
+              ctx.moveTo(centerX - 15, centerY + 22);
+              ctx.lineTo(centerX + 15, centerY + 22);
               ctx.stroke();
 
               // Title
               ctx.fillStyle = '#ffffff';
               ctx.font = 'bold 34px sans-serif';
               ctx.textAlign = 'center';
-              ctx.fillText(`${myName}'s Screen Stream`, 640, 420);
+              ctx.fillText(`${myName}'s Screen Stream`, centerX, centerY + 130);
 
               // Subtitle
               ctx.font = '18px sans-serif';
               ctx.fillStyle = '#949ba4';
               const timeStr = new Date().toLocaleTimeString();
-              ctx.fillText(`Live Stream Active • 1080p 60FPS • ${timeStr}`, 640, 460);
-
-              // Animated wave visualizer bars
-              const barCount = 24;
-              const totalW = 480;
-              const startX = 640 - totalW / 2;
-              for (let i = 0; i < barCount; i++) {
-                const barH = 10 + Math.abs(Math.sin((frameCount + i * 4) * 0.1)) * 36;
-                const bx = startX + (i * (totalW / barCount));
-                ctx.fillStyle = '#5865f2';
-                ctx.fillRect(bx, 530 - barH / 2, 10, barH);
-              }
+              ctx.fillText(`Live Stream Active • 60FPS • ${timeStr}`, centerX, centerY + 170);
             };
 
-            drawScreenFallback();
+            drawScreen();
             try {
               stream = (canvas as any).captureStream ? (canvas as any).captureStream(30) : null;
             } catch {}
@@ -915,7 +917,7 @@ class CallEngine {
                 }
                 return;
               }
-              drawScreenFallback();
+              void drawScreen();
             }, 1000 / 30);
           }
         }
@@ -1079,6 +1081,10 @@ class CallEngine {
 
   // 13. Full Cleanup
   public cleanup() {
+    const cap = (window as any).Capacitor;
+    if (typeof cap?.Plugins?.ShinziNotification?.stopNativeScreenCapture === 'function') {
+      void cap.Plugins.ShinziNotification.stopNativeScreenCapture().catch(() => {});
+    }
     this.stopRingtone();
     if (this.ringTimeoutId) {
       clearTimeout(this.ringTimeoutId);
