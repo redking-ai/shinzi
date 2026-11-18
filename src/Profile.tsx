@@ -9,10 +9,10 @@ import {
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import {
   ArrowLeft,
+  Bell,
   MessageCircle,
   Pencil,
   Plus,
-  Search,
   Server,
   Sparkles,
 } from 'lucide-react';
@@ -1308,11 +1308,11 @@ useEffect(() => {
         <button
           type="button"
           onClick={() => {
-            navigateTo('/chat?screen=search');
+            navigateTo('/chat?screen=notifications');
           }}
-          aria-label="Search"
+          aria-label="Notifications"
         >
-          <Search size={22} />
+          <Bell size={22} />
         </button>
 
         <button

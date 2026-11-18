@@ -2216,6 +2216,60 @@ export default function Chat({ onNavigate }: ChatProps) {
   const filteredConversations = useMemo(() => {
     let rows = [...conversations];
 
+    // Merge any outgoing or incoming DM requests into the chats list (Discord style)
+    const existingOtherUids = new Set(
+      rows.map((r) => (r.memberIds || []).find((m: string) => m !== uid)).filter(Boolean)
+    );
+
+    [...sentDMRequests, ...dmRequests].forEach((req) => {
+      const otherUid = req.fromUid === uid ? req.toUid : req.fromUid;
+      if (!otherUid || otherUid === uid || existingOtherUids.has(otherUid)) return;
+      existingOtherUids.add(otherUid);
+
+      const otherProfile = req.fromUid === uid ? req.toProfile : req.fromProfile;
+      const lastMsg = Array.isArray(req.messages) && req.messages.length > 0
+        ? req.messages[req.messages.length - 1]
+        : null;
+
+      rows.push({
+        id: directId(me, otherUid),
+        type: 'direct',
+        memberIds: [me, otherUid],
+        memberProfiles: {
+          [me]: {
+            displayName: profile?.displayName || 'You',
+            username: profile?.username || '',
+            photoURL: profile?.photoURL || '',
+            profileAssetId: profile?.profileAssetId || '',
+          },
+          [otherUid]: {
+            displayName: otherProfile?.displayName || otherProfile?.username || 'User',
+            username: otherProfile?.username || '',
+            photoURL: otherProfile?.photoURL || '',
+            profileAssetId: otherProfile?.profileAssetId || '',
+          },
+        },
+        lastMessageText: lastMsg?.text || req.message || 'Started a conversation',
+        lastMessageAt: lastMsg?.createdAt || req.updatedAt || req.createdAt,
+        lastSenderId: lastMsg?.senderId || req.fromUid,
+        lastSenderName: lastMsg?.senderName || (req.fromUid === uid ? 'You' : otherProfile?.displayName),
+        updatedAt: req.updatedAt || req.createdAt,
+        requestStatus: req.status || 'pending',
+        messages: req.messages || (req.message ? [{
+          id: `${req.fromUid}_${req.toUid}_0`,
+          type: 'text',
+          text: req.message,
+          senderId: req.fromUid,
+          senderName: otherProfile?.displayName || 'User',
+          senderUsername: otherProfile?.username || '',
+          senderPhotoURL: otherProfile?.photoURL || '',
+          senderProfileAssetId: otherProfile?.profileAssetId || '',
+          createdAt: millis(req.createdAt) || Date.now(),
+          deleted: false,
+        }] : []),
+      });
+    });
+
     const text = chatFilter.trim().toLowerCase();
 
     if (text) {
@@ -2363,7 +2417,35 @@ export default function Chat({ onNavigate }: ChatProps) {
 
     setSelected(conversation);
     setScreen('conversation');
-    setPendingDmMessages([]);
+    if (Array.isArray(conversation.messages) && conversation.messages.length > 0) {
+      setPendingDmMessages(conversation.messages);
+    } else {
+      const directTargetUid = (conversation.memberIds || []).find((m: string) => m !== uid);
+      if (directTargetUid) {
+        const matchingReq = sentDMRequests.find((r) => r.toUid === directTargetUid) ||
+          dmRequests.find((r) => r.fromUid === directTargetUid);
+        if (matchingReq && Array.isArray(matchingReq.messages)) {
+          setPendingDmMessages(matchingReq.messages);
+        } else if (matchingReq && matchingReq.message) {
+          setPendingDmMessages([{
+            id: `${matchingReq.fromUid}_${matchingReq.toUid}_0`,
+            type: 'text',
+            text: matchingReq.message,
+            senderId: matchingReq.fromUid,
+            senderName: matchingReq.fromProfile?.displayName || 'User',
+            senderUsername: matchingReq.fromProfile?.username || '',
+            senderPhotoURL: matchingReq.fromProfile?.photoURL || '',
+            senderProfileAssetId: matchingReq.fromProfile?.profileAssetId || '',
+            createdAt: millis(matchingReq.createdAt) || Date.now(),
+            deleted: false,
+          }]);
+        } else {
+          setPendingDmMessages([]);
+        }
+      } else {
+        setPendingDmMessages([]);
+      }
+    }
     isNearBottomRef.current = true;
     setShowScrollBottom(false);
 
@@ -2394,16 +2476,11 @@ export default function Chat({ onNavigate }: ChatProps) {
 
     const id = directId(uid, otherUser.id);
     const conversationRef = doc(db, 'conversations', id);
-    const isFriend = friends.some((friend) => friend.id === otherUser.id || friend.uid === otherUser.id);
 
     try {
       const existing = await getDoc(conversationRef);
 
       if (!existing.exists()) {
-        if (!isFriend) {
-          notify('Message request needed', 'Send a message to start a request before a private conversation can open.');
-          return;
-        }
         await setDoc(conversationRef, {
           type: 'direct',
           memberIds: [uid, otherUser.id],
@@ -2412,11 +2489,15 @@ export default function Chat({ onNavigate }: ChatProps) {
               displayName:
                 profile?.displayName || user?.displayName || 'User',
               username: profile?.username || '',
+              photoURL: profile?.photoURL || '',
+              profileAssetId: profile?.profileAssetId || '',
             },
             [otherUser.id]: {
               displayName:
                 otherUser.displayName || otherUser.username || 'User',
               username: otherUser.username || '',
+              photoURL: otherUser.photoURL || '',
+              profileAssetId: otherUser.profileAssetId || '',
             },
           },
           favoriteBy: { [uid]: false, [otherUser.id]: false },
@@ -3013,6 +3094,13 @@ const handleSearchMessage = async (target: Rec) => {
             messages: arrayUnion(queuedMessage),
             updatedAt: serverTimestamp(),
           });
+          const conversationId = directId(uid, directTargetUid);
+          void setDoc(doc(db, 'conversations', conversationId), {
+            lastMessageText: text,
+            lastMessageAt: serverTimestamp(),
+            lastSenderId: uid,
+            updatedAt: serverTimestamp(),
+          }, { merge: true }).catch(() => {});
           setPendingDmMessages((previous) => [...previous, queuedMessage]);
           setMessageText('');
           setReplyTarget(null);
@@ -3068,6 +3156,37 @@ const handleSearchMessage = async (target: Rec) => {
             setPendingDmMessages([queuedMessage]);
             setMessageText('');
             setReplyTarget(null);
+
+            // Mirror conversation document to 'conversations' so it appears in Chats list immediately
+            const conversationId = directId(uid, directTargetUid);
+            void setDoc(doc(db, 'conversations', conversationId), {
+              type: 'direct',
+              memberIds: [uid, directTargetUid],
+              memberProfiles: {
+                [uid]: {
+                  displayName: profile?.displayName || user?.displayName || 'User',
+                  username: profile?.username || '',
+                  photoURL: profile?.photoURL || '',
+                  profileAssetId: profile?.profileAssetId || '',
+                },
+                [directTargetUid]: {
+                  displayName: targetProfile.displayName || getConversationName(activeConv),
+                  username: targetProfile.username || getConversationUsername(activeConv),
+                  photoURL: targetProfile.photoURL || '',
+                  profileAssetId: targetProfile.profileAssetId || '',
+                },
+              },
+              favoriteBy: { [uid]: false, [directTargetUid]: false },
+              urgentFor: { [uid]: false, [directTargetUid]: false },
+              lastReadAt: { [uid]: serverTimestamp() },
+              lastMessageText: text,
+              lastMessageAt: serverTimestamp(),
+              lastSenderId: uid,
+              lastSenderName: profile?.displayName || profile?.username || 'You',
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+              hasChatIntro: false,
+            }, { merge: true }).catch(() => {});
           }
         } finally {
           sendingRef.current = false;
