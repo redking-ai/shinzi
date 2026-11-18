@@ -34,12 +34,16 @@ public class ShinziFirebaseMessagingService extends FirebaseMessagingService {
         Map<String, String> data = remoteMessage.getData();
         String type = data.get("type");
 
-        // 1. Handle incoming voice/video calls even when the app is completely DEAD or closed!
+        // 1. Handle incoming voice/video calls even when the app is completely DEAD, backgrounded, or screen is locked!
         if ("incoming_call".equals(type) || "call".equals(type)) {
-            // If the app is already in the foreground, CallOverlay in the webview handles the incoming call directly.
-            // Returning here prevents duplicate ringing, double vibration, and duplicate activity launches!
-            if (ShinziNotificationPlugin.isAppInForeground(this)) {
-                Log.d(TAG, "App in foreground: letting in-app CallOverlay handle incoming call.");
+            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+            android.app.KeyguardManager km = (android.app.KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+            boolean isScreenLockedOrOff = (km != null && km.isKeyguardLocked()) || (pm != null && !pm.isInteractive());
+
+            // If the app is actively in the foreground AND the user's screen is awake & unlocked,
+            // CallOverlay in the webview handles the incoming call directly.
+            if (ShinziNotificationPlugin.isAppInForeground(this) && !isScreenLockedOrOff) {
+                Log.d(TAG, "App in foreground and unlocked: letting in-app CallOverlay handle incoming call.");
                 return;
             }
 
@@ -59,9 +63,6 @@ public class ShinziFirebaseMessagingService extends FirebaseMessagingService {
             String effectiveCallId = callId != null ? callId : "call_default";
             String effectiveConvId = convId != null ? convId : "default";
 
-            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
-            android.app.KeyguardManager km = (android.app.KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
-            boolean isScreenLockedOrOff = (km != null && km.isKeyguardLocked()) || (pm != null && !pm.isInteractive());
 
             // 1. Acquire WakeLock to turn on device screen immediately
             try {

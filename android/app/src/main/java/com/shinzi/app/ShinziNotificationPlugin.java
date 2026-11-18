@@ -335,11 +335,24 @@ public class ShinziNotificationPlugin extends Plugin {
     public static void startCallVibrationNative(Context context) {
         try {
             stopCallVibrationNative(context);
-            Vibrator v = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+            Vibrator v = null;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                android.os.VibratorManager vm = (android.os.VibratorManager) context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
+                if (vm != null) {
+                    v = vm.getDefaultVibrator();
+                }
+            }
+            if (v == null) {
+                v = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+            }
             if (v != null && v.hasVibrator()) {
                 long[] pattern = new long[]{0, 1000, 1000};
+                AudioAttributes audioAttributes = new AudioAttributes.Builder()
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                        .build();
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    v.vibrate(VibrationEffect.createWaveform(pattern, 0));
+                    v.vibrate(VibrationEffect.createWaveform(pattern, 0), audioAttributes);
                 } else {
                     v.vibrate(pattern, 0);
                 }

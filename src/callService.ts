@@ -221,6 +221,13 @@ class CallEngine {
         gain.connect(this.ringtoneCtx.destination);
 
         if (type === 'incoming') {
+          // Continuous Vibration on incoming call
+          if (typeof navigator !== 'undefined' && navigator.vibrate) {
+            try { navigator.vibrate([1000, 1000]); } catch {}
+          }
+          const cap = typeof window !== 'undefined' ? (window as any).Capacitor : null;
+          void cap?.Plugins?.ShinziNotification?.startCallVibration?.().catch(() => {});
+
           // Standard phone ringing pitch: 440Hz + 480Hz
           osc.type = 'sine';
           osc.frequency.setValueAtTime(440, this.ringtoneCtx.currentTime);
@@ -246,6 +253,12 @@ class CallEngine {
   }
 
   public stopRingtone() {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      try { navigator.vibrate(0); } catch {}
+    }
+    const cap = typeof window !== 'undefined' ? (window as any).Capacitor : null;
+    void cap?.Plugins?.ShinziNotification?.stopCallVibration?.().catch(() => {});
+
     if (this.ringtoneInterval) {
       clearInterval(this.ringtoneInterval);
       this.ringtoneInterval = null;
@@ -831,6 +844,7 @@ class CallEngine {
             let frameCount = 0;
             const myName = this.isCaller ? (this.activeCall.callerName || 'Shinzi') : (this.activeCall.receiverName || 'Shinzi');
             const screenImg = new Image();
+            let hasDecodedFrame = false;
 
             const drawScreen = async () => {
               frameCount++;
@@ -841,6 +855,7 @@ class CallEngine {
                   const res = await cap.Plugins.ShinziNotification.getLatestScreenFrame();
                   if (res?.frame) {
                     screenImg.onload = () => {
+                      hasDecodedFrame = true;
                       if (screenImg.naturalWidth > 0 && canvas.width !== screenImg.naturalWidth) {
                         canvas.width = screenImg.naturalWidth;
                         canvas.height = screenImg.naturalHeight;
@@ -851,6 +866,11 @@ class CallEngine {
                     return;
                   }
                 } catch {}
+              }
+
+              if (hasDecodedFrame && screenImg.naturalWidth > 0) {
+                ctx.drawImage(screenImg, 0, 0);
+                return;
               }
 
               // 2. Fallback visualizer if native frame is not yet available

@@ -87,6 +87,15 @@ public class ScreenCaptureService extends Service {
             mediaProjection = mpm.getMediaProjection(resultCode, resultData);
             if (mediaProjection == null) return;
 
+            // Android 14+ (API 34/35) STRICT REQUIREMENT: callback must be registered before createVirtualDisplay
+            mediaProjection.registerCallback(new MediaProjection.Callback() {
+                @Override
+                public void onStop() {
+                    super.onStop();
+                    stopCapture();
+                }
+            }, null);
+
             WindowManager wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
             DisplayMetrics metrics = new DisplayMetrics();
             if (wm != null && wm.getDefaultDisplay() != null) {

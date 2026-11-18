@@ -194,7 +194,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
       if (autoAnswer) {
         pendingAutoAnswerRef.current = true;
       }
-      if (callId && (!call || call.id !== callId)) {
+      if (callId && (!call || call.id !== callId) && (!callEngine.activeCall || callEngine.activeCall.id !== callId)) {
         const immediateCall: CallSession = {
           id: callId,
           convId: convId || 'default',
@@ -225,6 +225,9 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
           if (callSnap.exists()) {
             const data = callSnap.data() as CallSession;
             if (data.status === 'ringing') {
+              if (callEngine.activeCall && (callEngine.activeCall.status === 'connected' || callEngine.activeCall.status === 'declined' || callEngine.activeCall.status === 'ended')) {
+                return;
+              }
               callEngine.activeCall = data;
               callEngine.isCaller = data.callerId === currentUid;
               setCall({ ...data });
@@ -232,8 +235,6 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
               if (pendingAutoAnswerRef.current && !callEngine.isCaller) {
                 pendingAutoAnswerRef.current = false;
                 void callEngine.answerCall(data);
-              } else if (!callEngine.isCaller && data.status === 'ringing') {
-                callEngine.playRingtone('incoming');
               }
             } else if (data.status === 'connected') {
               setCall({ ...data });
