@@ -16,6 +16,7 @@
     "@capacitor/push-notifications": "^6.0.3",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
+    "@iconify/react": "^6.0.4",
     "@mui/material": "^9.5.0",
     "emoji-picker-react": "^5.1.4",
     "emojibase-data": "^18.0.0",

@@ -64,6 +64,27 @@ public class CallActionReceiver extends BroadcastReceiver {
                 ShinziNotificationPlugin.clearCallNotificationNative(context);
                 if (nm != null) nm.cancel(notifId);
                 ShinziNotificationPlugin.notifyCallAction("decline", callId);
+
+                // Asynchronously update Firestore via serverless API even if app process is dead
+                if (callId != null && !callId.isEmpty()) {
+                    final String targetCallId = callId;
+                    new Thread(() -> {
+                        try {
+                            java.net.URL url = new java.net.URL("https://shinzi.vercel.app/api/decline-call");
+                            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                            conn.setRequestMethod("POST");
+                            conn.setRequestProperty("Content-Type", "application/json");
+                            conn.setDoOutput(true);
+                            conn.setConnectTimeout(4000);
+                            conn.setReadTimeout(4000);
+                            String body = "{\"callId\":\"" + targetCallId + "\"}";
+                            try (java.io.OutputStream os = conn.getOutputStream()) {
+                                os.write(body.getBytes("UTF-8"));
+                            }
+                            conn.getResponseCode();
+                        } catch (Exception ignored) {}
+                    }).start();
+                }
                 break;
 
             case ACTION_HANG_UP:
@@ -71,6 +92,26 @@ public class CallActionReceiver extends BroadcastReceiver {
                 ShinziNotificationPlugin.clearCallNotificationNative(context);
                 if (nm != null) nm.cancel(notifId);
                 ShinziNotificationPlugin.notifyCallAction("hangup", callId);
+
+                if (callId != null && !callId.isEmpty()) {
+                    final String targetCallId = callId;
+                    new Thread(() -> {
+                        try {
+                            java.net.URL url = new java.net.URL("https://shinzi.vercel.app/api/decline-call");
+                            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                            conn.setRequestMethod("POST");
+                            conn.setRequestProperty("Content-Type", "application/json");
+                            conn.setDoOutput(true);
+                            conn.setConnectTimeout(4000);
+                            conn.setReadTimeout(4000);
+                            String body = "{\"callId\":\"" + targetCallId + "\"}";
+                            try (java.io.OutputStream os = conn.getOutputStream()) {
+                                os.write(body.getBytes("UTF-8"));
+                            }
+                            conn.getResponseCode();
+                        } catch (Exception ignored) {}
+                    }).start();
+                }
                 break;
 
             case ACTION_SELF_MUTE:

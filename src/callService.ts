@@ -53,6 +53,33 @@ const ICE_SERVERS: RTCConfiguration = {
   ],
 };
 
+function enhanceOpusSdp(sdp: string): string {
+  if (!sdp) return sdp;
+  let enhanced = sdp;
+  const m = enhanced.match(/a=rtpmap:(\d+) opus\/48000/);
+  if (m) {
+    const pt = m[1];
+    const fmtpRegex = new RegExp(`a=fmtp:${pt} ([^\\r\\n]+)`);
+    if (fmtpRegex.test(enhanced)) {
+      enhanced = enhanced.replace(fmtpRegex, (_match, params) => {
+        const clean = params
+          .replace(/;?useinbandfec=\d/, '')
+          .replace(/;?stereo=\d/, '')
+          .replace(/;?sprop-stereo=\d/, '')
+          .replace(/;?maxaveragebitrate=\d+/, '')
+          .replace(/;?cbr=\d/, '');
+        return `a=fmtp:${pt} ${clean};useinbandfec=1;stereo=0;sprop-stereo=0;maxaveragebitrate=64000;cbr=1`;
+      });
+    } else {
+      enhanced = enhanced.replace(
+        new RegExp(`(a=rtpmap:${pt} opus\/48000[^\\r\\n]*)`),
+        `$1\r\na=fmtp:${pt} useinbandfec=1;stereo=0;sprop-stereo=0;maxaveragebitrate=64000;cbr=1`
+      );
+    }
+  }
+  return enhanced;
+}
+
 class CallEngine {
   private peerConnection: RTCPeerConnection | null = null;
   private localStream: MediaStream | null = null;
@@ -89,8 +116,10 @@ class CallEngine {
     const constraints: MediaStreamConstraints = {
       audio: {
         echoCancellation: true,
-        noiseSuppression: true,
+        noiseSuppression: false, // Disables aggressive noise suppression that clipped voice syllables like "outside raining"
         autoGainControl: true,
+        channelCount: 1, // Mono channel uses 50% less bandwidth, preventing packet loss & jitter
+        sampleRate: 48000,
       },
       video: type === 'video'
         ? {
@@ -417,13 +446,17 @@ class CallEngine {
         }
       };
 
-      // Create WebRTC Offer
+      // Create WebRTC Offer with Opus FEC enhancement
       const offer = await this.peerConnection.createOffer();
-      await this.peerConnection.setLocalDescription(offer);
+      const enhancedOffer = new RTCSessionDescription({
+        type: offer.type,
+        sdp: enhanceOpusSdp(offer.sdp || ''),
+      });
+      await this.peerConnection.setLocalDescription(enhancedOffer);
 
       const finalCallData: CallSession = {
         ...initialCallData,
-        offer: { type: offer.type, sdp: offer.sdp },
+        offer: { type: enhancedOffer.type, sdp: enhancedOffer.sdp },
       };
 
       this.activeCall = finalCallData;
@@ -544,7 +577,11 @@ class CallEngine {
       if (call.offer) {
         await this.peerConnection.setRemoteDescription(new RTCSessionDescription(call.offer));
         const answer = await this.peerConnection.createAnswer();
-        await this.peerConnection.setLocalDescription(answer);
+        const enhancedAnswer = new RTCSessionDescription({
+          type: answer.type,
+          sdp: enhanceOpusSdp(answer.sdp || ''),
+        });
+        await this.peerConnection.setLocalDescription(enhancedAnswer);
 
         // Drain any ICE candidates received before answer
         if (this.candidateQueue.length > 0) {
@@ -557,7 +594,7 @@ class CallEngine {
         }
 
         const updates = {
-          'activeCall.answer': { type: answer.type, sdp: answer.sdp },
+          'activeCall.answer': { type: enhancedAnswer.type, sdp: enhancedAnswer.sdp },
           'activeCall.status': 'connected',
           'activeCall.connectedAt': Date.now(),
           'activeCall.receiverVideoOn': call.type === 'video',
@@ -986,7 +1023,7 @@ class CallEngine {
       const cap = (window as any).Capacitor;
       if (typeof cap?.Plugins?.ShinziNotification?.setAudioRoute === 'function') {
         void cap.Plugins.ShinziNotification.setAudioRoute({
-          route: deviceType === 'mobile' ? 'earpiece' : 'speaker',
+          route: deviceType === 'device' ? 'device' : (deviceType === 'mobile' ? 'earpiece' : 'speaker'),
         }).catch(() => {});
       }
 

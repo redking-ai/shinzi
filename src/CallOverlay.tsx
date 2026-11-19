@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Icon } from '@iconify/react';
 import {
-  Phone,
   PhoneOff,
   PhoneCall,
   Mic,
@@ -10,7 +10,6 @@ import {
   Volume2,
   VolumeX,
   Smartphone,
-  Headphones,
   ChevronDown,
   UserPlus,
   ScreenShare,
@@ -59,9 +58,9 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   // Camera facing mode
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
 
-  // Audio output popup
+  // Audio output popup (default: mobile / earpiece)
   const [showAudioPopup, setShowAudioPopup] = useState<boolean>(false);
-  const [selectedAudioOutput, setSelectedAudioOutput] = useState<'speaker' | 'mobile' | 'device'>('speaker');
+  const [selectedAudioOutput, setSelectedAudioOutput] = useState<'speaker' | 'mobile' | 'device'>('mobile');
   const [hasBluetoothDevice, setHasBluetoothDevice] = useState<boolean>(false);
   const pendingAutoAnswerRef = useRef<boolean>(false);
 
@@ -154,6 +153,11 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
       const urlCaller = sp.get('caller');
       const urlAvatar = sp.get('avatar');
       const urlType = (sp.get('type') || 'voice') as 'voice' | 'video';
+      const urlAutoAnswer = sp.get('autoAnswer') === 'true';
+
+      if (urlAutoAnswer) {
+        pendingAutoAnswerRef.current = true;
+      }
 
       if (urlCallId && (!call || call.id !== urlCallId)) {
         const immediateCall: CallSession = {
@@ -166,14 +170,21 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
           receiverName: currentProfile?.displayName || 'You',
           receiverPhotoURL: currentProfile?.photoURL || '/icon-192.png',
           type: urlType,
-          status: 'ringing',
+          status: urlAutoAnswer ? 'connected' : 'ringing',
           startedAt: Date.now(),
         };
         callEngine.activeCall = immediateCall;
         callEngine.isCaller = false;
-        callEngine.playRingtone('incoming');
         setCall(immediateCall);
         callEngine.listenToCall(urlCallId, urlConvId || undefined);
+
+        if (urlAutoAnswer || pendingAutoAnswerRef.current) {
+          pendingAutoAnswerRef.current = false;
+          const cap = (window as any).Capacitor;
+          void cap?.Plugins?.ShinziNotification?.stopCallVibration?.().catch(() => {});
+          void cap?.Plugins?.ShinziNotification?.clearCallNotification?.().catch(() => {});
+          void callEngine.answerCall(immediateCall);
+        }
       }
     } catch {}
 
@@ -191,10 +202,11 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
 
     const handleIncomingCallEvent = async (e: any) => {
       const { callId, convId, caller, avatar, type, autoAnswer } = e.detail || {};
-      if (autoAnswer) {
+      const shouldAutoAnswer = Boolean(autoAnswer || pendingAutoAnswerRef.current);
+      if (shouldAutoAnswer) {
         pendingAutoAnswerRef.current = true;
       }
-      if (callId && (!call || call.id !== callId) && (!callEngine.activeCall || callEngine.activeCall.id !== callId)) {
+      if (callId && (!call || call.id !== callId || shouldAutoAnswer)) {
         const immediateCall: CallSession = {
           id: callId,
           convId: convId || 'default',
@@ -205,7 +217,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
           receiverName: currentProfile?.displayName || 'You',
           receiverPhotoURL: currentProfile?.photoURL || '/icon-192.png',
           type: type || 'voice',
-          status: 'ringing',
+          status: shouldAutoAnswer ? 'connected' : 'ringing',
           startedAt: Date.now(),
         };
         callEngine.activeCall = immediateCall;
@@ -213,11 +225,12 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
         setCall(immediateCall);
         callEngine.listenToCall(callId, convId || undefined);
 
-        if (pendingAutoAnswerRef.current) {
+        if (shouldAutoAnswer) {
           pendingAutoAnswerRef.current = false;
+          const cap = (window as any).Capacitor;
+          void cap?.Plugins?.ShinziNotification?.stopCallVibration?.().catch(() => {});
+          void cap?.Plugins?.ShinziNotification?.clearCallNotification?.().catch(() => {});
           void callEngine.answerCall(immediateCall);
-        } else {
-          callEngine.playRingtone('incoming');
         }
 
         try {
@@ -319,7 +332,41 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   // Duration timer & audio routing for connected calls
   useEffect(() => {
     if (call?.status === 'connected') {
-      void callEngine.setAudioOutputDevice(selectedAudioOutput || 'speaker');
+      const checkAudioDevices = async () => {
+        let hasHeadset = false;
+        try {
+          const cap = (window as any).Capacitor;
+          if (typeof cap?.Plugins?.ShinziNotification?.getAudioDevices === 'function') {
+            const res = await cap.Plugins.ShinziNotification.getAudioDevices();
+            if (res && res.hasHeadset) {
+              hasHeadset = true;
+            }
+          }
+        } catch {}
+
+        if (!hasHeadset && typeof navigator !== 'undefined' && navigator.mediaDevices?.enumerateDevices) {
+          try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            hasHeadset = devices.some(
+              (d) =>
+                d.kind === 'audiooutput' &&
+                (d.label.toLowerCase().includes('bluetooth') ||
+                  d.label.toLowerCase().includes('headset') ||
+                  d.label.toLowerCase().includes('headphones') ||
+                  d.label.toLowerCase().includes('buds') ||
+                  d.label.toLowerCase().includes('airpods'))
+            );
+          } catch {}
+        }
+
+        setHasBluetoothDevice(hasHeadset);
+        const initialRoute: 'speaker' | 'mobile' | 'device' = hasHeadset ? 'device' : 'mobile';
+        setSelectedAudioOutput(initialRoute);
+        void callEngine.setAudioOutputDevice(initialRoute);
+      };
+
+      void checkAudioDevices();
+
       const timer = setInterval(() => {
         setDurationSeconds((sec) => sec + 1);
       }, 1000);
@@ -328,20 +375,39 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
     setDurationSeconds(0);
   }, [call?.status]);
 
-  // Check for connected Bluetooth / Headset devices
+  // Check for connected Bluetooth / Headset devices when opening audio popup
   useEffect(() => {
-    if (typeof navigator !== 'undefined' && navigator.mediaDevices?.enumerateDevices) {
-      navigator.mediaDevices.enumerateDevices().then((devices) => {
-        const hasExternal = devices.some(
-          (d) =>
-            d.kind === 'audiooutput' &&
-            (d.label.toLowerCase().includes('bluetooth') ||
-              d.label.toLowerCase().includes('headset') ||
-              d.label.toLowerCase().includes('headphones'))
-        );
-        setHasBluetoothDevice(hasExternal);
-      }).catch(() => {});
-    }
+    if (!showAudioPopup) return;
+    const checkAudioDevices = async () => {
+      let hasHeadset = false;
+      try {
+        const cap = (window as any).Capacitor;
+        if (typeof cap?.Plugins?.ShinziNotification?.getAudioDevices === 'function') {
+          const res = await cap.Plugins.ShinziNotification.getAudioDevices();
+          if (res && res.hasHeadset) {
+            hasHeadset = true;
+          }
+        }
+      } catch {}
+
+      if (!hasHeadset && typeof navigator !== 'undefined' && navigator.mediaDevices?.enumerateDevices) {
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          hasHeadset = devices.some(
+            (d) =>
+              d.kind === 'audiooutput' &&
+              (d.label.toLowerCase().includes('bluetooth') ||
+                d.label.toLowerCase().includes('headset') ||
+                d.label.toLowerCase().includes('headphones') ||
+                d.label.toLowerCase().includes('buds') ||
+                d.label.toLowerCase().includes('airpods'))
+          );
+        } catch {}
+      }
+
+      setHasBluetoothDevice(hasHeadset);
+    };
+    void checkAudioDevices();
   }, [showAudioPopup]);
 
   // Helper to safely attach stream to video with playsInline and autoPlay
@@ -485,62 +551,9 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
 
   if (!call) return audioNode;
 
-  // 1. Fullscreen Incoming Call Screen (20261116_190800)
+  // 1. Incoming calls are exclusively handled by native heads-up notification banner (IMG-20261119-WA0001)
   if (isIncoming) {
-    return (
-      <div className="shc-call-overlay" role="dialog" aria-modal="true" aria-label="Incoming call">
-        {audioNode}
-        <div className="shc-incoming-screen">
-          <div className="shc-incoming-top">
-            <span className="shc-incoming-title">Incoming Call</span>
-            <h1 className="shc-incoming-name">{oppositeName || 'Friend'}</h1>
-          </div>
-
-          <div className="shc-incoming-center">
-            <div className="shc-incoming-avatar-wrap">
-              <img
-                src={oppositeAvatar || '/icon-192.png'}
-                alt={oppositeName || 'Caller'}
-                className="shc-incoming-avatar-img"
-              />
-            </div>
-          </div>
-
-          <div className="shc-incoming-actions">
-            {/* Green Pick Up Button (Left) */}
-            <button
-              type="button"
-              className="shc-incoming-btn shc-incoming-pickup"
-              onClick={() => {
-                const cap = (window as any).Capacitor;
-                void cap?.Plugins?.ShinziNotification?.stopCallVibration?.().catch(() => {});
-                void callEngine.answerCall(call);
-              }}
-              title="Pick up"
-              aria-label="Pick up call"
-            >
-              <Phone size={32} />
-            </button>
-
-            {/* Red Decline Button (Right) */}
-            <button
-              type="button"
-              className="shc-incoming-btn shc-incoming-decline"
-              onClick={() => {
-                const cap = (window as any).Capacitor;
-                void cap?.Plugins?.ShinziNotification?.stopCallVibration?.().catch(() => {});
-                void cap?.Plugins?.ShinziNotification?.clearCallNotification?.().catch(() => {});
-                void callEngine.endCall();
-              }}
-              title="Decline"
-              aria-label="Decline call"
-            >
-              <PhoneOff size={32} />
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+    return audioNode;
   }
 
   // 2. Draggable In-App Floating Box (20261116_191720, VID-20261116-WA0022)
@@ -817,7 +830,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
                 onClick={() => handleSelectAudioOutput('device')}
               >
                 <div className="shc-audio-left">
-                  <Headphones size={18} />
+                  <Icon icon="solar:headphones-round-bold" width={18} height={18} />
                   <span>Device</span>
                 </div>
                 {selectedAudioOutput === 'device' && <Check size={16} className="shc-check-icon" />}
@@ -873,7 +886,15 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
             title="Audio Output Device"
             aria-label="Select audio output"
           >
-            {isDeafened ? <VolumeX size={22} /> : <Volume2 size={22} />}
+            {isDeafened ? (
+              <VolumeX size={22} />
+            ) : selectedAudioOutput === 'device' ? (
+              <Icon icon="solar:headphones-round-bold" width={22} height={22} />
+            ) : selectedAudioOutput === 'mobile' ? (
+              <Smartphone size={22} />
+            ) : (
+              <Volume2 size={22} />
+            )}
           </button>
 
           {/* 4. Screen Sharing Button or Stop Video / Stop Screen Share Button */}

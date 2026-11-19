@@ -16,6 +16,8 @@ import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
 import android.media.AudioAttributes;
+import android.media.AudioDeviceInfo;
+import android.media.AudioManager;
 import android.media.RingtoneManager;
 import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
@@ -151,18 +153,7 @@ public class ShinziNotificationPlugin extends Plugin {
 
     @PluginMethod
     public void requestBatteryOptimization(PluginCall call) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            try {
-                PowerManager pm = (PowerManager) getContext().getSystemService(Context.POWER_SERVICE);
-                if (pm != null && !pm.isIgnoringBatteryOptimizations(getContext().getPackageName())) {
-                    Intent intent = new Intent();
-                    intent.setAction(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
-                    intent.setData(Uri.parse("package:" + getContext().getPackageName()));
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    getContext().startActivity(intent);
-                }
-            } catch (Exception ignored) {}
-        }
+        // Redundant with ongoing foreground services and high-priority FCM. Safe no-op to prevent Google Play Protect flags.
         call.resolve();
     }
 
@@ -311,16 +302,63 @@ public class ShinziNotificationPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void getAudioDevices(PluginCall call) {
+        Context context = getContext();
+        boolean hasHeadset = false;
+        if (context != null) {
+            AudioManager am = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+            if (am != null) {
+                if (am.isWiredHeadsetOn()) {
+                    hasHeadset = true;
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    AudioDeviceInfo[] devices = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
+                    if (devices != null) {
+                        for (AudioDeviceInfo dev : devices) {
+                            int type = dev.getType();
+                            if (type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
+                                type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
+                                type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                                type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                                type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
+                                type == AudioDeviceInfo.TYPE_USB_HEADSET) {
+                                hasHeadset = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        JSObject ret = new JSObject();
+        ret.put("hasHeadset", hasHeadset);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
     public void setAudioRoute(PluginCall call) {
-        String route = call.getString("route", "speaker"); // "speaker", "earpiece"
+        String route = call.getString("route", "mobile"); // "mobile" / "earpiece", "speaker", "device"
         try {
             Context context = getContext();
             if (context != null) {
-                android.media.AudioManager audioManager = (android.media.AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+                AudioManager audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
                 if (audioManager != null) {
-                    audioManager.setMode(android.media.AudioManager.MODE_IN_COMMUNICATION);
-                    boolean isSpeaker = "speaker".equalsIgnoreCase(route);
-                    audioManager.setSpeakerphoneOn(isSpeaker);
+                    audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                    if ("speaker".equalsIgnoreCase(route)) {
+                        try { audioManager.stopBluetoothSco(); } catch (Exception ignored) {}
+                        audioManager.setBluetoothScoOn(false);
+                        audioManager.setSpeakerphoneOn(true);
+                    } else if ("device".equalsIgnoreCase(route)) {
+                        audioManager.setSpeakerphoneOn(false);
+                        try {
+                            audioManager.startBluetoothSco();
+                            audioManager.setBluetoothScoOn(true);
+                        } catch (Exception ignored) {}
+                    } else { // "mobile" / "earpiece"
+                        try { audioManager.stopBluetoothSco(); } catch (Exception ignored) {}
+                        audioManager.setBluetoothScoOn(false);
+                        audioManager.setSpeakerphoneOn(false);
+                    }
                     call.resolve();
                     return;
                 }
