@@ -89,14 +89,6 @@ public class ShinziFirebaseMessagingService extends FirebaseMessagingService {
                     callType != null ? callType : "voice"
             );
             return;
-                    this,
-                    senderName,
-                    avatarUrl,
-                    effectiveConvId,
-                    effectiveCallId,
-                    callType != null ? callType : "voice"
-            );
-            return;
         }
 
         if ("call_ended".equals(type) || "call_declined".equals(type)) {
