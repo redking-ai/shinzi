@@ -50,7 +50,8 @@ export default {
           headers: {
             "Content-Type": cached.mimeType,
             "Content-Length": String(cached.buffer.length),
-            "Cache-Control": "public, max-age=31536000, immutable",
+            "Cache-Control": "public, max-age=31536000, s-maxage=31536000, stale-while-revalidate=86400, immutable",
+            "CDN-Cache-Control": "public, s-maxage=31536000",
             "Access-Control-Allow-Origin": "*",
           },
         });
@@ -81,7 +82,8 @@ export default {
           headers: {
             "Content-Type": cached.mimeType,
             "Content-Length": String(cached.buffer.length),
-            "Cache-Control": "public, max-age=31536000, immutable",
+            "Cache-Control": "public, max-age=31536000, s-maxage=31536000, stale-while-revalidate=86400, immutable",
+            "CDN-Cache-Control": "public, s-maxage=31536000",
             "Access-Control-Allow-Origin": "*",
           },
         });
@@ -131,7 +133,8 @@ export default {
           headers: {
             "Content-Type": cached.mimeType,
             "Content-Length": String(cached.buffer.length),
-            "Cache-Control": "public, max-age=31536000, immutable",
+            "Cache-Control": "public, max-age=31536000, s-maxage=31536000, stale-while-revalidate=86400, immutable",
+            "CDN-Cache-Control": "public, s-maxage=31536000",
             "Access-Control-Allow-Origin": "*",
           },
         });
@@ -206,7 +209,8 @@ export default {
                 "Accept-Ranges": "bytes",
                 "Content-Length": String(chunk.length),
                 "Content-Type": mimeType,
-                "Cache-Control": "public, max-age=31536000, immutable",
+                "Cache-Control": "public, max-age=31536000, s-maxage=31536000, stale-while-revalidate=86400, immutable",
+                "CDN-Cache-Control": "public, s-maxage=31536000",
                 "Access-Control-Allow-Origin": "*",
               },
             });
@@ -219,7 +223,8 @@ export default {
             "Content-Type": mimeType,
             "Content-Length": String(totalLength),
             "Accept-Ranges": "bytes",
-            "Cache-Control": "public, max-age=31536000, immutable",
+            "Cache-Control": "public, max-age=31536000, s-maxage=31536000, stale-while-revalidate=86400, immutable",
+            "CDN-Cache-Control": "public, s-maxage=31536000",
             "Access-Control-Allow-Origin": "*",
           },
         });
@@ -236,7 +241,8 @@ export default {
           return new Response(Buffer.from(b64, "base64"), {
             headers: {
               "Content-Type": mime,
-              "Cache-Control": "public, max-age=31536000, immutable",
+              "Cache-Control": "public, max-age=31536000, s-maxage=31536000, stale-while-revalidate=86400, immutable",
+              "CDN-Cache-Control": "public, s-maxage=31536000",
               "Access-Control-Allow-Origin": "*",
             },
           });
@@ -337,7 +343,8 @@ export default {
               "Accept-Ranges": "bytes",
               "Content-Length": String(chunk.length),
               "Content-Type": mimeType,
-              "Cache-Control": "public, max-age=86400",
+              "Cache-Control": "public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400",
+              "CDN-Cache-Control": "public, s-maxage=604800",
               "Access-Control-Allow-Origin": "*",
             },
           });
@@ -351,6 +358,7 @@ export default {
           "Content-Length": String(totalLength),
           "Accept-Ranges": "bytes",
           "Cache-Control": "public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400",
+          "CDN-Cache-Control": "public, s-maxage=604800",
           "Access-Control-Allow-Origin": "*",
         },
       });
@@ -363,7 +371,8 @@ export default {
           headers: {
             "Content-Type": cached.mimeType,
             "Content-Length": String(cached.buffer.length),
-            "Cache-Control": "public, max-age=31536000, immutable",
+            "Cache-Control": "public, max-age=31536000, s-maxage=31536000, stale-while-revalidate=86400, immutable",
+            "CDN-Cache-Control": "public, s-maxage=31536000",
             "Access-Control-Allow-Origin": "*",
           },
         });

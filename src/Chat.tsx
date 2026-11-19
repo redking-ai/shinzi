@@ -724,7 +724,13 @@ function useResolvedAvatarUri(
     }
 
     if (targetUid && avatarMemoryCache.has(targetUid)) {
-      setImageUri(avatarMemoryCache.get(targetUid)!);
+      const cached = avatarMemoryCache.get(targetUid)!;
+      if (cached === '__NONE__') {
+        setImageUri(null);
+        setLoading(false);
+        return;
+      }
+      setImageUri(cached);
       setLoading(false);
       return;
     }
@@ -733,6 +739,12 @@ function useResolvedAvatarUri(
       try {
         let localStored = localStorage.getItem(`shinzi_avatar_${targetUid}`);
         if (localStored) {
+          if (localStored === '__NONE__') {
+            avatarMemoryCache.set(targetUid, '__NONE__');
+            setImageUri(null);
+            setLoading(false);
+            return;
+          }
           localStored = getAbsoluteApiUrl(localStored);
           avatarMemoryCache.set(targetUid, localStored);
           setImageUri(localStored);
@@ -775,9 +787,9 @@ function useResolvedAvatarUri(
         // If the user has neither a photo URL nor a profile asset ID, they have no avatar
         if (!directUrl && !assetId) {
           if (targetUid) {
-            avatarMemoryCache.delete(targetUid);
+            avatarMemoryCache.set(targetUid, '__NONE__');
             try {
-              localStorage.removeItem(`shinzi_avatar_${targetUid}`);
+              localStorage.setItem(`shinzi_avatar_${targetUid}`, '__NONE__');
             } catch {}
           }
           if (!cancelled) {
@@ -801,8 +813,22 @@ function useResolvedAvatarUri(
           return;
         }
 
-        // Try backend /api/avatar endpoint only if user has an assetId or avatar attached
-        if (targetUid && assetId) {
+        // Try backend /api/avatar endpoint directly with assetId for global CDN edge caching
+        if (assetId) {
+          const apiAvatarUrl = getAbsoluteApiUrl(`/api/avatar?assetId=${encodeURIComponent(assetId)}`);
+          const canLoadFromApi = await testImageLoad(apiAvatarUrl);
+          if (canLoadFromApi && !cancelled) {
+            setImageUri(apiAvatarUrl);
+            if (targetUid) {
+              avatarMemoryCache.set(targetUid, apiAvatarUrl);
+              try {
+                localStorage.setItem(`shinzi_avatar_${targetUid}`, apiAvatarUrl);
+              } catch {}
+            }
+            setLoading(false);
+            return;
+          }
+        } else if (targetUid) {
           const apiAvatarUrl = getAbsoluteApiUrl(`/api/avatar?uid=${encodeURIComponent(targetUid)}`);
           const canLoadFromApi = await testImageLoad(apiAvatarUrl);
           if (canLoadFromApi && !cancelled) {
