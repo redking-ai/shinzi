@@ -26,6 +26,7 @@ import Chat from './Chat';
 import Servers from './Servers';
 import NotificationManager from './NotificationManager';
 import ErrorBoundary from './ErrorBoundary';
+import { AppErrorManager } from './ErrorScreens';
 import { getCachedProfile, setCachedProfile, navigateTo } from './profileCache';
 import { updateUserPresence } from './presenceService';
 
@@ -495,10 +496,10 @@ useEffect(() => {
   };
 
   return (
-    <>
+    <AppErrorManager currentUid={user?.uid || null}>
       <NotificationManager currentUid={user?.uid || null} />
       {renderContent()}
-    </>
+    </AppErrorManager>
   );
 }
 

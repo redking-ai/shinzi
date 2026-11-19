@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { InternetErrorScreen } from './ErrorScreens';
 
 interface Props {
   children: ReactNode;
@@ -51,6 +52,18 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       if (this.props.fallback) {
         return this.props.fallback;
+      }
+
+      const errMsg = (this.state.error?.message || '').toLowerCase();
+      const isNetworkIssue =
+        (typeof navigator !== 'undefined' && !navigator.onLine) ||
+        errMsg.includes('network') ||
+        errMsg.includes('failed to fetch') ||
+        errMsg.includes('timeout') ||
+        errMsg.includes('offline');
+
+      if (isNetworkIssue) {
+        return <InternetErrorScreen onRetry={this.handleReload} />;
       }
 
       return (
