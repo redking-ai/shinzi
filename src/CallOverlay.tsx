@@ -132,6 +132,17 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
               callEngine.playRingtone('incoming');
               setCall({ ...incomingCall });
               callEngine.listenToCall(incomingCall.id, incomingCall.convId);
+
+              // Post native heads-up notification banner (exclusive call UI)
+              const cap = (window as any).Capacitor;
+              void cap?.Plugins?.ShinziNotification?.showCallNotification?.({
+                callerName: incomingCall.callerName || 'Friend',
+                avatarUrl: incomingCall.callerPhotoURL || '',
+                convId: incomingCall.convId || 'default',
+                callId: incomingCall.id,
+                callType: incomingCall.type || 'voice',
+                isIncoming: true,
+              }).catch(() => {});
             }
           }
         });
@@ -234,30 +245,39 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
         }
 
         try {
-          const callSnap = await getDoc(doc(db, 'calls', callId));
-          if (callSnap.exists()) {
-            const data = callSnap.data() as CallSession;
-            if (data.status === 'ringing') {
+          let foundCall: CallSession | null = null;
+          if (convId) {
+            const convSnap = await getDoc(doc(db, 'conversations', convId));
+            if (convSnap.exists() && convSnap.data()?.activeCall?.id === callId) {
+              foundCall = convSnap.data().activeCall as CallSession;
+            }
+          }
+          if (!foundCall) {
+            const callSnap = await getDoc(doc(db, 'calls', callId));
+            if (callSnap.exists()) {
+              foundCall = callSnap.data() as CallSession;
+            }
+          }
+
+          if (foundCall) {
+            if (foundCall.status === 'ringing') {
               if (callEngine.activeCall && (callEngine.activeCall.status === 'connected' || callEngine.activeCall.status === 'declined' || callEngine.activeCall.status === 'ended')) {
                 return;
               }
-              callEngine.activeCall = data;
-              callEngine.isCaller = data.callerId === currentUid;
-              setCall({ ...data });
-              callEngine.listenToCall(callId, convId || data.convId);
+              callEngine.activeCall = foundCall;
+              callEngine.isCaller = foundCall.callerId === currentUid;
+              setCall({ ...foundCall });
+              callEngine.listenToCall(callId, convId || foundCall.convId);
               if (pendingAutoAnswerRef.current && !callEngine.isCaller) {
                 pendingAutoAnswerRef.current = false;
-                void callEngine.answerCall(data);
+                void callEngine.answerCall(foundCall);
               }
-            } else if (data.status === 'connected') {
-              setCall({ ...data });
+            } else if (foundCall.status === 'connected') {
+              setCall({ ...foundCall });
             } else {
               setCall(null);
               callEngine.cleanup();
             }
-          } else {
-            setCall(null);
-            callEngine.cleanup();
           }
         } catch {}
       }
@@ -277,9 +297,8 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
       const callerAvatar = isCaller ? (call.receiverPhotoURL || '') : (call.callerPhotoURL || '');
 
       if (isIncoming) {
-        // IN-APP INCOMING CALL: Continuous non-stop vibration, NO duplicate heads-up notification!
+        // IN-APP INCOMING CALL: Continuous non-stop vibration. Keep heads-up notification banner active!
         void cap.Plugins.ShinziNotification.startCallVibration?.().catch(() => {});
-        void cap.Plugins.ShinziNotification.clearCallNotification?.().catch(() => {});
       } else if (call.status === 'connected') {
         // Connected call: stop vibration immediately
         void cap.Plugins.ShinziNotification.stopCallVibration?.().catch(() => {});

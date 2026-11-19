@@ -59,7 +59,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ShinziNotificationPlugin extends Plugin {
     public static final String CHANNEL_ID = "shinzi_messages";
     private static final String CHANNEL_NAME = "Direct Messages";
-    public static final String CALL_INCOMING_CHANNEL_ID = "shinzi_call_incoming_v2";
+    public static final String CALL_INCOMING_CHANNEL_ID = "shinzi_call_incoming_v3";
     public static final String CALL_ONGOING_CHANNEL_ID = "shinzi_call_ongoing_v2";
     private static final int CALL_NOTIFICATION_ID = 8888;
     private static ShinziNotificationPlugin instance;
@@ -441,6 +441,7 @@ public class ShinziNotificationPlugin extends Plugin {
         Intent hangupIntent = new Intent(context, CallActionReceiver.class);
         hangupIntent.setAction(CallActionReceiver.ACTION_HANG_UP);
         hangupIntent.putExtra("callId", callId);
+        hangupIntent.putExtra("convId", convId);
         hangupIntent.putExtra("notificationId", CALL_NOTIFICATION_ID);
         PendingIntent hangupPI = PendingIntent.getBroadcast(context, 1, hangupIntent, flags);
 
@@ -521,6 +522,7 @@ public class ShinziNotificationPlugin extends Plugin {
         Intent declineIntent = new Intent(context, CallActionReceiver.class);
         declineIntent.setAction(CallActionReceiver.ACTION_CALL_DECLINE);
         declineIntent.putExtra("callId", callId);
+        declineIntent.putExtra("convId", convId);
         declineIntent.putExtra("notificationId", CALL_NOTIFICATION_ID);
         PendingIntent declinePI = PendingIntent.getBroadcast(context, 10, declineIntent, flags);
 
@@ -558,7 +560,6 @@ public class ShinziNotificationPlugin extends Plugin {
                 .setContentTitle(callerName)
                 .setContentText("video".equals(callType) ? "Incoming Video Call..." : "Incoming Voice Call...")
                 .setContentIntent(openPI)
-                .setFullScreenIntent(openPI, true)
                 .setStyle(callStyle)
                 .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setCategory(NotificationCompat.CATEGORY_CALL)
@@ -653,6 +654,7 @@ public class ShinziNotificationPlugin extends Plugin {
             if (manager != null) {
                 try {
                     manager.deleteNotificationChannel("shinzi_calls");
+                    manager.deleteNotificationChannel("shinzi_call_incoming_v2");
                 } catch (Exception ignored) {}
 
                 // 1. High priority incoming call channel with loud ringtone & vibration

@@ -19,30 +19,46 @@ export default {
     try {
       const body = await request.json().catch(() => ({}));
       const callId = body.callId;
+      const convId = body.convId;
 
       if (!callId || typeof callId !== "string") {
         return Response.json({ ok: false, error: "Missing or invalid callId" }, { status: 400, headers: CORS_HEADERS });
       }
 
-      const callRef = adminDb.collection("calls").doc(callId);
-      const snap = await callRef.get();
+      // 1. If convId is provided directly, update conversations/{convId} IMMEDIATELY
+      if (convId && typeof convId === "string") {
+        try {
+          await adminDb.collection("conversations").doc(convId).update({
+            "activeCall.status": "declined",
+            "activeCall.endedAt": Date.now(),
+          });
+        } catch (e) {
+          console.warn("[decline-call] Direct convId update failed:", e);
+        }
+      }
 
-      if (snap.exists) {
-        const data = snap.data();
-        await callRef.update({
+      // 2. Query any conversation where activeCall.id matches callId
+      try {
+        const convSnap = await adminDb.collection("conversations").where("activeCall.id", "==", callId).get();
+        for (const doc of convSnap.docs) {
+          await doc.ref.update({
+            "activeCall.status": "declined",
+            "activeCall.endedAt": Date.now(),
+          }).catch(() => {});
+        }
+      } catch (e) {
+        console.warn("[decline-call] Conv query by activeCall.id failed:", e);
+      }
+
+      // 3. Also update calls/{callId} doc
+      try {
+        const callRef = adminDb.collection("calls").doc(callId);
+        await callRef.set({
           status: "declined",
           endedAt: Date.now(),
-        });
-
-        // Also clean activeCall in conversation if present
-        if (data?.convId) {
-          try {
-            await adminDb.collection("conversations").doc(data.convId).update({
-              "activeCall.status": "declined",
-              "activeCall.endedAt": Date.now(),
-            });
-          } catch {}
-        }
+        }, { merge: true });
+      } catch (e) {
+        console.warn("[decline-call] Call doc update failed:", e);
       }
 
       return Response.json({ ok: true, callId, status: "declined" }, { headers: CORS_HEADERS });

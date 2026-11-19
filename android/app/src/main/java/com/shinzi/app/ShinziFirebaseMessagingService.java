@@ -34,19 +34,8 @@ public class ShinziFirebaseMessagingService extends FirebaseMessagingService {
         Map<String, String> data = remoteMessage.getData();
         String type = data.get("type");
 
-        // 1. Handle incoming voice/video calls even when the app is completely DEAD, backgrounded, or screen is locked!
+        // 1. Handle incoming voice/video calls even when the app is completely DEAD, backgrounded, or in foreground!
         if ("incoming_call".equals(type) || "call".equals(type)) {
-            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
-            android.app.KeyguardManager km = (android.app.KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
-            boolean isScreenLockedOrOff = (km != null && km.isKeyguardLocked()) || (pm != null && !pm.isInteractive());
-
-            // If the app is actively in the foreground AND the user's screen is awake & unlocked,
-            // CallOverlay in the webview handles the incoming call directly.
-            if (ShinziNotificationPlugin.isAppInForeground(this) && !isScreenLockedOrOff) {
-                Log.d(TAG, "App in foreground and unlocked: letting in-app CallOverlay handle incoming call.");
-                return;
-            }
-
             String senderName = data.get("senderName");
             if (senderName == null || senderName.isEmpty()) {
                 if (remoteMessage.getNotification() != null && remoteMessage.getNotification().getTitle() != null) {

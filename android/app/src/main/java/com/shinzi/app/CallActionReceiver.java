@@ -68,6 +68,7 @@ public class CallActionReceiver extends BroadcastReceiver {
                 // Asynchronously update Firestore via serverless API even if app process is dead
                 if (callId != null && !callId.isEmpty()) {
                     final String targetCallId = callId;
+                    final String targetConvId = intent.getStringExtra("convId");
                     new Thread(() -> {
                         try {
                             java.net.URL url = new java.net.URL("https://shinzi.vercel.app/api/decline-call");
@@ -77,7 +78,7 @@ public class CallActionReceiver extends BroadcastReceiver {
                             conn.setDoOutput(true);
                             conn.setConnectTimeout(4000);
                             conn.setReadTimeout(4000);
-                            String body = "{\"callId\":\"" + targetCallId + "\"}";
+                            String body = "{\"callId\":\"" + targetCallId + "\",\"convId\":\"" + (targetConvId != null ? targetConvId : "") + "\"}";
                             try (java.io.OutputStream os = conn.getOutputStream()) {
                                 os.write(body.getBytes("UTF-8"));
                             }
@@ -95,6 +96,7 @@ public class CallActionReceiver extends BroadcastReceiver {
 
                 if (callId != null && !callId.isEmpty()) {
                     final String targetCallId = callId;
+                    final String targetConvId = intent.getStringExtra("convId");
                     new Thread(() -> {
                         try {
                             java.net.URL url = new java.net.URL("https://shinzi.vercel.app/api/decline-call");
@@ -104,7 +106,7 @@ public class CallActionReceiver extends BroadcastReceiver {
                             conn.setDoOutput(true);
                             conn.setConnectTimeout(4000);
                             conn.setReadTimeout(4000);
-                            String body = "{\"callId\":\"" + targetCallId + "\"}";
+                            String body = "{\"callId\":\"" + targetCallId + "\",\"convId\":\"" + (targetConvId != null ? targetConvId : "") + "\"}";
                             try (java.io.OutputStream os = conn.getOutputStream()) {
                                 os.write(body.getBytes("UTF-8"));
                             }
