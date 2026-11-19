@@ -43,16 +43,25 @@ self.addEventListener('push', (event) => {
   }
 
   const title = data.title || 'Shinzi';
+  const isIncomingCall = data.type === 'incoming_call' || data.type === 'call';
+
   const options = {
     body: data.body || data.text || 'You received a new message',
     icon: data.icon || '/icon-192.png',
     badge: '/icon-192.png',
-    tag: data.tag || `shinzi-${Date.now()}`,
+    tag: isIncomingCall ? `shinzi-call-${data.callId || 'incoming'}` : (data.tag || `shinzi-${Date.now()}`),
     renotify: true,
-    vibrate: [200, 100, 200],
+    vibrate: isIncomingCall ? [500, 250, 500, 250, 500, 250, 500] : [200, 100, 200],
     data: {
       url: data.url || '/',
+      type: data.type,
+      callId: data.callId,
+      convId: data.convId,
     },
+    actions: isIncomingCall ? [
+      { action: 'decline', title: 'Decline' },
+      { action: 'answer', title: 'Answer' },
+    ] : [],
   };
 
   event.waitUntil(self.registration.showNotification(title, options));
@@ -60,7 +69,25 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const urlToOpen = event.notification.data?.url || '/';
+  const notifData = event.notification.data || {};
+
+  if (event.action === 'decline') {
+    if (notifData.callId) {
+      event.waitUntil(
+        fetch('/api/decline-call', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ callId: notifData.callId, convId: notifData.convId || '' }),
+        }).catch(() => {})
+      );
+    }
+    return;
+  }
+
+  let urlToOpen = notifData.url || '/';
+  if (event.action === 'answer') {
+    urlToOpen = `/call?id=${notifData.callId || ''}&conv=${notifData.convId || ''}&autoAnswer=true`;
+  }
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {

@@ -561,6 +561,8 @@ public class ShinziNotificationPlugin extends Plugin {
                 .setContentText("video".equals(callType) ? "Incoming Video Call..." : "Incoming Voice Call...")
                 .setContentIntent(openPI)
                 .setStyle(callStyle)
+                .addAction(0, "Decline", declinePI)
+                .addAction(0, "Answer", answerPI)
                 .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setCategory(NotificationCompat.CATEGORY_CALL)
                 .setOngoing(true)

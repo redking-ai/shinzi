@@ -212,13 +212,20 @@ export default {
         );
       }
 
+      const isCall = type === 'incoming_call' || type === 'call';
       const payload = JSON.stringify({
         title: title || senderName || 'Shinzi',
         body: text || 'You received a new message',
         icon: pushAvatar || icon || '/icon-192.png',
         badge: '/icon-192.png',
-        url: url || '/',
-        tag: tag || `shinzi-${Date.now()}`,
+        url: isCall
+          ? `/call?id=${callId || ''}&conv=${actualConvId || ''}&caller=${encodeURIComponent(title || senderName || 'Friend')}&type=${callType || 'voice'}`
+          : (url || '/'),
+        tag: isCall ? `shinzi-call-${callId || Date.now()}` : (tag || `shinzi-${Date.now()}`),
+        type: type || 'chat',
+        callId: callId || '',
+        convId: actualConvId || '',
+        callType: callType || 'voice',
       });
 
       const promises = subsSnapshot.docs.map(async (docItem) => {
