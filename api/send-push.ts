@@ -205,6 +205,11 @@ export default {
         return Response.json({ ok: true, fcmSent: fcmSentCount, webPushSent: 0 }, { headers: CORS_HEADERS });
       }
 
+      // STRICT POLICY: If recipient has native Android app installed (FCM delivered), NEVER send duplicate notification to Chrome!
+      if (fcmSentCount > 0) {
+        return Response.json({ ok: true, fcmSent: fcmSentCount, webPushSent: 0 }, { headers: CORS_HEADERS });
+      }
+
       const subsSnapshot = await adminDb
         .collection('users')
         .doc(recipientUid)
