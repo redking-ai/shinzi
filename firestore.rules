@@ -108,6 +108,7 @@ match /users/{userId} {
             'bio',  
             'bubleText',  
             'pronouns',
+            'themeColors',
             'photoURL',
             'bannerUrl',
             'profileAssetId',
