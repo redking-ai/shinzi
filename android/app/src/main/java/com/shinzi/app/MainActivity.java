@@ -206,10 +206,6 @@ public class MainActivity extends BridgeActivity {
                 String autoAnswer = uri.getQueryParameter("autoAnswer");
                 boolean isAutoAnswer = "true".equalsIgnoreCase(autoAnswer) || intent.getBooleanExtra("backgroundAutoAnswer", false);
 
-                if (isAutoAnswer) {
-                    moveTaskToBack(true);
-                }
-
                 java.util.Map<String, String> pending = new java.util.HashMap<>();
                 pending.put("callId", callId);
                 pending.put("convId", convId != null ? convId : "");
@@ -263,17 +259,7 @@ public class MainActivity extends BridgeActivity {
         ShinziNotificationPlugin.isAppForeground = true;
 
         if (getIntent() != null) {
-            Uri data = getIntent().getData();
-            boolean isAutoAnswer = (data != null && "true".equalsIgnoreCase(data.getQueryParameter("autoAnswer"))) ||
-                                   getIntent().getBooleanExtra("backgroundAutoAnswer", false);
-            if (isAutoAnswer) {
-                getIntent().removeExtra("backgroundAutoAnswer");
-                if (data != null) {
-                    getIntent().setData(null);
-                }
-                moveTaskToBack(true);
-                return;
-            }
+            getIntent().removeExtra("backgroundAutoAnswer");
         }
 
         try {

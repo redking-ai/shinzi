@@ -29,10 +29,7 @@ public class CallActionReceiver extends BroadcastReceiver {
                     ShinziNotificationPlugin.clearCallNotificationNative(context);
                     if (nm != null) nm.cancel(notifId);
 
-                    // 2. Notify webview call engine to functionally answer and stream audio
-                    ShinziNotificationPlugin.notifyCallAction("pickup", callId);
-
-                    // 3. Post ongoing active call notification with live chronometer timer and "Hang up" button
+                    // 2. Start ongoing active call foreground service so Android keeps audio/mic alive in background!
                     String caller = intent.getStringExtra("callerName");
                     String avatar = intent.getStringExtra("avatarUrl");
                     String conv = intent.getStringExtra("convId");
@@ -44,9 +41,11 @@ public class CallActionReceiver extends BroadcastReceiver {
                             callId != null ? callId : ""
                     );
 
-                    // 4. Only if app process was completely killed, launch MainActivity with autoAnswer=true so it boots up.
-                    // If app is already active in background (e.g. user is in a game), DO NOT redirect or pull app to foreground!
-                    if (ShinziNotificationPlugin.getInstance() == null) {
+                    // 3. If app is already active, functionally answer via JS event without pulling user to app screen
+                    if (ShinziNotificationPlugin.getInstance() != null) {
+                        ShinziNotificationPlugin.notifyCallAction("pickup", callId);
+                    } else {
+                        // 4. If app process was dead, cleanly launch MainActivity so WebView boots up and connects WebRTC call
                         try {
                             Intent openApp = new Intent(context, MainActivity.class);
                             openApp.setAction(Intent.ACTION_VIEW);
@@ -57,8 +56,7 @@ public class CallActionReceiver extends BroadcastReceiver {
                             String callType = intent.getStringExtra("callType");
                             String safeType = callType != null ? Uri.encode(callType) : "voice";
                             openApp.setData(Uri.parse("https://shinzi.vercel.app/call?id=" + safeCallId + "&conv=" + safeConv + "&caller=" + safeCaller + "&avatar=" + safeAvatar + "&type=" + safeType + "&autoAnswer=true"));
-                            openApp.putExtra("backgroundAutoAnswer", true);
-                            openApp.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            openApp.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
                             context.startActivity(openApp);
                         } catch (Exception ignored) {}
                     }

@@ -63,6 +63,22 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   const [selectedAudioOutput, setSelectedAudioOutput] = useState<'speaker' | 'mobile' | 'device'>('mobile');
   const [hasBluetoothDevice, setHasBluetoothDevice] = useState<boolean>(false);
   const pendingAutoAnswerRef = useRef<boolean>(false);
+  const isAnsweringRef = useRef<boolean>(false);
+
+  // Safe deduplicated answer call executor
+  const safeAnswerCall = async (targetCall: CallSession) => {
+    if (isAnsweringRef.current) return;
+    isAnsweringRef.current = true;
+    pendingAutoAnswerRef.current = false;
+    const cap = (window as any).Capacitor;
+    void cap?.Plugins?.ShinziNotification?.stopCallVibration?.().catch(() => {});
+    try {
+      await callEngine.answerCall(targetCall);
+    } catch (err) {
+      console.error('[CallOverlay] safeAnswerCall error:', err);
+      isAnsweringRef.current = false;
+    }
+  };
 
   // Draggable floating box coordinates
   const [floatingPos, setFloatingPos] = useState<{ x: number; y: number }>({
@@ -82,7 +98,8 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   useEffect(() => {
     callEngine.onCallStateChange = (newCall) => {
       setCall(newCall ? { ...newCall } : null);
-      if (!newCall) {
+      if (!newCall || newCall.status === 'declined' || newCall.status === 'ended') {
+        isAnsweringRef.current = false;
         setMinimized(false);
         setFullscreenScreenShare(false);
         setDurationSeconds(0);
@@ -190,10 +207,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
         callEngine.listenToCall(urlCallId, urlConvId || undefined);
 
         if (urlAutoAnswer || pendingAutoAnswerRef.current) {
-          pendingAutoAnswerRef.current = false;
-          const cap = (window as any).Capacitor;
-          void cap?.Plugins?.ShinziNotification?.stopCallVibration?.().catch(() => {});
-          void callEngine.answerCall(immediateCall);
+          void safeAnswerCall(immediateCall);
         }
       }
     } catch {}
@@ -236,10 +250,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
         callEngine.listenToCall(callId, convId || undefined);
 
         if (shouldAutoAnswer) {
-          pendingAutoAnswerRef.current = false;
-          const cap = (window as any).Capacitor;
-          void cap?.Plugins?.ShinziNotification?.stopCallVibration?.().catch(() => {});
-          void callEngine.answerCall(immediateCall);
+          void safeAnswerCall(immediateCall);
         }
 
         try {
@@ -267,8 +278,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
               setCall({ ...foundCall });
               callEngine.listenToCall(callId, convId || foundCall.convId);
               if (pendingAutoAnswerRef.current && !callEngine.isCaller) {
-                pendingAutoAnswerRef.current = false;
-                void callEngine.answerCall(foundCall);
+                void safeAnswerCall(foundCall);
               }
             } else if (foundCall.status === 'connected') {
               setCall({ ...foundCall });
@@ -329,7 +339,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
           void callEngine.endCall();
         } else if (data.action === 'pickup') {
           if (call && !isCaller && call.status === 'ringing') {
-            void callEngine.answerCall(call);
+            void safeAnswerCall(call);
           } else {
             pendingAutoAnswerRef.current = true;
           }

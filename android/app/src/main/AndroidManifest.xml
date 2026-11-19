@@ -66,6 +66,11 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+        <!-- Ongoing VoIP Call Foreground Service for Background Audio & Microphone -->
+        <service
+            android:name=".CallForegroundService"
+            android:foregroundServiceType="phoneCall|microphone"
+            android:exported="false" />
         <!-- Foreground Screen Capture Service for Real Device Screen Streaming -->
         <service
             android:name=".ScreenCaptureService"
@@ -89,6 +94,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />

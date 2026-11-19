@@ -84,8 +84,12 @@ public class ShinziNotificationPlugin extends Plugin {
     private static volatile String pendingConvId = null;
     private static volatile String pendingSenderUid = null;
 
+    // Deduplication tracker for incoming call alerts
+    public static volatile String lastIncomingCallId = "";
+    public static volatile long lastIncomingCallTime = 0;
+
     // Cache circular avatar bitmaps in memory
-    private static final Map<String, Bitmap> cachedAvatars = new ConcurrentHashMap<>();
+    static final Map<String, Bitmap> cachedAvatars = new ConcurrentHashMap<>();
 
     public static class HistoryMessage {
         public String sender;
@@ -208,29 +212,10 @@ public class ShinziNotificationPlugin extends Plugin {
             call.resolve();
             return;
         } else if (isConnected) {
-            // Ongoing Active Call
-            builder.setContentText("Ongoing Call")
-                    .setUsesChronometer(true);
-
-            Intent hangupIntent = new Intent(getContext(), CallActionReceiver.class);
-            hangupIntent.setAction(CallActionReceiver.ACTION_HANG_UP);
-            hangupIntent.putExtra("callId", callId);
-            hangupIntent.putExtra("notificationId", CALL_NOTIFICATION_ID);
-            PendingIntent hangupPI = PendingIntent.getBroadcast(getContext(), 1, hangupIntent, flags);
-
-            Intent muteIntent = new Intent(getContext(), CallActionReceiver.class);
-            muteIntent.setAction(CallActionReceiver.ACTION_SELF_MUTE);
-            muteIntent.putExtra("callId", callId);
-            PendingIntent mutePI = PendingIntent.getBroadcast(getContext(), 2, muteIntent, flags);
-
-            Intent deafenIntent = new Intent(getContext(), CallActionReceiver.class);
-            deafenIntent.setAction(CallActionReceiver.ACTION_MUTE_SOUND);
-            deafenIntent.putExtra("callId", callId);
-            PendingIntent deafenPI = PendingIntent.getBroadcast(getContext(), 3, deafenIntent, flags);
-
-            builder.addAction(0, "Hang up", hangupPI);
-            builder.addAction(0, isMuted ? "Unmute" : "Self Mute", mutePI);
-            builder.addAction(0, isDeafened ? "Undeafen" : "Mute", deafenPI);
+            String avatarUrl = call.getString("avatarUrl", "");
+            showOngoingCallNotificationNative(getContext(), callerName, avatarUrl, convId, callId);
+            call.resolve();
+            return;
         } else {
             // Outgoing Ringing
             builder.setContentText("Calling...");
@@ -296,11 +281,19 @@ public class ShinziNotificationPlugin extends Plugin {
             activeCallAvatarUrl = call.getString("avatarUrl", "");
             activeCallConvId = call.getString("convId", "default");
             activeCallId = call.getString("callId", "");
+            showOngoingCallNotificationNative(
+                    getContext(),
+                    activeCallCallerName,
+                    activeCallAvatarUrl,
+                    activeCallConvId,
+                    activeCallId
+            );
         } else {
             activeCallCallerName = "";
             activeCallAvatarUrl = "";
             activeCallConvId = "";
             activeCallId = "";
+            clearCallNotificationNative(getContext());
         }
         call.resolve();
     }
@@ -425,67 +418,14 @@ public class ShinziNotificationPlugin extends Plugin {
     ) {
         if (context == null) return;
         try {
-            createCallNotificationChannel(context);
             hasActiveCall = true;
             activeCallCallerName = callerName != null && !callerName.isEmpty() ? callerName : "Friend";
             activeCallAvatarUrl = avatarUrl != null ? avatarUrl : "";
             activeCallConvId = convId != null && !convId.isEmpty() ? convId : "default";
             activeCallId = callId != null && !callId.isEmpty() ? callId : "";
 
-            Intent openIntent = new Intent(context, MainActivity.class);
-            openIntent.setAction(Intent.ACTION_VIEW);
-            openIntent.setData(Uri.parse("https://shinzi.vercel.app/call?id=" + Uri.encode(activeCallId) + "&conv=" + Uri.encode(activeCallConvId)));
-            openIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-
-            int flags = PendingIntent.FLAG_UPDATE_CURRENT;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                flags |= PendingIntent.FLAG_MUTABLE;
-            }
-
-            PendingIntent openPI = PendingIntent.getActivity(context, CALL_NOTIFICATION_ID, openIntent, flags);
-
-            Intent hangupIntent = new Intent(context, CallActionReceiver.class);
-            hangupIntent.setAction(CallActionReceiver.ACTION_HANG_UP);
-            hangupIntent.putExtra("callId", activeCallId);
-            hangupIntent.putExtra("convId", activeCallConvId);
-            hangupIntent.putExtra("notificationId", CALL_NOTIFICATION_ID);
-            PendingIntent hangupPI = PendingIntent.getBroadcast(context, 1, hangupIntent, flags);
-
-            Bitmap avatar = fetchCircularAvatar(context, activeCallAvatarUrl, activeCallCallerName, activeCallConvId);
-
-            NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CALL_ONGOING_CHANNEL_ID)
-                    .setSmallIcon(R.drawable.ic_stat_shinzi)
-                    .setContentTitle(activeCallCallerName)
-                    .setContentText("Call in progress")
-                    .setUsesChronometer(true)
-                    .setContentIntent(openPI)
-                    .setPriority(NotificationCompat.PRIORITY_LOW)
-                    .setCategory(NotificationCompat.CATEGORY_CALL)
-                    .setOngoing(true)
-                    .setAutoCancel(false)
-                    .addAction(R.drawable.ic_stat_shinzi, "Hang up", hangupPI);
-
-            if (avatar != null) {
-                builder.setLargeIcon(avatar);
-            }
-
-            NotificationManagerCompat.from(context).notify(CALL_NOTIFICATION_ID, builder.build());
-
-            // If remote avatar not yet cached, fetch in background thread and update
-            final String fAvatarUrl = activeCallAvatarUrl;
-            final String fCallerName = activeCallCallerName;
-            final String fConvId = activeCallConvId;
-            if (fAvatarUrl != null && fAvatarUrl.startsWith("http") && !cachedAvatars.containsKey(fConvId)) {
-                new Thread(() -> {
-                    try {
-                        Bitmap netAvatar = fetchCircularAvatar(context, fAvatarUrl, fCallerName, fConvId);
-                        if (netAvatar != null) {
-                            builder.setLargeIcon(netAvatar);
-                            NotificationManagerCompat.from(context).notify(CALL_NOTIFICATION_ID, builder.build());
-                        }
-                    } catch (Throwable ignored) {}
-                }).start();
-            }
+            // Use Android Foreground Service with type phoneCall|microphone to prevent audio/mic cutoff in background
+            CallForegroundService.start(context, activeCallCallerName, activeCallAvatarUrl, activeCallConvId, activeCallId);
         } catch (Throwable t) {
             android.util.Log.e("ShinziNotif", "Error showing ongoing call notification", t);
         }
@@ -501,12 +441,21 @@ public class ShinziNotificationPlugin extends Plugin {
     ) {
         if (context == null) return;
         try {
+            String safeCallId = callId != null && !callId.isEmpty() ? callId : "call_default";
+
+            // Deduplication: prevent double incoming call alerts from both FCM push and Firestore snapshot
+            long now = System.currentTimeMillis();
+            if (safeCallId.equals(lastIncomingCallId) && (now - lastIncomingCallTime < 20000)) {
+                return;
+            }
+            lastIncomingCallId = safeCallId;
+            lastIncomingCallTime = now;
+
             createCallNotificationChannel(context);
 
             String safeCaller = callerName != null && !callerName.isEmpty() ? callerName : "Friend";
             String safeAvatar = avatarUrl != null ? avatarUrl : "";
             String safeConv = convId != null && !convId.isEmpty() ? convId : "default";
-            String safeCallId = callId != null && !callId.isEmpty() ? callId : "call_default";
             String safeType = callType != null ? callType : "voice";
 
             java.util.Map<String, String> pending = new java.util.HashMap<>();
@@ -615,10 +564,16 @@ public class ShinziNotificationPlugin extends Plugin {
     }
 
     public static void clearCallNotificationNative(Context context) {
+        hasActiveCall = false;
+        lastIncomingCallId = "";
+        lastIncomingCallTime = 0;
         stopCallVibrationNative(context);
-        try {
-            NotificationManagerCompat.from(context).cancel(CALL_NOTIFICATION_ID);
-        } catch (Exception ignored) {}
+        if (context != null) {
+            CallForegroundService.stop(context);
+            try {
+                NotificationManagerCompat.from(context).cancel(CALL_NOTIFICATION_ID);
+            } catch (Exception ignored) {}
+        }
     }
 
     @PluginMethod
@@ -686,7 +641,7 @@ public class ShinziNotificationPlugin extends Plugin {
         call.resolve(ret);
     }
 
-    private static void createCallNotificationChannel(Context context) {
+    public static void createCallNotificationChannel(Context context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
             if (manager != null) {
@@ -716,11 +671,11 @@ public class ShinziNotificationPlugin extends Plugin {
                 incomingChannel.setLockscreenVisibility(NotificationCompat.VISIBILITY_PUBLIC);
                 manager.createNotificationChannel(incomingChannel);
 
-                // 2. Silent ongoing call channel (NO ringtone, NO vibration) for caller outgoing & active calls
+                // 2. Ongoing call channel (DEFAULT importance for foreground VoIP call with chronometer)
                 NotificationChannel ongoingChannel = new NotificationChannel(
                         CALL_ONGOING_CHANNEL_ID,
                         "Active Call Status",
-                        NotificationManager.IMPORTANCE_LOW
+                        NotificationManager.IMPORTANCE_DEFAULT
                 );
                 ongoingChannel.setDescription("Ongoing active call indicator");
                 ongoingChannel.setSound(null, null);
