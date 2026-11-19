@@ -55,6 +55,7 @@ public class ShinziFirebaseMessagingService extends FirebaseMessagingService {
 
             // 1. Acquire WakeLock to turn on device screen immediately
             try {
+                PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
                 if (pm != null) {
                     PowerManager.WakeLock wakeLock = pm.newWakeLock(
                             PowerManager.FULL_WAKE_LOCK |
