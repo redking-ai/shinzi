@@ -42,26 +42,28 @@ self.addEventListener('push', (event) => {
     }
   }
 
+  // Completely suppress browser/Chrome call notifications! Calls are handled exclusively by native Android app.
+  const isCallEvent = data.type === 'incoming_call' || data.type === 'call' || data.type === 'call_ended' || data.type === 'call_declined';
+  if (isCallEvent) {
+    return;
+  }
+
   const title = data.title || 'Shinzi';
-  const isIncomingCall = data.type === 'incoming_call' || data.type === 'call';
 
   const options = {
     body: data.body || data.text || 'You received a new message',
     icon: data.icon || '/icon-192.png',
     badge: '/icon-192.png',
-    tag: isIncomingCall ? `shinzi-call-${data.callId || 'incoming'}` : (data.tag || `shinzi-${Date.now()}`),
+    tag: data.tag || `shinzi-${Date.now()}`,
     renotify: true,
-    vibrate: isIncomingCall ? [500, 250, 500, 250, 500, 250, 500] : [200, 100, 200],
+    vibrate: [200, 100, 200],
     data: {
       url: data.url || '/',
       type: data.type,
       callId: data.callId,
       convId: data.convId,
     },
-    actions: isIncomingCall ? [
-      { action: 'decline', title: 'Decline' },
-      { action: 'answer', title: 'Answer' },
-    ] : [],
+    actions: [],
   };
 
   event.waitUntil(self.registration.showNotification(title, options));

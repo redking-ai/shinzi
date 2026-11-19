@@ -244,7 +244,11 @@ public class ShinziNotificationPlugin extends Plugin {
             builder.addAction(0, "Hang up", hangupPI);
         }
 
-        NotificationManagerCompat.from(getContext()).notify(CALL_NOTIFICATION_ID, builder.build());
+        try {
+            NotificationManagerCompat.from(getContext()).notify(CALL_NOTIFICATION_ID, builder.build());
+        } catch (Throwable t) {
+            android.util.Log.e("ShinziNotif", "Error notifying call", t);
+        }
         call.resolve();
     }
 
@@ -419,51 +423,72 @@ public class ShinziNotificationPlugin extends Plugin {
             String convId,
             String callId
     ) {
-        createCallNotificationChannel(context);
-        hasActiveCall = true;
-        activeCallCallerName = callerName != null ? callerName : "Friend";
-        activeCallAvatarUrl = avatarUrl != null ? avatarUrl : "";
-        activeCallConvId = convId != null ? convId : "default";
-        activeCallId = callId != null ? callId : "";
+        if (context == null) return;
+        try {
+            createCallNotificationChannel(context);
+            hasActiveCall = true;
+            activeCallCallerName = callerName != null && !callerName.isEmpty() ? callerName : "Friend";
+            activeCallAvatarUrl = avatarUrl != null ? avatarUrl : "";
+            activeCallConvId = convId != null && !convId.isEmpty() ? convId : "default";
+            activeCallId = callId != null && !callId.isEmpty() ? callId : "";
 
-        Intent openIntent = new Intent(context, MainActivity.class);
-        openIntent.setAction(Intent.ACTION_VIEW);
-        openIntent.setData(Uri.parse("https://shinzi.vercel.app/call?id=" + callId + "&conv=" + convId));
-        openIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            Intent openIntent = new Intent(context, MainActivity.class);
+            openIntent.setAction(Intent.ACTION_VIEW);
+            openIntent.setData(Uri.parse("https://shinzi.vercel.app/call?id=" + Uri.encode(activeCallId) + "&conv=" + Uri.encode(activeCallConvId)));
+            openIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
-        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            flags |= PendingIntent.FLAG_MUTABLE;
+            int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                flags |= PendingIntent.FLAG_MUTABLE;
+            }
+
+            PendingIntent openPI = PendingIntent.getActivity(context, CALL_NOTIFICATION_ID, openIntent, flags);
+
+            Intent hangupIntent = new Intent(context, CallActionReceiver.class);
+            hangupIntent.setAction(CallActionReceiver.ACTION_HANG_UP);
+            hangupIntent.putExtra("callId", activeCallId);
+            hangupIntent.putExtra("convId", activeCallConvId);
+            hangupIntent.putExtra("notificationId", CALL_NOTIFICATION_ID);
+            PendingIntent hangupPI = PendingIntent.getBroadcast(context, 1, hangupIntent, flags);
+
+            Bitmap avatar = fetchCircularAvatar(context, activeCallAvatarUrl, activeCallCallerName, activeCallConvId);
+
+            NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CALL_ONGOING_CHANNEL_ID)
+                    .setSmallIcon(R.drawable.ic_stat_shinzi)
+                    .setContentTitle(activeCallCallerName)
+                    .setContentText("Call in progress")
+                    .setUsesChronometer(true)
+                    .setContentIntent(openPI)
+                    .setPriority(NotificationCompat.PRIORITY_LOW)
+                    .setCategory(NotificationCompat.CATEGORY_CALL)
+                    .setOngoing(true)
+                    .setAutoCancel(false)
+                    .addAction(R.drawable.ic_stat_shinzi, "Hang up", hangupPI);
+
+            if (avatar != null) {
+                builder.setLargeIcon(avatar);
+            }
+
+            NotificationManagerCompat.from(context).notify(CALL_NOTIFICATION_ID, builder.build());
+
+            // If remote avatar not yet cached, fetch in background thread and update
+            final String fAvatarUrl = activeCallAvatarUrl;
+            final String fCallerName = activeCallCallerName;
+            final String fConvId = activeCallConvId;
+            if (fAvatarUrl != null && fAvatarUrl.startsWith("http") && !cachedAvatars.containsKey(fConvId)) {
+                new Thread(() -> {
+                    try {
+                        Bitmap netAvatar = fetchCircularAvatar(context, fAvatarUrl, fCallerName, fConvId);
+                        if (netAvatar != null) {
+                            builder.setLargeIcon(netAvatar);
+                            NotificationManagerCompat.from(context).notify(CALL_NOTIFICATION_ID, builder.build());
+                        }
+                    } catch (Throwable ignored) {}
+                }).start();
+            }
+        } catch (Throwable t) {
+            android.util.Log.e("ShinziNotif", "Error showing ongoing call notification", t);
         }
-
-        PendingIntent openPI = PendingIntent.getActivity(context, CALL_NOTIFICATION_ID, openIntent, flags);
-
-        Intent hangupIntent = new Intent(context, CallActionReceiver.class);
-        hangupIntent.setAction(CallActionReceiver.ACTION_HANG_UP);
-        hangupIntent.putExtra("callId", callId);
-        hangupIntent.putExtra("convId", convId);
-        hangupIntent.putExtra("notificationId", CALL_NOTIFICATION_ID);
-        PendingIntent hangupPI = PendingIntent.getBroadcast(context, 1, hangupIntent, flags);
-
-        Bitmap avatar = fetchCircularAvatar(context, avatarUrl, callerName, convId);
-
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CALL_ONGOING_CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_stat_shinzi)
-                .setContentTitle(callerName != null && !callerName.isEmpty() ? callerName : "Ongoing Call")
-                .setContentText("Call in progress")
-                .setUsesChronometer(true)
-                .setContentIntent(openPI)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
-                .setCategory(NotificationCompat.CATEGORY_CALL)
-                .setOngoing(true)
-                .setAutoCancel(false)
-                .addAction(0, "Hang up", hangupPI);
-
-        if (avatar != null) {
-            builder.setLargeIcon(avatar);
-        }
-
-        NotificationManagerCompat.from(context).notify(CALL_NOTIFICATION_ID, builder.build());
     }
 
     public static void showIncomingCallNotificationNative(
@@ -474,106 +499,119 @@ public class ShinziNotificationPlugin extends Plugin {
             String callId,
             String callType
     ) {
-        createCallNotificationChannel(context);
+        if (context == null) return;
+        try {
+            createCallNotificationChannel(context);
 
-        String safeCaller = callerName != null ? Uri.encode(callerName) : "Friend";
-        String safeAvatar = avatarUrl != null ? Uri.encode(avatarUrl) : "";
-        String safeType = callType != null ? Uri.encode(callType) : "voice";
+            String safeCaller = callerName != null && !callerName.isEmpty() ? callerName : "Friend";
+            String safeAvatar = avatarUrl != null ? avatarUrl : "";
+            String safeConv = convId != null && !convId.isEmpty() ? convId : "default";
+            String safeCallId = callId != null && !callId.isEmpty() ? callId : "call_default";
+            String safeType = callType != null ? callType : "voice";
 
-        java.util.Map<String, String> pending = new java.util.HashMap<>();
-        pending.put("callId", callId);
-        pending.put("convId", convId != null ? convId : "");
-        pending.put("caller", callerName != null ? callerName : "Friend");
-        pending.put("avatar", avatarUrl != null ? avatarUrl : "");
-        pending.put("type", callType != null ? callType : "voice");
-        pendingCall = pending;
+            java.util.Map<String, String> pending = new java.util.HashMap<>();
+            pending.put("callId", safeCallId);
+            pending.put("convId", safeConv);
+            pending.put("caller", safeCaller);
+            pending.put("avatar", safeAvatar);
+            pending.put("type", safeType);
+            pendingCall = pending;
 
-        // Continuous Non-Stop Looping Vibration
-        startCallVibrationNative(context);
+            // Continuous Non-Stop Looping Vibration
+            startCallVibrationNative(context);
 
-        Intent openIntent = new Intent(context, MainActivity.class);
-        openIntent.setAction(Intent.ACTION_VIEW);
-        openIntent.setData(Uri.parse("https://shinzi.vercel.app/call?id=" + callId + "&conv=" + convId + "&caller=" + safeCaller + "&avatar=" + safeAvatar + "&type=" + safeType));
-        openIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            Intent openIntent = new Intent(context, MainActivity.class);
+            openIntent.setAction(Intent.ACTION_VIEW);
+            openIntent.setData(Uri.parse("https://shinzi.vercel.app/call?id=" + Uri.encode(safeCallId) + "&conv=" + Uri.encode(safeConv) + "&caller=" + Uri.encode(safeCaller) + "&avatar=" + Uri.encode(safeAvatar) + "&type=" + Uri.encode(safeType)));
+            openIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
-        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            flags |= PendingIntent.FLAG_MUTABLE;
+            int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                flags |= PendingIntent.FLAG_MUTABLE;
+            }
+
+            android.os.Bundle activityOptionsBundle = null;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                android.app.ActivityOptions options = android.app.ActivityOptions.makeBasic();
+                options.setPendingIntentBackgroundActivityStartMode(
+                    android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                );
+                activityOptionsBundle = options.toBundle();
+            }
+
+            PendingIntent openPI;
+            if (activityOptionsBundle != null) {
+                openPI = PendingIntent.getActivity(context, CALL_NOTIFICATION_ID, openIntent, flags, activityOptionsBundle);
+            } else {
+                openPI = PendingIntent.getActivity(context, CALL_NOTIFICATION_ID, openIntent, flags);
+            }
+
+            Intent declineIntent = new Intent(context, CallActionReceiver.class);
+            declineIntent.setAction(CallActionReceiver.ACTION_CALL_DECLINE);
+            declineIntent.putExtra("callId", safeCallId);
+            declineIntent.putExtra("convId", safeConv);
+            declineIntent.putExtra("notificationId", CALL_NOTIFICATION_ID);
+            PendingIntent declinePI = PendingIntent.getBroadcast(context, 10, declineIntent, flags);
+
+            // Outside app Answer button: directly answers the call functionally in background
+            Intent answerIntent = new Intent(context, CallActionReceiver.class);
+            answerIntent.setAction(CallActionReceiver.ACTION_CALL_PICKUP);
+            answerIntent.putExtra("callId", safeCallId);
+            answerIntent.putExtra("convId", safeConv);
+            answerIntent.putExtra("callerName", safeCaller);
+            answerIntent.putExtra("avatarUrl", safeAvatar);
+            answerIntent.putExtra("callType", safeType);
+            answerIntent.putExtra("notificationId", CALL_NOTIFICATION_ID);
+            PendingIntent answerPI = PendingIntent.getBroadcast(context, 20, answerIntent, flags);
+
+            Bitmap avatar = fetchCircularAvatar(context, safeAvatar, safeCaller, safeConv);
+
+            long[] pattern30s = new long[]{
+                0, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+                1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+                1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000
+            };
+
+            NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CALL_INCOMING_CHANNEL_ID)
+                    .setSmallIcon(R.drawable.ic_stat_shinzi)
+                    .setContentTitle(safeCaller)
+                    .setContentText("video".equals(safeType) ? "Incoming Video Call..." : "Incoming Voice Call...")
+                    .setContentIntent(openPI)
+                    .setFullScreenIntent(openPI, true)
+                    .setPriority(NotificationCompat.PRIORITY_MAX)
+                    .setCategory(NotificationCompat.CATEGORY_CALL)
+                    .setOngoing(true)
+                    .setAutoCancel(false)
+                    .setTimeoutAfter(35000)
+                    .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))
+                    .setVibrate(pattern30s)
+                    .addAction(R.drawable.ic_stat_shinzi, "Decline", declinePI)
+                    .addAction(R.drawable.ic_stat_shinzi, "Accept", answerPI);
+
+            if (avatar != null) {
+                builder.setLargeIcon(avatar);
+            }
+
+            NotificationManagerCompat.from(context).notify(CALL_NOTIFICATION_ID, builder.build());
+
+            // If remote avatar not yet cached, fetch in background thread and update
+            final String fAvatarUrl = safeAvatar;
+            final String fCallerName = safeCaller;
+            final String fConvId = safeConv;
+            if (fAvatarUrl != null && fAvatarUrl.startsWith("http") && !cachedAvatars.containsKey(fConvId)) {
+                new Thread(() -> {
+                    try {
+                        Bitmap netAvatar = fetchCircularAvatar(context, fAvatarUrl, fCallerName, fConvId);
+                        if (netAvatar != null) {
+                            builder.setLargeIcon(netAvatar);
+                            NotificationManagerCompat.from(context).notify(CALL_NOTIFICATION_ID, builder.build());
+                        }
+                    } catch (Throwable ignored) {}
+                }).start();
+            }
+        } catch (Throwable t) {
+            android.util.Log.e("ShinziNotif", "Error showing incoming call notification", t);
         }
-
-        android.os.Bundle activityOptionsBundle = null;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            android.app.ActivityOptions options = android.app.ActivityOptions.makeBasic();
-            options.setPendingIntentBackgroundActivityStartMode(
-                android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
-            );
-            activityOptionsBundle = options.toBundle();
-        }
-
-        PendingIntent openPI;
-        if (activityOptionsBundle != null) {
-            openPI = PendingIntent.getActivity(context, CALL_NOTIFICATION_ID, openIntent, flags, activityOptionsBundle);
-        } else {
-            openPI = PendingIntent.getActivity(context, CALL_NOTIFICATION_ID, openIntent, flags);
-        }
-
-        Bitmap avatar = fetchCircularAvatar(context, avatarUrl, callerName, convId);
-
-        Intent declineIntent = new Intent(context, CallActionReceiver.class);
-        declineIntent.setAction(CallActionReceiver.ACTION_CALL_DECLINE);
-        declineIntent.putExtra("callId", callId);
-        declineIntent.putExtra("convId", convId);
-        declineIntent.putExtra("notificationId", CALL_NOTIFICATION_ID);
-        PendingIntent declinePI = PendingIntent.getBroadcast(context, 10, declineIntent, flags);
-
-        // Outside app Answer button: directly answers the call functionally in background
-        Intent answerIntent = new Intent(context, CallActionReceiver.class);
-        answerIntent.setAction(CallActionReceiver.ACTION_CALL_PICKUP);
-        answerIntent.putExtra("callId", callId);
-        answerIntent.putExtra("convId", convId);
-        answerIntent.putExtra("callerName", callerName);
-        answerIntent.putExtra("avatarUrl", avatarUrl);
-        answerIntent.putExtra("callType", callType);
-        answerIntent.putExtra("notificationId", CALL_NOTIFICATION_ID);
-        PendingIntent answerPI = PendingIntent.getBroadcast(context, 20, answerIntent, flags);
-
-        Person.Builder personBuilder = new Person.Builder().setName(callerName);
-        if (avatar != null) {
-            personBuilder.setIcon(IconCompat.createWithBitmap(avatar));
-        }
-        Person callerPerson = personBuilder.build();
-
-        NotificationCompat.CallStyle callStyle = NotificationCompat.CallStyle.forIncomingCall(
-                callerPerson,
-                declinePI,
-                answerPI
-        );
-
-        long[] pattern30s = new long[]{
-            0, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
-            1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
-            1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000
-        };
-
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CALL_INCOMING_CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_stat_shinzi)
-                .setContentTitle(callerName)
-                .setContentText("video".equals(callType) ? "Incoming Video Call..." : "Incoming Voice Call...")
-                .setContentIntent(openPI)
-                .setStyle(callStyle)
-                .setPriority(NotificationCompat.PRIORITY_MAX)
-                .setCategory(NotificationCompat.CATEGORY_CALL)
-                .setOngoing(true)
-                .setAutoCancel(false)
-                .setTimeoutAfter(35000)
-                .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))
-                .setVibrate(pattern30s);
-
-        if (avatar != null) {
-            builder.setLargeIcon(avatar);
-        }
-
-        NotificationManagerCompat.from(context).notify(CALL_NOTIFICATION_ID, builder.build());
     }
 
     public static void clearCallNotificationNative(Context context) {
@@ -985,6 +1023,10 @@ public class ShinziNotificationPlugin extends Plugin {
     }
 
     public static Bitmap fetchCircularAvatar(Context context, String avatarUrl, String senderName, String convId) {
+        if (context == null) return null;
+        if (convId == null || convId.isEmpty()) convId = "default";
+        if (senderName == null || senderName.isEmpty()) senderName = "Shinzi";
+
         if (avatarUrl != null && !avatarUrl.isEmpty()) {
             if (avatarUrl.startsWith("/")) {
                 avatarUrl = "https://shinzi.vercel.app" + avatarUrl;
@@ -993,20 +1035,33 @@ public class ShinziNotificationPlugin extends Plugin {
 
         // Check memory cache
         if (cachedAvatars.containsKey(convId)) {
-            return cachedAvatars.get(convId);
+            Bitmap mem = cachedAvatars.get(convId);
+            if (mem != null) return mem;
         }
 
         // Check local disk cache
-        File diskCache = new File(context.getCacheDir(), "avatar_" + Math.abs(convId.hashCode()) + ".png");
-        if (diskCache.exists()) {
-            try {
+        try {
+            File diskCache = new File(context.getCacheDir(), "avatar_" + Math.abs(convId.hashCode()) + ".png");
+            if (diskCache.exists()) {
                 Bitmap cached = BitmapFactory.decodeFile(diskCache.getAbsolutePath());
                 if (cached != null) {
                     cachedAvatars.put(convId, cached);
                     return cached;
                 }
-            } catch (Exception ignored) {}
+            }
+        } catch (Exception ignored) {}
+
+        // Never perform network operations on the main UI thread!
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+            Bitmap initial = createInitialAvatar(senderName);
+            if (initial != null) cachedAvatars.put(convId, initial);
+            return initial;
         }
+
+        File diskCache = null;
+        try {
+            diskCache = new File(context.getCacheDir(), "avatar_" + Math.abs(convId.hashCode()) + ".png");
+        } catch (Exception ignored) {}
 
         Bitmap avatarBitmap = null;
         if (avatarUrl != null && !avatarUrl.isEmpty() && avatarUrl.startsWith("http")) {
@@ -1053,9 +1108,11 @@ public class ShinziNotificationPlugin extends Plugin {
                         if (raw != null) {
                             avatarBitmap = getCircularBitmap(raw);
                             // Persist to disk cache
-                            try (FileOutputStream fos = new FileOutputStream(diskCache)) {
-                                avatarBitmap.compress(Bitmap.CompressFormat.PNG, 95, fos);
-                            } catch (Exception ignored) {}
+                            if (diskCache != null) {
+                                try (FileOutputStream fos = new FileOutputStream(diskCache)) {
+                                    avatarBitmap.compress(Bitmap.CompressFormat.PNG, 95, fos);
+                                } catch (Exception ignored) {}
+                            }
                         }
                     }
                 }
@@ -1066,7 +1123,9 @@ public class ShinziNotificationPlugin extends Plugin {
             avatarBitmap = createInitialAvatar(senderName);
         }
 
-        cachedAvatars.put(convId, avatarBitmap);
+        if (avatarBitmap != null) {
+            cachedAvatars.put(convId, avatarBitmap);
+        }
         return avatarBitmap;
     }
 

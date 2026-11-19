@@ -268,13 +268,15 @@ public class MainActivity extends BridgeActivity {
         ShinziNotificationPlugin.isAppForeground = false;
         // When user exits/minimizes app during active call, display ongoing call notification with Hang Up button
         if (ShinziNotificationPlugin.hasActiveCall) {
-            ShinziNotificationPlugin.showOngoingCallNotificationNative(
-                    this,
-                    ShinziNotificationPlugin.activeCallCallerName,
-                    ShinziNotificationPlugin.activeCallAvatarUrl,
-                    ShinziNotificationPlugin.activeCallConvId,
-                    ShinziNotificationPlugin.activeCallId
-            );
+            try {
+                ShinziNotificationPlugin.showOngoingCallNotificationNative(
+                        this,
+                        ShinziNotificationPlugin.activeCallCallerName,
+                        ShinziNotificationPlugin.activeCallAvatarUrl,
+                        ShinziNotificationPlugin.activeCallConvId,
+                        ShinziNotificationPlugin.activeCallId
+                );
+            } catch (Throwable ignored) {}
         }
     }
 }
