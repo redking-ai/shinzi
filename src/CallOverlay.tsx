@@ -193,7 +193,6 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
           pendingAutoAnswerRef.current = false;
           const cap = (window as any).Capacitor;
           void cap?.Plugins?.ShinziNotification?.stopCallVibration?.().catch(() => {});
-          void cap?.Plugins?.ShinziNotification?.clearCallNotification?.().catch(() => {});
           void callEngine.answerCall(immediateCall);
         }
       }
@@ -240,7 +239,6 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
           pendingAutoAnswerRef.current = false;
           const cap = (window as any).Capacitor;
           void cap?.Plugins?.ShinziNotification?.stopCallVibration?.().catch(() => {});
-          void cap?.Plugins?.ShinziNotification?.clearCallNotification?.().catch(() => {});
           void callEngine.answerCall(immediateCall);
         }
 

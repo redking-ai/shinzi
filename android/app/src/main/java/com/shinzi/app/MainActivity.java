@@ -36,6 +36,16 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(ShinziNotificationPlugin.class);
         super.onCreate(savedInstanceState);
 
+        // If launched to answer a call in the background, keep the activity in the background
+        if (getIntent() != null) {
+            Uri data = getIntent().getData();
+            boolean isAutoAnswer = (data != null && "true".equalsIgnoreCase(data.getQueryParameter("autoAnswer"))) ||
+                                   getIntent().getBooleanExtra("backgroundAutoAnswer", false);
+            if (isAutoAnswer) {
+                moveTaskToBack(true);
+            }
+        }
+
         // Turn screen on and show over lock screen ONLY for incoming calls
         applyLockScreenFlagsIfNeeded(getIntent());
 
@@ -194,7 +204,11 @@ public class MainActivity extends BridgeActivity {
                 String avatar = uri.getQueryParameter("avatar");
                 String type = uri.getQueryParameter("type");
                 String autoAnswer = uri.getQueryParameter("autoAnswer");
-                boolean isAutoAnswer = "true".equalsIgnoreCase(autoAnswer);
+                boolean isAutoAnswer = "true".equalsIgnoreCase(autoAnswer) || intent.getBooleanExtra("backgroundAutoAnswer", false);
+
+                if (isAutoAnswer) {
+                    moveTaskToBack(true);
+                }
 
                 java.util.Map<String, String> pending = new java.util.HashMap<>();
                 pending.put("callId", callId);
@@ -247,11 +261,21 @@ public class MainActivity extends BridgeActivity {
     public void onResume() {
         super.onResume();
         ShinziNotificationPlugin.isAppForeground = true;
-        // When user is inside the app during an active call, dismiss status bar notification
-        // so it doesn't duplicate over the active in-app screen
-        if (ShinziNotificationPlugin.hasActiveCall) {
-            ShinziNotificationPlugin.clearCallNotificationNative(this);
+
+        if (getIntent() != null) {
+            Uri data = getIntent().getData();
+            boolean isAutoAnswer = (data != null && "true".equalsIgnoreCase(data.getQueryParameter("autoAnswer"))) ||
+                                   getIntent().getBooleanExtra("backgroundAutoAnswer", false);
+            if (isAutoAnswer) {
+                getIntent().removeExtra("backgroundAutoAnswer");
+                if (data != null) {
+                    getIntent().setData(null);
+                }
+                moveTaskToBack(true);
+                return;
+            }
         }
+
         try {
             WebView webView = getBridge().getWebView();
             if (webView != null) {

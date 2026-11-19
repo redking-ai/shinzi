@@ -57,6 +57,7 @@ public class CallActionReceiver extends BroadcastReceiver {
                             String callType = intent.getStringExtra("callType");
                             String safeType = callType != null ? Uri.encode(callType) : "voice";
                             openApp.setData(Uri.parse("https://shinzi.vercel.app/call?id=" + safeCallId + "&conv=" + safeConv + "&caller=" + safeCaller + "&avatar=" + safeAvatar + "&type=" + safeType + "&autoAnswer=true"));
+                            openApp.putExtra("backgroundAutoAnswer", true);
                             openApp.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                             context.startActivity(openApp);
                         } catch (Exception ignored) {}
