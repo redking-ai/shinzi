@@ -132,5 +132,4 @@ public class CallActionReceiver extends BroadcastReceiver {
             android.util.Log.e("CallActionReceiver", "Unhandled error in onReceive", t);
         }
     }
-    }
 }
