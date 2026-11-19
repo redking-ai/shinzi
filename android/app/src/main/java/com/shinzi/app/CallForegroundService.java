@@ -104,14 +104,14 @@ public class CallForegroundService extends Service {
 
             Notification notification = builder.build();
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                int type = ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL;
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    type |= ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL);
+                } else {
+                    startForeground(NOTIF_ID, notification);
                 }
-                startForeground(NOTIF_ID, notification, type);
-            } else {
-                startForeground(NOTIF_ID, notification);
+            } catch (Throwable t) {
+                android.util.Log.e("CallForegroundService", "startForeground failed: " + t.getMessage(), t);
             }
 
             // Async avatar download if needed

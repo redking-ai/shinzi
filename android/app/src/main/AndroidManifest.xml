@@ -69,7 +69,7 @@
         <!-- Ongoing VoIP Call Foreground Service for Background Audio & Microphone -->
         <service
             android:name=".CallForegroundService"
-            android:foregroundServiceType="phoneCall|microphone"
+            android:foregroundServiceType="phoneCall"
             android:exported="false" />
         <!-- Foreground Screen Capture Service for Real Device Screen Streaming -->
         <service

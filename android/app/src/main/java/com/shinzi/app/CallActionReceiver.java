@@ -26,7 +26,7 @@ public class CallActionReceiver extends BroadcastReceiver {
             switch (action) {
                 case ACTION_CALL_PICKUP:
                     // 1. Immediately cancel incoming ringing notification & stop phone vibration
-                    ShinziNotificationPlugin.clearCallNotificationNative(context);
+                    ShinziNotificationPlugin.stopCallVibrationNative(context);
                     if (nm != null) nm.cancel(notifId);
 
                     // 2. Start ongoing active call foreground service so Android keeps audio/mic alive in background!

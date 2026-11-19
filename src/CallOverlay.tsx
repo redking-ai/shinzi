@@ -67,13 +67,40 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
 
   // Safe deduplicated answer call executor
   const safeAnswerCall = async (targetCall: CallSession) => {
+    let callWithOffer = targetCall;
+    if (!callWithOffer.offer) {
+      try {
+        if (targetCall.convId && targetCall.convId !== 'default') {
+          const cSnap = await getDoc(doc(db, 'conversations', targetCall.convId));
+          const active = cSnap.data()?.activeCall as CallSession | undefined;
+          if (active?.id === targetCall.id && active?.offer) {
+            callWithOffer = active;
+          }
+        }
+        if (!callWithOffer.offer) {
+          const callSnap = await getDoc(doc(db, 'calls', targetCall.id));
+          if (callSnap.exists() && callSnap.data()?.offer) {
+            callWithOffer = { ...callWithOffer, ...(callSnap.data() as CallSession) };
+          }
+        }
+      } catch (err) {
+        console.warn('[CallOverlay] Fetch offer error:', err);
+      }
+    }
+
+    if (!callWithOffer.offer) {
+      console.warn('[CallOverlay] Waiting for offer before answering...');
+      pendingAutoAnswerRef.current = true;
+      return;
+    }
+
     if (isAnsweringRef.current) return;
     isAnsweringRef.current = true;
     pendingAutoAnswerRef.current = false;
     const cap = (window as any).Capacitor;
     void cap?.Plugins?.ShinziNotification?.stopCallVibration?.().catch(() => {});
     try {
-      await callEngine.answerCall(targetCall);
+      await callEngine.answerCall(callWithOffer);
     } catch (err) {
       console.error('[CallOverlay] safeAnswerCall error:', err);
       isAnsweringRef.current = false;
@@ -143,6 +170,14 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
             incomingCall.status === 'ringing' &&
             incomingCall.receiverId === currentUid
           ) {
+            if (pendingAutoAnswerRef.current) {
+              setCall({ ...incomingCall });
+              callEngine.activeCall = incomingCall;
+              callEngine.isCaller = false;
+              callEngine.listenToCall(incomingCall.id, incomingCall.convId);
+              void safeAnswerCall(incomingCall);
+              return;
+            }
             if (!callEngine.activeCall || callEngine.activeCall.id !== incomingCall.id) {
               callEngine.activeCall = incomingCall;
               callEngine.isCaller = false;

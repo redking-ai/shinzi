@@ -109,19 +109,13 @@ public class MainActivity extends BridgeActivity {
             }
         } catch (Exception ignored) {}
 
-        // 2. Request Android 13+ (API 33+) Runtime POST_NOTIFICATIONS Permission
+        // 2. Request Android Runtime Permissions in ONE unified batch (Notifications, Microphone, Camera, Bluetooth)
+        List<String> neededPermissions = new ArrayList<>();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(
-                        this,
-                        new String[]{Manifest.permission.POST_NOTIFICATIONS},
-                        PERMISSION_REQUEST_NOTIFICATIONS
-                );
+                neededPermissions.add(Manifest.permission.POST_NOTIFICATIONS);
             }
         }
-
-        // 3. Request RECORD_AUDIO & CAMERA Permission for Calls and Voice Notes
-        List<String> neededPermissions = new ArrayList<>();
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             neededPermissions.add(Manifest.permission.RECORD_AUDIO);
             neededPermissions.add(Manifest.permission.MODIFY_AUDIO_SETTINGS);
