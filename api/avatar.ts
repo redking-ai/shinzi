@@ -45,7 +45,7 @@ export default {
       // Instant RAM return if already assembled
       if (targetAssetId && avatarMemoryCache.has(targetAssetId)) {
         const cached = avatarMemoryCache.get(targetAssetId)!;
-        return new Response(cached.buffer, {
+        return new Response(new Uint8Array(cached.buffer), {
           status: 200,
           headers: {
             "Content-Type": cached.mimeType,
@@ -77,7 +77,7 @@ export default {
 
       if (targetAssetId && avatarMemoryCache.has(targetAssetId)) {
         const cached = avatarMemoryCache.get(targetAssetId)!;
-        return new Response(cached.buffer, {
+        return new Response(new Uint8Array(cached.buffer), {
           status: 200,
           headers: {
             "Content-Type": cached.mimeType,
@@ -106,7 +106,7 @@ export default {
               if (udata.photoURL.startsWith("data:")) {
                 const [header, b64] = udata.photoURL.split(",");
                 const mime = header.split(";")[0].replace("data:", "") || "image/jpeg";
-                return new Response(Buffer.from(b64, "base64"), {
+                return new Response(new Uint8Array(Buffer.from(b64, "base64")), {
                   headers: {
                     "Content-Type": mime,
                     "Cache-Control": "public, max-age=86400, s-maxage=604800",
@@ -128,7 +128,7 @@ export default {
 
       if (avatarMemoryCache.has(targetAssetId)) {
         const cached = avatarMemoryCache.get(targetAssetId)!;
-        return new Response(cached.buffer, {
+        return new Response(new Uint8Array(cached.buffer), {
           status: 200,
           headers: {
             "Content-Type": cached.mimeType,
@@ -202,7 +202,7 @@ export default {
           if (!isNaN(start) && start < totalLength) {
             const chunkEnd = Math.min(end, totalLength - 1);
             const chunk = fullBuffer.subarray(start, chunkEnd + 1);
-            return new Response(chunk, {
+            return new Response(new Uint8Array(chunk), {
               status: 206,
               headers: {
                 "Content-Range": `bytes ${start}-${chunkEnd}/${totalLength}`,
@@ -217,7 +217,7 @@ export default {
           }
         }
 
-        return new Response(fullBuffer, {
+        return new Response(new Uint8Array(fullBuffer), {
           status: 200,
           headers: {
             "Content-Type": mimeType,
@@ -238,7 +238,7 @@ export default {
         if (asset.mediaUrl.startsWith("data:")) {
           const [header, b64] = asset.mediaUrl.split(",");
           const mime = header.split(";")[0].replace("data:", "") || mimeType;
-          return new Response(Buffer.from(b64, "base64"), {
+          return new Response(new Uint8Array(Buffer.from(b64, "base64")), {
             headers: {
               "Content-Type": mime,
               "Cache-Control": "public, max-age=31536000, s-maxage=31536000, stale-while-revalidate=86400, immutable",
@@ -336,7 +336,7 @@ export default {
         if (!isNaN(start) && start < totalLength) {
           const chunkEnd = Math.min(end, totalLength - 1);
           const chunk = fullBuffer.subarray(start, chunkEnd + 1);
-          return new Response(chunk, {
+          return new Response(new Uint8Array(chunk), {
             status: 206,
             headers: {
               "Content-Range": `bytes ${start}-${chunkEnd}/${totalLength}`,
@@ -351,7 +351,7 @@ export default {
         }
       }
 
-      return new Response(fullBuffer, {
+      return new Response(new Uint8Array(fullBuffer), {
         status: 200,
         headers: {
           "Content-Type": mimeType,
@@ -366,7 +366,7 @@ export default {
       console.error("Avatar endpoint error:", e);
       if (targetAssetId && avatarMemoryCache.has(targetAssetId)) {
         const cached = avatarMemoryCache.get(targetAssetId)!;
-        return new Response(cached.buffer, {
+        return new Response(new Uint8Array(cached.buffer), {
           status: 200,
           headers: {
             "Content-Type": cached.mimeType,

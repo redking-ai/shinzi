@@ -126,8 +126,8 @@ export default {
 
       // 1. Send Native Android FCM Push (Delivers even when app is killed)
       let fcmSentCount = 0;
+      let pushAvatar = icon || '';
       try {
-        let pushAvatar = icon || '';
         if (senderUid) {
           try {
             const senderDoc = await adminDb.collection('users').doc(senderUid).get();
