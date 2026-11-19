@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "deploy:rules": "node scripts/deploy-firestore-rules.js",
     "preview": "vite preview"
   },
   "dependencies": {
