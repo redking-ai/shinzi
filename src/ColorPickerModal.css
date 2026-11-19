@@ -1,0 +1,262 @@
+/* Bottom Sheet Modal for Discord-style Color Picker */
+.sh-color-picker-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: shFadeInOverlay 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes shFadeInOverlay {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.sh-color-picker-sheet {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  background-color: #111214;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 20px 20px 0 0;
+  padding: 12px 20px calc(24px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: shSlideUpSheet 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+@keyframes shSlideUpSheet {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.sh-color-picker-handle {
+  width: 36px;
+  height: 4px;
+  background-color: rgba(255, 255, 255, 0.25);
+  border-radius: 2px;
+  margin-bottom: 12px;
+}
+
+.sh-color-picker-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.sh-color-picker-close-btn {
+  background: none;
+  border: none;
+  color: #949ba4;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.sh-color-picker-close-btn:hover {
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.sh-color-picker-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #ffffff;
+  text-align: center;
+  flex: 1;
+}
+
+.sh-color-picker-select-btn {
+  background: #ffffff;
+  color: #000000;
+  border: none;
+  border-radius: 18px;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 6px 16px;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+.sh-color-picker-select-btn:hover {
+  opacity: 0.9;
+}
+
+.sh-color-picker-select-btn:active {
+  transform: scale(0.96);
+}
+
+/* Hex input row */
+.sh-color-picker-hex-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background-color: #1e1f22;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 6px 12px;
+  margin-bottom: 16px;
+}
+
+.sh-color-picker-preview-chip {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  flex-shrink: 0;
+}
+
+.sh-color-picker-hex-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #ffffff;
+  font-size: 15px;
+  font-family: monospace;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+/* Preset swatches */
+.sh-color-picker-swatches {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 2px 14px;
+  margin-bottom: 8px;
+  scrollbar-width: none;
+}
+
+.sh-color-picker-swatches::-webkit-scrollbar {
+  display: none;
+}
+
+.sh-color-picker-swatch {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+  transition: transform 0.12s, border-color 0.12s;
+}
+
+.sh-color-picker-swatch:hover {
+  transform: scale(1.1);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.sh-color-picker-swatch-active {
+  border-color: #ffffff;
+  transform: scale(1.12);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.35);
+}
+
+/* Wheel Canvas Area */
+.sh-color-picker-wheel-container {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 10px 0 16px;
+}
+
+.sh-color-picker-wheel-wrap {
+  position: relative;
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6), inset 0 0 2px rgba(255, 255, 255, 0.3);
+  touch-action: none;
+  cursor: crosshair;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.sh-color-picker-canvas {
+  display: block;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.sh-color-picker-dot {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2.5px solid #ffffff;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.7), inset 0 0 4px rgba(0, 0, 0, 0.3);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  transition: transform 0.05s ease;
+}
+
+/* Hue slider bar */
+.sh-color-picker-slider-wrap {
+  width: 100%;
+  padding: 10px 4px 6px;
+}
+
+.sh-color-picker-hue-bar {
+  position: relative;
+  width: 100%;
+  height: 18px;
+  border-radius: 9px;
+  background: linear-gradient(
+    to right,
+    #ff0000 0%,
+    #ffff00 17%,
+    #00ff00 33%,
+    #00ffff 50%,
+    #0000ff 67%,
+    #ff00ff 83%,
+    #ff0000 100%
+  );
+  box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+
+.sh-color-picker-hue-thumb {
+  position: absolute;
+  top: 50%;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2.5px solid #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}

@@ -20,6 +20,8 @@ import { auth, db } from './firebaseConfig';
 import { useDriveStore, type DriveFolderType } from './driveStore';
 import MediaCropModal from './MediaCropModal';
 import Settings from './Settings';
+import ColorPickerModal from './ColorPickerModal';
+import { extractMaterialYouTheme, DEFAULT_THEME_COLORS, type ProfileThemeColors } from './materialYouTheme';
 import {
   getCachedProfile,
   setCachedProfile,
@@ -289,12 +291,27 @@ useEffect(() => {
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const bannerInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [editForm, setEditForm] = useState({
+  const [colorPickerTarget, setColorPickerTarget] = useState<'primary' | 'secondary' | 'accent' | null>(null);
+  const [extractingTheme, setExtractingTheme] = useState(false);
+
+  const [editForm, setEditForm] = useState<{
+    displayName: string;
+    username: string;
+    bio: string;
+    bubleText: string;
+    pronouns: string;
+    themeColors: ProfileThemeColors;
+  }>({
     displayName: '',
     username: '',
     bio: '',
     bubleText: '',
-     pronouns: '',
+    pronouns: '',
+    themeColors: {
+      primary: '#000000',
+      secondary: '#000000',
+      accent: '#000000',
+    },
   });
 
   const resetEditForm = useCallback((data: AnyRecord) => {
@@ -304,6 +321,11 @@ useEffect(() => {
       bio: String(data.bio ?? ''),
       bubleText: String(data.bubleText ?? ''),
       pronouns: String(data.pronouns ?? ''),
+      themeColors: {
+        primary: data.themeColors?.primary || '#000000',
+        secondary: data.themeColors?.secondary || '#000000',
+        accent: data.themeColors?.accent || '#000000',
+      },
     });
   }, []);
 
@@ -314,6 +336,7 @@ useEffect(() => {
     const currentBio = String(userData.bio ?? '').trim();
     const currentPronouns = String(userData.pronouns ?? '').trim();
     const currentBubble = String(userData.bubleText ?? '').trim().replace(/^\+\s*/, '');
+    const currentTheme = (userData.themeColors as ProfileThemeColors) || DEFAULT_THEME_COLORS;
 
     const newDisplayName = editForm.displayName.trim();
     const newUsername = editForm.username.trim().toLowerCase();
@@ -321,12 +344,21 @@ useEffect(() => {
     const newPronouns = editForm.pronouns.trim();
     const newBubble = editForm.bubleText.trim().replace(/^\+\s*/, '');
 
+    const themeChanged =
+      (editForm.themeColors?.primary || '#000000').toUpperCase() !==
+        (currentTheme.primary || '#000000').toUpperCase() ||
+      (editForm.themeColors?.secondary || '#000000').toUpperCase() !==
+        (currentTheme.secondary || '#000000').toUpperCase() ||
+      (editForm.themeColors?.accent || '#000000').toUpperCase() !==
+        (currentTheme.accent || '#000000').toUpperCase();
+
     return (
       newDisplayName !== currentDisplayName ||
       newUsername !== currentUsername ||
       newBio !== currentBio ||
       newPronouns !== currentPronouns ||
-      newBubble !== currentBubble
+      newBubble !== currentBubble ||
+      themeChanged
     );
   }, [editForm, userData]);
 
@@ -548,6 +580,22 @@ useEffect(() => {
     retryAssets,
   ]);
 
+  const handleSurpriseMe = async () => {
+    setExtractingTheme(true);
+    try {
+      const imgUri = profileImageUri || bannerImageUri || userData?.photoURL || userData?.bannerUrl;
+      const extracted = await extractMaterialYouTheme(imgUri);
+      setEditForm((prev) => ({
+        ...prev,
+        themeColors: extracted,
+      }));
+    } catch (e) {
+      console.error('[PROFILE] Material You theme extraction error:', e);
+    } finally {
+      setExtractingTheme(false);
+    }
+  };
+
   const cancelEditing = () => {
     if (userData) {
       resetEditForm(userData);
@@ -602,6 +650,7 @@ useEffect(() => {
         bio: editForm.bio.trim().slice(0, 300),
         bubleText: editForm.bubleText.trim().replace(/^\+\s*/, '').slice(0, 100),
         pronouns: editForm.pronouns.trim().slice(0, 20),
+        themeColors: editForm.themeColors,
         updatedAt: serverTimestamp(),
       };
 
@@ -908,9 +957,31 @@ useEffect(() => {
     );
   }
 
+  const effectiveTheme = isEditing
+    ? editForm.themeColors
+    : ((userData?.themeColors as ProfileThemeColors) || DEFAULT_THEME_COLORS);
+
+  const hasCustomTheme = Boolean(
+    effectiveTheme &&
+    ((effectiveTheme.primary && effectiveTheme.primary.toLowerCase() !== '#000000') ||
+     (effectiveTheme.secondary && effectiveTheme.secondary.toLowerCase() !== '#000000') ||
+     (effectiveTheme.accent && effectiveTheme.accent.toLowerCase() !== '#000000'))
+  );
+
   return (
     <main className="sh-profile-page">
-      <section className="sh-profile-card">
+      <section
+        className={`sh-profile-card ${hasCustomTheme ? 'sh-profile-custom-theme' : ''}`}
+        style={
+          hasCustomTheme
+            ? {
+                background: `linear-gradient(180deg, ${effectiveTheme.primary || '#000000'} 0%, ${effectiveTheme.secondary || '#000000'} 100%)`,
+                borderColor: effectiveTheme.accent ? `${effectiveTheme.accent}44` : undefined,
+                boxShadow: effectiveTheme.accent ? `0 16px 48px ${effectiveTheme.accent}24` : undefined,
+              }
+            : undefined
+        }
+      >
         <div
           className="sh-profile-banner"
           style={
@@ -1136,6 +1207,11 @@ useEffect(() => {
             <button
               type="button"
               className="sh-profile-edit-button"
+              style={
+                hasCustomTheme && effectiveTheme.accent && effectiveTheme.accent.toLowerCase() !== '#000000'
+                  ? { backgroundColor: effectiveTheme.accent, color: '#ffffff' }
+                  : undefined
+              }
               onClick={() => {
                 setError('');
                 setIsEditing(true);
@@ -1213,6 +1289,81 @@ useEffect(() => {
                 }
               />
             </label>
+
+            {/* Discord Profile Theme Section (IMG-20261120-WA0001, IMG-20261120-WA0003) */}
+            <div className="sh-profile-theme-section">
+              <div className="sh-theme-section-header">
+                <span className="sh-theme-section-title">PROFILE THEME</span>
+                <p className="sh-theme-section-subtitle">Customize the colors of your profile</p>
+              </div>
+
+              <div className="sh-theme-boxes-row">
+                {/* Primary */}
+                <div
+                  className="sh-theme-box-wrap"
+                  onClick={() => setColorPickerTarget('primary')}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <div
+                    className="sh-theme-color-box"
+                    style={{ backgroundColor: editForm.themeColors?.primary || '#000000' }}
+                  >
+                    <div className="sh-theme-box-pencil">
+                      <Pencil size={11} color="#ffffff" />
+                    </div>
+                  </div>
+                  <span className="sh-theme-box-label">Primary</span>
+                </div>
+
+                {/* Secondary */}
+                <div
+                  className="sh-theme-box-wrap"
+                  onClick={() => setColorPickerTarget('secondary')}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <div
+                    className="sh-theme-color-box"
+                    style={{ backgroundColor: editForm.themeColors?.secondary || '#000000' }}
+                  >
+                    <div className="sh-theme-box-pencil">
+                      <Pencil size={11} color="#ffffff" />
+                    </div>
+                  </div>
+                  <span className="sh-theme-box-label">Secondary</span>
+                </div>
+
+                {/* Accent */}
+                <div
+                  className="sh-theme-box-wrap"
+                  onClick={() => setColorPickerTarget('accent')}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <div
+                    className="sh-theme-color-box"
+                    style={{ backgroundColor: editForm.themeColors?.accent || '#000000' }}
+                  >
+                    <div className="sh-theme-box-pencil">
+                      <Pencil size={11} color="#ffffff" />
+                    </div>
+                  </div>
+                  <span className="sh-theme-box-label">Accent</span>
+                </div>
+              </div>
+
+              {/* Surprise me button */}
+              <button
+                type="button"
+                className="sh-surprise-me-button"
+                disabled={extractingTheme}
+                onClick={() => void handleSurpriseMe()}
+              >
+                <Sparkles size={16} />
+                <span>{extractingTheme ? 'Extracting colors…' : 'Surprise me'}</span>
+              </button>
+            </div>
               
 
             <div className="sh-edit-actions">
@@ -1518,6 +1669,34 @@ useEffect(() => {
           </div>
         </div>
       )}
+      {/* Color Picker Bottom Sheet Modal (IMG-20261120-WA0003) */}
+      <ColorPickerModal
+        isOpen={Boolean(colorPickerTarget)}
+        title={
+          colorPickerTarget === 'primary'
+            ? 'Pick Primary Color'
+            : colorPickerTarget === 'secondary'
+            ? 'Pick Secondary Color'
+            : 'Pick Accent Color'
+        }
+        initialColor={
+          colorPickerTarget
+            ? editForm.themeColors?.[colorPickerTarget] || '#000000'
+            : '#000000'
+        }
+        onSelect={(selectedColor) => {
+          if (colorPickerTarget) {
+            setEditForm((prev) => ({
+              ...prev,
+              themeColors: {
+                ...prev.themeColors,
+                [colorPickerTarget]: selectedColor,
+              },
+            }));
+          }
+        }}
+        onClose={() => setColorPickerTarget(null)}
+      />
     </main>
   );
 }

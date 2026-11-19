@@ -1893,3 +1893,156 @@ body {
 .sh-set-status-save-btn.sh-set-status-save-active:active {
   background: #4752c4;
 }
+
+/* ==========================================================================
+   Discord Profile Theme Customization (Primary, Secondary, Accent, Surprise Me)
+   Matches IMG-20261120-WA0001, IMG-20261120-WA0003, IMG-20261120-WA0004
+   ========================================================================== */
+
+.sh-profile-theme-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sh-theme-section-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sh-theme-section-title {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #b5bac1;
+  text-transform: uppercase;
+}
+
+.sh-theme-section-subtitle {
+  font-size: 13px;
+  color: #949ba4;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.sh-theme-boxes-row {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+}
+
+.sh-theme-box-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.sh-theme-color-box {
+  position: relative;
+  width: 100%;
+  height: 64px;
+  border-radius: 14px;
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.35);
+  transition: transform 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+  overflow: hidden;
+}
+
+.sh-theme-box-wrap:hover .sh-theme-color-box {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+
+.sh-theme-box-wrap:active .sh-theme-color-box {
+  transform: scale(0.96);
+}
+
+.sh-theme-box-pencil {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.sh-theme-box-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff !important;
+  text-align: center;
+}
+
+.sh-surprise-me-button {
+  margin-top: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background-color: #ffffff;
+  color: #000000 !important;
+  border: none;
+  border-radius: 20px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  align-self: flex-start;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.sh-surprise-me-button:hover:not(:disabled) {
+  opacity: 0.92;
+}
+
+.sh-surprise-me-button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.sh-surprise-me-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+/* Custom Themed Profile Overrides */
+.sh-profile-card.sh-profile-custom-theme {
+  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.sh-profile-custom-theme .sh-profile-info-card {
+  background-color: rgba(0, 0, 0, 0.45) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+
+/* Strict rule: All text in the profile card remains pure white */
+.sh-profile-card.sh-profile-custom-theme h2,
+.sh-profile-card.sh-profile-custom-theme .sh-username,
+.sh-profile-card.sh-profile-custom-theme .sh-pronouns,
+.sh-profile-card.sh-profile-custom-theme .sh-bio-text,
+.sh-profile-card.sh-profile-custom-theme .sh-info-card-label,
+.sh-profile-card.sh-profile-custom-theme .sh-joined-text,
+.sh-profile-card.sh-profile-custom-theme .sh-status-bubble-text,
+.sh-profile-card.sh-profile-custom-theme .sh-theme-box-label {
+  color: #ffffff !important;
+}
+

@@ -602,6 +602,19 @@ export default function OtherProfile({
     );
   }
 
+  const theme = userData.themeColors;
+  const hasCustomTheme = Boolean(
+    theme &&
+    ((theme.primary && theme.primary.toLowerCase() !== '#000000') ||
+     (theme.secondary && theme.secondary.toLowerCase() !== '#000000') ||
+     (theme.accent && theme.accent.toLowerCase() !== '#000000'))
+  );
+
+  const accentBtnStyle =
+    hasCustomTheme && theme?.accent && theme.accent.toLowerCase() !== '#000000'
+      ? { backgroundColor: theme.accent, color: '#ffffff' }
+      : undefined;
+
   return (
     <main className="sh-profile-page sh-other-profile-page">
       {error && (
@@ -617,7 +630,18 @@ export default function OtherProfile({
         </div>
       )}
 
-      <section className="sh-profile-card">
+      <section
+        className={`sh-profile-card ${hasCustomTheme ? 'sh-profile-custom-theme' : ''}`}
+        style={
+          hasCustomTheme
+            ? {
+                background: `linear-gradient(180deg, ${theme.primary || '#000000'} 0%, ${theme.secondary || '#000000'} 100%)`,
+                borderColor: theme.accent ? `${theme.accent}44` : undefined,
+                boxShadow: theme.accent ? `0 16px 48px ${theme.accent}24` : undefined,
+              }
+            : undefined
+        }
+      >
         <div
           className="sh-profile-banner"
           style={
@@ -772,11 +796,23 @@ export default function OtherProfile({
                 Request Pending
               </button>
             ) : friendState.incoming ? (
-              <button type="button" className="sh-other-add-friend" disabled={friendActionBusy} onClick={() => void acceptIncomingFriendRequest()}>
+              <button
+                type="button"
+                className="sh-other-add-friend"
+                style={accentBtnStyle}
+                disabled={friendActionBusy}
+                onClick={() => void acceptIncomingFriendRequest()}
+              >
                 <UserPlus size={18} aria-hidden="true" /> {friendActionBusy ? 'Accepting…' : 'Accept Request'}
               </button>
             ) : (
-              <button type="button" className="sh-other-add-friend" disabled={!currentUser || friendActionBusy} onClick={() => void sendFriendRequest()}>
+              <button
+                type="button"
+                className="sh-other-add-friend"
+                style={accentBtnStyle}
+                disabled={!currentUser || friendActionBusy}
+                onClick={() => void sendFriendRequest()}
+              >
                 <UserPlus size={18} aria-hidden="true" /> {friendActionBusy ? 'Sending…' : 'Add Friend'}
               </button>
             )}
