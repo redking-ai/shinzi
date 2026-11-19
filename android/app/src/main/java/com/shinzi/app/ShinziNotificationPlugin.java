@@ -63,6 +63,7 @@ public class ShinziNotificationPlugin extends Plugin {
     public static final String CALL_ONGOING_CHANNEL_ID = "shinzi_call_ongoing_v2";
     private static final int CALL_NOTIFICATION_ID = 8888;
     private static ShinziNotificationPlugin instance;
+    public static ShinziNotificationPlugin getInstance() { return instance; }
 
     // Track app foreground and active conversation
     public static volatile boolean isAppForeground = false;
@@ -202,9 +203,8 @@ public class ShinziNotificationPlugin extends Plugin {
                 .setAutoCancel(false);
 
         if (isIncoming) {
-            if (!isAppInForeground(getContext())) {
-                showIncomingCallNotificationNative(getContext(), callerName, "", convId, callId, callType);
-            }
+            String avatarUrl = call.getString("avatarUrl", "");
+            showIncomingCallNotificationNative(getContext(), callerName, avatarUrl, convId, callId, callType);
             call.resolve();
             return;
         } else if (isConnected) {
@@ -561,8 +561,6 @@ public class ShinziNotificationPlugin extends Plugin {
                 .setContentText("video".equals(callType) ? "Incoming Video Call..." : "Incoming Voice Call...")
                 .setContentIntent(openPI)
                 .setStyle(callStyle)
-                .addAction(0, "Decline", declinePI)
-                .addAction(0, "Answer", answerPI)
                 .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setCategory(NotificationCompat.CATEGORY_CALL)
                 .setOngoing(true)

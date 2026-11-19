@@ -199,6 +199,12 @@ export default {
       }
 
       // 2. Query recipient's Web Push subscriptions from Firestore
+      // Calls are strictly for native Android app! Do not send call notifications to Chrome browser!
+      const isCallEvent = type === 'incoming_call' || type === 'call' || type === 'call_ended' || type === 'call_declined';
+      if (isCallEvent) {
+        return Response.json({ ok: true, fcmSent: fcmSentCount, webPushSent: 0 }, { headers: CORS_HEADERS });
+      }
+
       const subsSnapshot = await adminDb
         .collection('users')
         .doc(recipientUid)
