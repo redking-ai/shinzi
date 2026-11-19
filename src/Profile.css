@@ -2055,3 +2055,48 @@ body {
   color: #ffffff !important;
 }
 
+/* Custom theme button overrides - buttons adopt the Accent color */
+.sh-profile-card.sh-profile-custom-theme .sh-profile-edit-button {
+  background: var(--sh-theme-accent, #5865f2) !important;
+  border: 1px solid var(--sh-theme-accent, #5865f2) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25) !important;
+}
+
+.sh-profile-card.sh-profile-custom-theme .sh-profile-edit-button svg {
+  color: #ffffff !important;
+}
+
+.sh-profile-card.sh-profile-custom-theme .sh-other-add-friend {
+  background: var(--sh-theme-accent, #5865f2) !important;
+  border: 1px solid var(--sh-theme-accent, #5865f2) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25) !important;
+}
+
+.sh-profile-card.sh-profile-custom-theme .sh-other-action-button {
+  background: var(--sh-theme-accent, #5865f2) !important;
+  border: 1px solid var(--sh-theme-accent, #5865f2) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25) !important;
+}
+
+.sh-profile-card.sh-profile-custom-theme .sh-other-pending-button {
+  background: rgba(255, 255, 255, 0.15) !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  color: #ffffff !important;
+}
+
+.sh-profile-card.sh-profile-custom-theme .sh-other-action-button:hover,
+.sh-profile-card.sh-profile-custom-theme .sh-other-add-friend:hover,
+.sh-profile-card.sh-profile-custom-theme .sh-profile-edit-button:hover {
+  opacity: 0.92;
+  filter: brightness(1.08);
+}
+
+.sh-profile-card.sh-profile-custom-theme .sh-other-action-button:active,
+.sh-profile-card.sh-profile-custom-theme .sh-other-add-friend:active,
+.sh-profile-card.sh-profile-custom-theme .sh-profile-edit-button:active {
+  transform: scale(0.98);
+}
+

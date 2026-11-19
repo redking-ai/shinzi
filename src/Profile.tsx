@@ -974,11 +974,15 @@ useEffect(() => {
         className={`sh-profile-card ${hasCustomTheme ? 'sh-profile-custom-theme' : ''}`}
         style={
           hasCustomTheme
-            ? {
+            ? ({
                 background: `linear-gradient(180deg, ${effectiveTheme.primary || '#000000'} 0%, ${effectiveTheme.secondary || '#000000'} 100%)`,
                 borderColor: effectiveTheme.accent ? `${effectiveTheme.accent}44` : undefined,
                 boxShadow: effectiveTheme.accent ? `0 16px 48px ${effectiveTheme.accent}24` : undefined,
-              }
+                '--sh-theme-accent':
+                  effectiveTheme.accent && effectiveTheme.accent.toLowerCase() !== '#000000'
+                    ? effectiveTheme.accent
+                    : '#5865f2',
+              } as React.CSSProperties)
             : undefined
         }
       >

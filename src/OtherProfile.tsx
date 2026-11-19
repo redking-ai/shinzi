@@ -634,11 +634,15 @@ export default function OtherProfile({
         className={`sh-profile-card ${hasCustomTheme ? 'sh-profile-custom-theme' : ''}`}
         style={
           hasCustomTheme
-            ? {
+            ? ({
                 background: `linear-gradient(180deg, ${theme.primary || '#000000'} 0%, ${theme.secondary || '#000000'} 100%)`,
                 borderColor: theme.accent ? `${theme.accent}44` : undefined,
                 boxShadow: theme.accent ? `0 16px 48px ${theme.accent}24` : undefined,
-              }
+                '--sh-theme-accent':
+                  theme.accent && theme.accent.toLowerCase() !== '#000000'
+                    ? theme.accent
+                    : '#5865f2',
+              } as React.CSSProperties)
             : undefined
         }
       >
