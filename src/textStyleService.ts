@@ -131,6 +131,19 @@ const BUILT_IN_STYLES: Record<string, TextStyleDefinition> = {
       U: '𝔘', V: '𝔙', W: '𝔚', X: '𝔛', Y: '𝔜', Z: 'ℨ',
     },
   },
+  journal: {
+    id: 'journal',
+    name: 'Journal',
+    type: 'unicode',
+    map: {
+      a: '𝔞', b: '𝔟', c: '𝔠', d: '𝔡', e: '𝔢', f: '𝔣', g: '𝔤', h: '𝔥', i: '𝔦', j: '𝔧',
+      k: '𝔨', l: '𝔩', m: '𝔪', n: '𝔫', o: '𝔬', p: '𝔭', q: '𝔮', r: '𝔯', s: '𝔰', t: '𝔱',
+      u: '𝔲', v: '𝔳', w: '𝔴', x: '𝔵', y: '𝔶', z: '𝔷',
+      A: '𝔄', B: '𝔅', C: 'ℭ', D: '𝔇', E: '𝔈', F: '𝔉', G: '𝔊', H: 'ℌ', I: 'ℑ', J: '𝔍',
+      K: '𝔎', L: '𝔏', M: '𝔐', N: '𝔑', O: '𝔒', P: '𝔓', Q: '𝔔', R: 'ℜ', S: '𝔖', T: '𝔗',
+      U: '𝔘', V: '𝔙', W: '𝔚', X: '𝔛', Y: '𝔜', Z: 'ℨ',
+    },
+  },
 };
 
 // Recognized Google Fonts dictionary for instant cross-device mapping
@@ -711,4 +724,61 @@ export function renderStyledContent(
     }
     return React.createElement(React.Fragment, { key: idx }, content);
   });
+}
+
+/**
+ * Transforms plain text into the specified font/Unicode style (e.g. Ashetic, Journal, Arabic, Bold).
+ */
+export function applyStyleToText(text: string, styleId?: string): string {
+  if (!text || !styleId || styleId === 'standard') return text;
+  const allStyles = getAllTextStyles();
+  const cleanKey = styleId.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  return transformString(text, cleanKey, allStyles);
+}
+
+/**
+ * Renders a display name with its full DisplayNameStyleConfig (Font + Gradient Effect).
+ */
+export function renderStyledDisplayName(
+  rawName: string,
+  style?: {
+    fontId?: string;
+    effectId?: string;
+    gradientCss?: string;
+  } | null
+): React.ReactNode {
+  if (!rawName) return 'Shinzi User';
+  const styledText = style?.fontId ? applyStyleToText(rawName, style.fontId) : rawName;
+
+  if (!style || !style.gradientCss || style.gradientCss === 'none' || style.effectId === 'standard') {
+    return styledText;
+  }
+
+  let textShadow: string | undefined;
+  if (style.effectId === 'neon') {
+    textShadow = '0 0 10px rgba(192, 132, 252, 0.75), 0 0 20px rgba(244, 114, 182, 0.5)';
+  } else if (style.effectId === 'toon') {
+    textShadow = '1.5px 1.5px 0 #000, -1.5px -1.5px 0 #000, 1.5px -1.5px 0 #000, -1.5px 1.5px 0 #000';
+  } else if (style.effectId === 'pop') {
+    textShadow = '2px 3px 0 rgba(0, 0, 0, 0.8), 0 0 12px rgba(52, 211, 153, 0.4)';
+  } else if (style.effectId === 'gummy') {
+    textShadow = '0 2px 4px rgba(0, 0, 0, 0.4)';
+  } else if (style.effectId === 'prism') {
+    textShadow = '0 0 12px rgba(244, 90, 24, 0.5)';
+  }
+
+  return React.createElement(
+    'span',
+    {
+      style: {
+        backgroundImage: style.gradientCss,
+        WebkitBackgroundClip: 'text',
+        backgroundClip: 'text',
+        WebkitTextFillColor: 'transparent',
+        display: 'inline-block',
+        textShadow,
+      },
+    },
+    styledText
+  );
 }

@@ -1,0 +1,773 @@
+/* Display Name Styles Modal (Discord Nitro style) */
+.sh-style-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  background-color: #111214;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  animation: shFadeInModal 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes shFadeInModal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.sh-style-modal-window {
+  width: 100%;
+  max-width: 540px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
+}
+
+/* Header */
+.sh-style-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 52px;
+  margin-bottom: 12px;
+}
+
+.sh-style-header-back {
+  background: none;
+  border: none;
+  color: #ffffff;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sh-style-header-back:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.sh-style-header-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+/* Top Preview Card (Matches Red Circle in IMG-20261120-WA0011) */
+.sh-style-preview-container {
+  width: 100%;
+  margin-bottom: 20px;
+}
+
+.sh-style-mini-card {
+  width: 100%;
+  background: #18191c;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sh-style-mini-banner {
+  width: 100%;
+  height: 110px;
+  background-size: cover;
+  background-position: center;
+}
+
+.sh-style-mini-body {
+  position: relative;
+  padding: 0 16px 16px;
+}
+
+.sh-style-mini-avatar-wrap {
+  position: relative;
+  width: 68px;
+  height: 68px;
+  margin-top: -34px;
+  margin-bottom: 10px;
+}
+
+.sh-style-mini-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 4px solid #18191c;
+}
+
+.sh-style-mini-avatar-fallback {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: #2b2d31;
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 4px solid #18191c;
+}
+
+.sh-style-mini-status-dot {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: #23a55a;
+  border: 3px solid #18191c;
+}
+
+.sh-style-mini-name-row {
+  margin-bottom: 2px;
+}
+
+.sh-style-mini-display-name {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.sh-style-mini-details {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #949ba4;
+}
+
+.sh-style-mini-bullet {
+  color: #4e5058;
+}
+
+/* 3 Settings Rows Group */
+.sh-style-settings-group {
+  width: 100%;
+  background-color: #1e1f22;
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sh-style-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  transition: background-color 0.12s;
+}
+
+.sh-style-row:last-child {
+  border-bottom: none;
+}
+
+.sh-style-row:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.sh-style-row-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sh-style-row-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.sh-style-row-value {
+  font-size: 13px;
+  color: #949ba4;
+}
+
+.sh-style-row-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sh-style-row-swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.sh-style-chevron {
+  color: #80848e;
+}
+
+/* Surprise Me & Remove Style Buttons */
+.sh-style-actions-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.sh-style-surprise-btn {
+  width: 100%;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background-color: #2b2d31;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.12s, transform 0.1s;
+}
+
+.sh-style-surprise-btn:hover:not(:disabled) {
+  background-color: #35373c;
+}
+
+.sh-style-surprise-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.sh-style-surprise-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.sh-style-remove-btn {
+  width: 100%;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background-color: transparent;
+  color: #dbdee1;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.12s;
+}
+
+.sh-style-remove-btn:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Bottom Bar */
+.sh-style-bottom-bar {
+  margin-top: auto;
+  width: 100%;
+}
+
+.sh-style-apply-btn {
+  width: 100%;
+  height: 48px;
+  background-color: #5865f2;
+  color: #ffffff;
+  border: none;
+  border-radius: 24px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+.sh-style-apply-btn:hover {
+  opacity: 0.92;
+}
+
+.sh-style-apply-btn:active {
+  transform: scale(0.98);
+}
+
+/* =========================================================================
+   SUB-SHEET SLIDE-UP MODALS
+   ========================================================================= */
+.sh-subsheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10002;
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: shFadeInOverlay 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sh-subsheet-panel {
+  position: relative;
+  width: 100%;
+  max-width: 520px;
+  max-height: 85vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background-color: #111214;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 20px 20px 0 0;
+  padding: 12px 18px calc(24px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  animation: shSlideUpSheet 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sh-subsheet-handle {
+  width: 36px;
+  height: 4px;
+  background-color: rgba(255, 255, 255, 0.25);
+  border-radius: 2px;
+  margin: 0 auto 12px;
+}
+
+.sh-subsheet-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.sh-subsheet-close {
+  background: none;
+  border: none;
+  color: #949ba4;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sh-subsheet-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #ffffff;
+  text-align: center;
+  flex: 1;
+}
+
+.sh-subsheet-select-btn {
+  background: #ffffff;
+  color: #000000;
+  border: none;
+  border-radius: 18px;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 6px 16px;
+  cursor: pointer;
+  transition: opacity 0.12s;
+}
+
+.sh-subsheet-section-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: #b5bac1;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 10px;
+}
+
+/* =========================================================================
+   FONT GRID (IMG-20261120-WA0014) - Shows 'Text' + Font Name
+   ========================================================================= */
+.sh-font-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 420px) {
+  .sh-font-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.sh-font-box {
+  position: relative;
+  background-color: #1e1f22;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 16px 10px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: transform 0.12s, border-color 0.12s, background-color 0.12s;
+}
+
+.sh-font-box:hover {
+  background-color: #2b2d31;
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-2px);
+}
+
+.sh-font-box-active {
+  border-color: #5865f2 !important;
+  background-color: rgba(88, 101, 242, 0.12) !important;
+}
+
+.sh-font-sample {
+  font-size: 20px;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.2;
+}
+
+.sh-font-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #949ba4;
+}
+
+.sh-font-indicator {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #5865f2;
+}
+
+/* =========================================================================
+   EFFECT GRID (IMG-20261120-WA0009)
+   ========================================================================= */
+.sh-effect-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.sh-effect-box {
+  height: 64px;
+  background-color: #1e1f22;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.12s, border-color 0.12s;
+  padding: 6px;
+}
+
+.sh-effect-box:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.sh-effect-box-active {
+  border-color: #5865f2 !important;
+  background-color: rgba(88, 101, 242, 0.12) !important;
+}
+
+.sh-effect-sample {
+  font-size: 15px;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* 400+ Web Gradients in Effect Sheet */
+.sh-subsheet-divider {
+  width: 100%;
+  height: 1px;
+  background-color: rgba(255, 255, 255, 0.1);
+  margin: 12px 0 16px;
+}
+
+.sh-subsheet-categories-header {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.sh-category-pills {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 4px;
+}
+
+.sh-category-pills::-webkit-scrollbar {
+  display: none;
+}
+
+.sh-category-pill {
+  padding: 6px 14px;
+  border-radius: 16px;
+  background-color: #1e1f22;
+  color: #949ba4;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.sh-category-pill:hover {
+  color: #ffffff;
+  background-color: #2b2d31;
+}
+
+.sh-category-pill-active {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  font-weight: 700 !important;
+}
+
+.sh-web-gradient-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  width: 100%;
+}
+
+.sh-web-gradient-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background-color: #1e1f22;
+  border: 1.5px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.sh-web-gradient-card:hover {
+  background-color: #2b2d31;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.sh-web-gradient-card-active {
+  border-color: #5865f2 !important;
+  background-color: rgba(88, 101, 242, 0.12) !important;
+}
+
+.sh-web-gradient-chip {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  flex-shrink: 0;
+}
+
+.sh-web-gradient-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* =========================================================================
+   COLOR SHEET (IMG-20261120-WA0010) - 2 Endpoint Custom Boxes
+   ========================================================================= */
+.sh-color-gradient-bar-wrap {
+  width: 100%;
+  margin-bottom: 20px;
+}
+
+.sh-color-gradient-track {
+  position: relative;
+  width: 100%;
+  height: 54px;
+  border-radius: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  box-sizing: border-box;
+}
+
+.sh-color-endpoint-box {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 2.5px solid #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.12s;
+}
+
+.sh-color-endpoint-box:hover {
+  transform: scale(1.1);
+}
+
+.sh-color-endpoint-tag {
+  font-size: 12px;
+  font-weight: 800;
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+/* Swatches Row */
+.sh-color-swatches-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 20px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 4px 2px;
+}
+
+.sh-color-swatches-row::-webkit-scrollbar {
+  display: none;
+}
+
+.sh-color-swatch-pill {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.12s, border-color 0.12s;
+}
+
+.sh-color-swatch-pill:hover {
+  transform: scale(1.1);
+  border-color: #ffffff;
+}
+
+.sh-color-swatch-pill-active {
+  border-color: #ffffff !important;
+  transform: scale(1.15);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.4);
+}
+
+.sh-color-reset-wrap {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.sh-color-reset-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #2b2d31;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  padding: 8px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.12s;
+}
+
+.sh-color-reset-btn:hover {
+  background-color: #35373c;
+}
+
+/* Entry point in Profile Edit panel (IMG-20261120-WA0008) */
+.sh-display-name-style-entry {
+  width: 100%;
+  margin-top: 14px;
+  margin-bottom: 14px;
+}
+
+.sh-style-entry-card {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background-color: #1e1f22;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: background-color 0.12s, border-color 0.12s;
+}
+
+.sh-style-entry-card:hover {
+  background-color: #2b2d31;
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.sh-style-entry-badge {
+  background-color: #2b2d31;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sh-style-entry-info {
+  flex: 1;
+}
+
+.sh-style-entry-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.sh-style-entry-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  flex-shrink: 0;
+}
+
+.sh-style-entry-arrow {
+  color: #80848e;
+  flex-shrink: 0;
+}

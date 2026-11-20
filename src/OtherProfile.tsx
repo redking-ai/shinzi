@@ -22,7 +22,7 @@ import {
   navigateTo,
 } from './profileCache';
 import { getUserEffectiveStatus } from './presenceService';
-import { renderStyledContent } from './textStyleService';
+import { renderStyledContent, renderStyledDisplayName } from './textStyleService';
 import './Profile.css';
 
 type AnyRecord = Record<string, any>;
@@ -764,7 +764,7 @@ export default function OtherProfile({
 
           <div className="sh-identity-copy">
             <h2>
-              {renderStyledContent(userData.displayName || 'Shinzi User')}{' '}
+              {renderStyledDisplayName(userData.displayName || 'Shinzi User', userData.displayNameStyle)}{' '}
               <span className="sh-beta-badge">
                 BETA
               </span>

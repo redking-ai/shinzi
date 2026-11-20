@@ -10,6 +10,7 @@ import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import {
   ArrowLeft,
   Bell,
+  ChevronRight,
   MessageCircle,
   Pencil,
   Plus,
@@ -32,7 +33,14 @@ import {
 } from './profileCache';
 import { getAbsoluteApiUrl } from './apiUtils';
 import { updateUserPresence, type OnlineStatusMode } from './presenceService';
-import { applyTextStyles, validateTextStyleSyntax, renderStyledContent } from './textStyleService';
+import { renderStyledContent, renderStyledDisplayName } from './textStyleService';
+import DisplayNameStyleModal from './DisplayNameStyleModal';
+import {
+  DEFAULT_DISPLAY_NAME_STYLE,
+  DISPLAY_EFFECTS,
+  WEB_GRADIENTS_LIBRARY,
+  type DisplayNameStyleConfig,
+} from './webGradientsData';
 import './Profile.css';
 
 type AnyRecord = Record<string, any>;
@@ -293,6 +301,7 @@ useEffect(() => {
 
   const [colorPickerTarget, setColorPickerTarget] = useState<'primary' | 'secondary' | 'accent' | null>(null);
   const [extractingTheme, setExtractingTheme] = useState(false);
+  const [showDisplayNameStyleModal, setShowDisplayNameStyleModal] = useState(false);
 
   const [editForm, setEditForm] = useState<{
     displayName: string;
@@ -301,6 +310,7 @@ useEffect(() => {
     bubleText: string;
     pronouns: string;
     themeColors: ProfileThemeColors;
+    displayNameStyle: DisplayNameStyleConfig;
   }>({
     displayName: '',
     username: '',
@@ -312,6 +322,7 @@ useEffect(() => {
       secondary: '#000000',
       accent: '#000000',
     },
+    displayNameStyle: DEFAULT_DISPLAY_NAME_STYLE,
   });
 
   const resetEditForm = useCallback((data: AnyRecord) => {
@@ -326,6 +337,7 @@ useEffect(() => {
         secondary: data.themeColors?.secondary || '#000000',
         accent: data.themeColors?.accent || '#000000',
       },
+      displayNameStyle: (data.displayNameStyle as DisplayNameStyleConfig) || DEFAULT_DISPLAY_NAME_STYLE,
     });
   }, []);
 
@@ -337,6 +349,8 @@ useEffect(() => {
     const currentPronouns = String(userData.pronouns ?? '').trim();
     const currentBubble = String(userData.bubleText ?? '').trim().replace(/^\+\s*/, '');
     const currentTheme = (userData.themeColors as ProfileThemeColors) || DEFAULT_THEME_COLORS;
+    const currentStyle = (userData.displayNameStyle as DisplayNameStyleConfig) || DEFAULT_DISPLAY_NAME_STYLE;
+    const newStyle = editForm.displayNameStyle || DEFAULT_DISPLAY_NAME_STYLE;
 
     const newDisplayName = editForm.displayName.trim();
     const newUsername = editForm.username.trim().toLowerCase();
@@ -352,13 +366,21 @@ useEffect(() => {
       (editForm.themeColors?.accent || '#000000').toUpperCase() !==
         (currentTheme.accent || '#000000').toUpperCase();
 
+    const styleChanged =
+      (newStyle.fontId || 'standard') !== (currentStyle.fontId || 'standard') ||
+      (newStyle.effectId || 'standard') !== (currentStyle.effectId || 'standard') ||
+      (newStyle.gradientCss || 'none') !== (currentStyle.gradientCss || 'none') ||
+      (newStyle.colors?.[0] || '') !== (currentStyle.colors?.[0] || '') ||
+      (newStyle.colors?.[1] || '') !== (currentStyle.colors?.[1] || '');
+
     return (
       newDisplayName !== currentDisplayName ||
       newUsername !== currentUsername ||
       newBio !== currentBio ||
       newPronouns !== currentPronouns ||
       newBubble !== currentBubble ||
-      themeChanged
+      themeChanged ||
+      styleChanged
     );
   }, [editForm, userData]);
 
@@ -617,12 +639,6 @@ useEffect(() => {
       return;
     }
 
-    const syntaxCheck = validateTextStyleSyntax(displayName);
-    if (!syntaxCheck.isValid) {
-      setError(syntaxCheck.error || 'Name is unsupported. Please enter a space, e.g. (ts ashetic)');
-      return;
-    }
-
     if (displayName.length > 50) {
       setError('Display name cannot exceed 50 characters.');
       return;
@@ -644,14 +660,13 @@ useEffect(() => {
       const usernameChanged = username !== oldUsername;
       const batch = writeBatch(db);
 
-      const finalDisplayName = applyTextStyles(displayName);
-
       const updates: AnyRecord = {
-        displayName: finalDisplayName,
+        displayName: displayName,
         bio: editForm.bio.trim().slice(0, 300),
         bubleText: editForm.bubleText.trim().replace(/^\+\s*/, '').slice(0, 100),
         pronouns: editForm.pronouns.trim().slice(0, 20),
         themeColors: editForm.themeColors,
+        displayNameStyle: editForm.displayNameStyle || DEFAULT_DISPLAY_NAME_STYLE,
         updatedAt: serverTimestamp(),
       };
 
@@ -1195,7 +1210,12 @@ useEffect(() => {
           </div>
 
           <div className="sh-identity-copy">
-            <h2>{renderStyledContent(userData.displayName || 'Shinzi User')}</h2>
+            <h2>
+              {renderStyledDisplayName(
+                isEditing ? (editForm.displayName || 'Shinzi User') : (userData.displayName || 'Shinzi User'),
+                isEditing ? editForm.displayNameStyle : userData.displayNameStyle
+              )}
+            </h2>
             <p className="sh-username">
               {userData.username || 'username'}
             </p>
@@ -1355,6 +1375,47 @@ useEffect(() => {
                     </div>
                   </div>
                   <span className="sh-theme-box-label">Accent</span>
+                </div>
+              </div>
+
+              {/* Display Name Styles Entry Card */}
+              <div className="sh-dns-entry-container" style={{ margin: '14px 0 10px' }}>
+                <div className="sh-theme-section-header" style={{ marginBottom: 6 }}>
+                  <span className="sh-theme-section-title">DISPLAY NAME STYLES</span>
+                  <p className="sh-theme-section-subtitle">Customize the font, gradient &amp; effect of your name</p>
+                </div>
+                <div
+                  className="sh-style-entry-card"
+                  onClick={() => setShowDisplayNameStyleModal(true)}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <div className="sh-style-entry-badge">
+                    {renderStyledDisplayName('Text', editForm.displayNameStyle)}
+                  </div>
+                  <div className="sh-style-entry-info">
+                    <div className="sh-style-entry-title">
+                      {(editForm.displayNameStyle?.fontName || 'Standard')} + {(
+                        DISPLAY_EFFECTS.find((e) => e.id === editForm.displayNameStyle?.effectId)?.name ||
+                        WEB_GRADIENTS_LIBRARY.find((g) => g.id === editForm.displayNameStyle?.effectId)?.name ||
+                        (editForm.displayNameStyle?.effectId
+                          ? editForm.displayNameStyle.effectId.charAt(0).toUpperCase() +
+                            editForm.displayNameStyle.effectId.slice(1)
+                          : 'Standard')
+                      )}
+                    </div>
+                  </div>
+                  <div
+                    className="sh-style-entry-swatch"
+                    style={{
+                      background:
+                        editForm.displayNameStyle?.gradientCss &&
+                        editForm.displayNameStyle.gradientCss !== 'none'
+                          ? editForm.displayNameStyle.gradientCss
+                          : 'linear-gradient(135deg, #ffffff, #aaaaaa)',
+                    }}
+                  />
+                  <ChevronRight size={18} className="sh-style-entry-arrow" />
                 </div>
               </div>
 
@@ -1701,6 +1762,25 @@ useEffect(() => {
           }
         }}
         onClose={() => setColorPickerTarget(null)}
+      />
+
+      {/* Display Name Style Modal (IMG-20261120-WA0011 & WA0012) */}
+      <DisplayNameStyleModal
+        isOpen={showDisplayNameStyleModal}
+        rawDisplayName={editForm.displayName || userData?.displayName || 'Shinzi User'}
+        username={editForm.username || userData?.username || 'username'}
+        pronouns={editForm.pronouns || userData?.pronouns}
+        avatarUrl={profileImageUri || userData?.photoURL}
+        bannerUrl={bannerImageUri || userData?.bannerUrl}
+        initialStyle={editForm.displayNameStyle || userData?.displayNameStyle}
+        onApply={(newStyle) => {
+          setEditForm((prev) => ({
+            ...prev,
+            displayNameStyle: newStyle,
+          }));
+          setShowDisplayNameStyleModal(false);
+        }}
+        onClose={() => setShowDisplayNameStyleModal(false)}
       />
     </main>
   );
