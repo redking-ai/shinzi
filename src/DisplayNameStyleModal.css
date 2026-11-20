@@ -412,58 +412,85 @@
   }
 }
 
+.sh-font-card,
 .sh-font-box {
   position: relative;
   background-color: #1e1f22;
   border: 2px solid rgba(255, 255, 255, 0.1);
   border-radius: 14px;
-  padding: 16px 10px 12px;
+  padding: 14px 10px 10px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   cursor: pointer;
   transition: transform 0.12s, border-color 0.12s, background-color 0.12s;
+  box-sizing: border-box;
 }
 
+.sh-font-card:hover,
 .sh-font-box:hover {
   background-color: #2b2d31;
   border-color: rgba(255, 255, 255, 0.25);
   transform: translateY(-2px);
 }
 
+.sh-font-card-active,
 .sh-font-box-active {
   border-color: #5865f2 !important;
   background-color: rgba(88, 101, 242, 0.12) !important;
 }
 
+.sh-font-card-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+}
+
+.sh-font-card-sample,
 .sh-font-sample {
   font-size: 20px;
   font-weight: 700;
   color: #ffffff;
   line-height: 1.2;
+  text-align: center;
 }
 
+.sh-font-card-label-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  justify-content: center;
+}
+
+.sh-font-card-name,
 .sh-font-name {
   font-size: 12px;
   font-weight: 600;
   color: #949ba4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
 }
 
-.sh-font-indicator {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: #5865f2;
+.sh-font-card-badge {
+  font-size: 9px;
+  font-weight: 700;
+  color: #c084fc;
+  background-color: rgba(192, 132, 252, 0.15);
+  padding: 1px 4px;
+  border-radius: 4px;
+  text-transform: uppercase;
 }
 
 /* =========================================================================
    EFFECT GRID (IMG-20261120-WA0009)
    ========================================================================= */
+.sh-effects-grid,
 .sh-effect-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -472,27 +499,59 @@
   margin-bottom: 16px;
 }
 
+@media (max-width: 420px) {
+  .sh-effects-grid,
+  .sh-effect-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.sh-effect-card,
 .sh-effect-box {
-  height: 64px;
+  min-height: 70px;
   background-color: #1e1f22;
   border: 2px solid rgba(255, 255, 255, 0.1);
   border-radius: 14px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   cursor: pointer;
-  transition: transform 0.12s, border-color 0.12s;
-  padding: 6px;
+  transition: transform 0.12s, border-color 0.12s, background-color 0.12s;
+  padding: 10px 8px;
+  box-sizing: border-box;
 }
 
+.sh-effect-card:hover,
 .sh-effect-box:hover {
   transform: translateY(-2px);
   border-color: rgba(255, 255, 255, 0.25);
+  background-color: #2b2d31;
 }
 
+.sh-effect-card-active,
 .sh-effect-box-active {
   border-color: #5865f2 !important;
   background-color: rgba(88, 101, 242, 0.12) !important;
+}
+
+.sh-effect-card-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+}
+
+.sh-effect-card-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: #949ba4;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .sh-effect-sample {

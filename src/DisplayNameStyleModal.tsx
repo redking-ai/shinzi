@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ArrowLeft, Check, ChevronRight, Dices, RotateCcw, X } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { ArrowLeft, Check, ChevronRight, Dices, RotateCcw } from 'lucide-react';
 import ColorPickerModal from './ColorPickerModal';
 import {
   DISPLAY_EFFECTS,
@@ -8,7 +8,7 @@ import {
   type TextStyleEffect,
   type GradientPreset,
 } from './webGradientsData';
-import { applyStyleToText } from './textStyleService';
+import { applyStyleToText, getAllTextStyles } from './textStyleService';
 import { extractMaterialYouTheme } from './materialYouTheme';
 import './DisplayNameStyleModal.css';
 
@@ -23,19 +23,6 @@ interface DisplayNameStyleModalProps {
   onApply: (style: DisplayNameStyleConfig) => void;
   onClose: () => void;
 }
-
-const BUILT_IN_FONT_OPTIONS = [
-  { id: 'standard', name: 'Standard' },
-  { id: 'journal', name: 'Journal' },
-  { id: 'ashetic', name: 'Aesthetic' },
-  { id: 'bold', name: 'Bold' },
-  { id: 'newashetic', name: 'New Aesthetic' },
-  { id: 'arabic', name: 'Arabic' },
-  { id: 'superboldwhite', name: 'Super Bold' },
-  { id: 'superboldblack', name: 'Sans Bold' },
-  { id: 'latte', name: 'Latte' },
-  { id: 'weird', name: 'Gothic' },
-];
 
 const PRESET_GRADIENT_SWATCHES: [string, string][] = [
   ['#ff0844', '#ffb199'], // Warm Flame
@@ -53,8 +40,11 @@ const GRADIENT_CATEGORIES = [
   'Fire & Sunset',
   'Neon & Cyber',
   'Ocean & Aqua',
-  'Pastel & Gummy',
+  'Pastel & Candy',
   'Cosmic & Luxury',
+  'Emerald & Earth',
+  'Monochrome & Pure',
+  'Vibrant Spectrum',
 ];
 
 export default function DisplayNameStyleModal({
@@ -91,10 +81,39 @@ export default function DisplayNameStyleModal({
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [surpriseLoading, setSurpriseLoading] = useState(false);
 
+  interface FontItem {
+    id: string;
+    name: string;
+    type?: string;
+    isCustom?: boolean;
+    fontFamily?: string;
+    map?: Record<string, string>;
+  }
+
+  // All dynamic styles (built-in + custom uploaded fonts like bbh)
+  const allStylesMap = useMemo(() => {
+    return typeof window !== 'undefined' ? getAllTextStyles() : {};
+  }, [isOpen]);
+
+  const allFontList = useMemo<FontItem[]>(() => {
+    const map = allStylesMap;
+    const standardDef: FontItem = { id: 'standard', name: 'Standard', type: 'standard' };
+    const customList: FontItem[] = Object.values(map).filter((s) => s.id !== 'standard');
+    return [standardDef, ...customList];
+  }, [allStylesMap]);
+
   if (!isOpen) return null;
 
   // Active effect object
   const activeEffectObj = DISPLAY_EFFECTS.find((e) => e.id === currentEffectId);
+
+  // Check if active font is a custom font-family file
+  const cleanFontId = currentFontId.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  const activeFontDef = allStylesMap[cleanFontId];
+  const isCustomFontFamily = activeFontDef?.type === 'font' && activeFontDef.fontFamily;
+  const previewFontFamily = isCustomFontFamily
+    ? `"${activeFontDef.fontFamily}", sans-serif`
+    : undefined;
 
   // Live preview text with font transformation
   const previewText = applyStyleToText(rawDisplayName || 'Shinzi User', currentFontId);
@@ -108,10 +127,13 @@ export default function DisplayNameStyleModal({
         backgroundClip: 'text',
         WebkitTextFillColor: 'transparent',
         display: 'inline-block',
+        fontFamily: previewFontFamily,
         textShadow: activeEffectObj?.textShadow || undefined,
       }
     : {
         color: '#FFFFFF',
+        fontFamily: previewFontFamily,
+        display: 'inline-block',
       };
 
   // Font Selection
@@ -127,18 +149,24 @@ export default function DisplayNameStyleModal({
     if (effect.id === 'standard') {
       setCurrentGradientCss('none');
     } else {
-      setCurrentColors(effect.colors);
-      setCurrentGradientCss(effect.css);
+      // If user had no gradient yet (or was standard), initialize with effect's default colors
+      if (currentGradientCss === 'none' || currentColors[0] === '#FFFFFF') {
+        setCurrentColors(effect.colors);
+        setCurrentGradientCss(effect.css);
+      }
     }
     setActiveSheet(null);
   };
 
-  // WebGradient Preset Selection
+  // WebGradient Preset Selection (Does NOT overwrite selected effect!)
   const handleSelectWebGradient = (preset: GradientPreset) => {
-    setCurrentEffectId('gradient');
     setCurrentColors(preset.colors);
     setCurrentGradientCss(preset.css);
-    setActiveSheet(null);
+    // If effect was standard, switch to 'gradient' so it renders.
+    // If effect was already an effect (Neon, Gummy, Prism, Aurora, etc.), KEEP that effect!
+    if (currentEffectId === 'standard') {
+      setCurrentEffectId('gradient');
+    }
   };
 
   // Custom Colors updated via color wheel
@@ -172,26 +200,36 @@ export default function DisplayNameStyleModal({
     setSurpriseLoading(true);
     try {
       const img = bannerUrl || avatarUrl;
-      const theme = await extractMaterialYouTheme(img);
+      const palette = await extractMaterialYouTheme(img);
+
+      // Pick random pair from 400+ Web Gradients that match tone
+      const randomIdx = Math.floor(Math.random() * WEB_GRADIENTS_LIBRARY.length);
+      const chosen = WEB_GRADIENTS_LIBRARY[randomIdx];
+
+      // Pick a stylish non-standard effect
+      const stylishEffects = DISPLAY_EFFECTS.filter((e) => e.id !== 'standard');
+      const randomEffect =
+        stylishEffects[Math.floor(Math.random() * stylishEffects.length)];
 
       // Pick a stylish font
-      const randomFonts = ['journal', 'ashetic', 'bold', 'newashetic'];
-      const chosenFont = randomFonts[Math.floor(Math.random() * randomFonts.length)];
-      const fontObj = BUILT_IN_FONT_OPTIONS.find((f) => f.id === chosenFont);
-      setCurrentFontId(chosenFont);
-      setCurrentFontName(fontObj?.name || 'Journal');
+      const stylishFonts = allFontList.filter((f) => f.id !== 'standard');
+      const randomFont = stylishFonts.length > 0
+        ? stylishFonts[Math.floor(Math.random() * stylishFonts.length)]
+        : { id: 'standard', name: 'Standard' };
 
-      // Create rich gradient matching profile colors
-      const newColors: [string, string] = [theme.accent || '#38bdf8', theme.primary || '#818cf8'];
-      setCurrentColors(newColors);
-      setCurrentEffectId('prism');
-      setCurrentGradientCss(`linear-gradient(135deg, ${newColors[0]} 0%, ${newColors[1]} 100%)`);
+      setCurrentColors(chosen ? chosen.colors : [palette.primary, palette.secondary]);
+      setCurrentGradientCss(chosen ? chosen.css : `linear-gradient(135deg, ${palette.primary} 0%, ${palette.secondary} 100%)`);
+      setCurrentEffectId(randomEffect ? randomEffect.id : 'prism');
+      setCurrentFontId(randomFont.id);
+      setCurrentFontName(randomFont.name);
+    } catch (e) {
+      console.warn('[DisplayNameStyleModal] Surprise Me error:', e);
     } finally {
       setSurpriseLoading(false);
     }
   };
 
-  // Remove Style
+  // Reset to default clean white name
   const handleRemoveStyle = () => {
     setCurrentFontId('standard');
     setCurrentFontName('Standard');
@@ -200,7 +238,7 @@ export default function DisplayNameStyleModal({
     setCurrentGradientCss('none');
   };
 
-  // Apply changes to parent
+  // Apply Changes
   const handleApply = () => {
     onApply({
       fontId: currentFontId,
@@ -209,217 +247,243 @@ export default function DisplayNameStyleModal({
       colors: currentColors,
       gradientCss: currentGradientCss,
     });
-    onClose();
   };
 
-  // Filtered Web Gradients
+  // Filtered Web Gradients for Color Sub-Sheet
   const filteredGradients =
     selectedCategory === 'All'
       ? WEB_GRADIENTS_LIBRARY
       : WEB_GRADIENTS_LIBRARY.filter((g) => g.category === selectedCategory);
 
+  // Separate Discord Styles vs Shinzi Styles
+  const discordEffects = DISPLAY_EFFECTS.filter((e) => e.group === 'discord');
+  const shinziEffects = DISPLAY_EFFECTS.filter((e) => e.group === 'shinzi');
+
   return (
-    <div className="sh-style-modal-backdrop" role="dialog" aria-modal="true">
-      <div className="sh-style-modal-window">
-        {/* Header */}
-        <header className="sh-style-modal-header">
+    <div className="sh-dns-modal-backdrop" onClick={onClose}>
+      <div
+        className="sh-dns-modal-panel"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sh-dns-title"
+      >
+        {/* Main Modal Header */}
+        <div className="sh-dns-header">
           <button
             type="button"
-            className="sh-style-header-back"
+            className="sh-dns-back-btn"
             onClick={onClose}
-            aria-label="Go back"
+            aria-label="Back"
           >
-            <ArrowLeft size={22} />
+            <ArrowLeft size={20} />
           </button>
-          <h2 className="sh-style-header-title">Change Display Name Style</h2>
-          <div style={{ width: 24 }} />
-        </header>
+          <h2 id="sh-dns-title" className="sh-dns-title">
+            Change Display Name Style
+          </h2>
+          <div className="sh-dns-header-spacer" />
+        </div>
 
-        {/* Top Preview Card (Matches Red Circle in IMG-20261120-WA0011) */}
-        <section className="sh-style-preview-container">
-          <div className="sh-style-mini-card">
-            {/* Mini Banner */}
+        {/* =========================================================================
+            TOP PREVIEW CARD (Strictly Profile snippet marked in red: IMG-20261120-WA0011)
+            Banner, Avatar with status, live Styled Display Name, Username & Pronouns.
+           ========================================================================= */}
+        <div className="sh-dns-preview-section">
+          <div className="sh-dns-profile-card">
             <div
-              className="sh-style-mini-banner"
+              className="sh-dns-card-banner"
               style={
                 bannerUrl
                   ? { backgroundImage: `url("${bannerUrl}")` }
-                  : { background: 'linear-gradient(135deg, #1e1035, #0f2942)' }
+                  : { background: 'linear-gradient(135deg, #1e1f22 0%, #2b2d31 100%)' }
               }
             />
-
-            {/* Mini Avatar & Identity */}
-            <div className="sh-style-mini-body">
-              <div className="sh-style-mini-avatar-wrap">
+            <div className="sh-dns-card-body">
+              <div className="sh-dns-card-avatar-wrap">
                 {avatarUrl ? (
-                  <img src={avatarUrl} alt="Avatar" className="sh-style-mini-avatar-img" />
+                  <img
+                    src={avatarUrl}
+                    alt="Avatar"
+                    className="sh-dns-card-avatar-img"
+                  />
                 ) : (
-                  <div className="sh-style-mini-avatar-fallback">
+                  <div className="sh-dns-card-avatar-fallback">
                     {(rawDisplayName || username || 'U').charAt(0).toUpperCase()}
                   </div>
                 )}
-                <div className="sh-style-mini-status-dot" />
+                <div className="sh-dns-status-dot" />
               </div>
 
-              {/* Styled Display Name Preview */}
-              <div className="sh-style-mini-name-row">
-                <span className="sh-style-mini-display-name" style={previewTextStyle}>
+              <div className="sh-dns-card-identity">
+                <div className="sh-dns-card-name" style={previewTextStyle}>
                   {previewText}
-                </span>
-              </div>
-
-              <div className="sh-style-mini-details">
-                <span className="sh-style-mini-username">{username || 'username'}</span>
-                {pronouns && (
-                  <>
-                    <span className="sh-style-mini-bullet">•</span>
-                    <span className="sh-style-mini-pronouns">{pronouns}</span>
-                  </>
-                )}
+                </div>
+                <div className="sh-dns-card-meta-row">
+                  <span className="sh-dns-card-username">
+                    @{username || 'username'}
+                  </span>
+                  {pronouns && (
+                    <span className="sh-dns-card-pronouns">{pronouns}</span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
-        </section>
+        </div>
 
-        {/* 3 Settings Rows (Font, Effect, Color) - IMG-20261120-WA0012 */}
-        <div className="sh-style-settings-group">
+        {/* =========================================================================
+            SETTINGS ROWS (Font, Effect, Color: IMG-20261120-WA0012)
+           ========================================================================= */}
+        <div className="sh-dns-settings-list">
           {/* Row 1: Font */}
           <div
-            className="sh-style-row"
+            className="sh-dns-setting-row"
             onClick={() => setActiveSheet('font')}
             role="button"
             tabIndex={0}
           >
-            <div className="sh-style-row-info">
-              <span className="sh-style-row-label">Font</span>
-              <span className="sh-style-row-value">{currentFontName}</span>
-            </div>
-            <div className="sh-style-row-right">
-              <ChevronRight size={18} className="sh-style-chevron" />
+            <span className="sh-dns-setting-label">Font</span>
+            <div className="sh-dns-setting-val">
+              <span>{currentFontName}</span>
+              <ChevronRight size={18} className="sh-dns-chevron" />
             </div>
           </div>
 
           {/* Row 2: Effect */}
           <div
-            className="sh-style-row"
+            className="sh-dns-setting-row"
             onClick={() => setActiveSheet('effect')}
             role="button"
             tabIndex={0}
           >
-            <div className="sh-style-row-info">
-              <span className="sh-style-row-label">Effect</span>
-              <span className="sh-style-row-value">
-                {activeEffectObj?.name || 'Standard'}
-              </span>
-            </div>
-            <div className="sh-style-row-right">
-              <ChevronRight size={18} className="sh-style-chevron" />
+            <span className="sh-dns-setting-label">Effect</span>
+            <div className="sh-dns-setting-val">
+              <span>{activeEffectObj?.name || 'Standard'}</span>
+              <ChevronRight size={18} className="sh-dns-chevron" />
             </div>
           </div>
 
           {/* Row 3: Color */}
           <div
-            className="sh-style-row"
+            className="sh-dns-setting-row"
             onClick={() => setActiveSheet('color')}
             role="button"
             tabIndex={0}
           >
-            <div className="sh-style-row-info">
-              <span className="sh-style-row-label">Color</span>
-              <span className="sh-style-row-value">
-                {currentColors[0]} &rarr; {currentColors[1]}
-              </span>
-            </div>
-            <div className="sh-style-row-right">
+            <span className="sh-dns-setting-label">Color</span>
+            <div className="sh-dns-setting-val">
               <div
-                className="sh-style-row-swatch"
+                className="sh-dns-color-indicator"
                 style={{
                   background:
-                    currentGradientCss === 'none'
-                      ? '#FFFFFF'
-                      : currentGradientCss,
+                    currentGradientCss && currentGradientCss !== 'none'
+                      ? currentGradientCss
+                      : 'linear-gradient(135deg, #ffffff, #aaaaaa)',
                 }}
               />
-              <ChevronRight size={18} className="sh-style-chevron" />
+              <ChevronRight size={18} className="sh-dns-chevron" />
             </div>
           </div>
         </div>
 
-        {/* Surprise Me & Remove Buttons */}
-        <div className="sh-style-actions-row">
+        {/* =========================================================================
+            BOTTOM ACTIONS (Surprise Me, Remove Style, Apply)
+           ========================================================================= */}
+        <div className="sh-dns-actions-footer">
           <button
             type="button"
-            className="sh-style-surprise-btn"
+            className="sh-dns-btn-surprise"
             disabled={surpriseLoading}
             onClick={() => void handleSurpriseMe()}
           >
-            <Dices size={18} />
-            <span>{surpriseLoading ? 'Matching…' : 'Surprise Me'}</span>
+            <Dices size={16} />
+            <span>{surpriseLoading ? 'Analyzing...' : 'Surprise me'}</span>
           </button>
 
           <button
             type="button"
-            className="sh-style-remove-btn"
+            className="sh-dns-btn-remove"
             onClick={handleRemoveStyle}
           >
+            <RotateCcw size={15} />
             <span>Remove Style</span>
           </button>
-        </div>
 
-        {/* Apply Button */}
-        <div className="sh-style-bottom-bar">
-          <button type="button" className="sh-style-apply-btn" onClick={handleApply}>
-            Apply
+          <button
+            type="button"
+            className="sh-dns-btn-apply"
+            onClick={handleApply}
+          >
+            <Check size={16} />
+            <span>Apply</span>
           </button>
         </div>
 
         {/* =========================================================================
-            SUB-SHEET 1: FONT PICKER (Matches IMG-20261120-WA0014)
-            Shows boxes with 'Text' in each font + font name label
+            SUB-SHEET 1: FONT PICKER (Matches IMG-20261120-WA0014 with dynamic styles)
+            Loads all available fonts dynamically (including custom uploaded fonts like bbh)
            ========================================================================= */}
         {activeSheet === 'font' && (
           <div
             className="sh-subsheet-overlay"
             onClick={() => setActiveSheet(null)}
-            role="dialog"
-            aria-modal="true"
           >
-            <div className="sh-subsheet-panel" onClick={(e) => e.stopPropagation()}>
-              <div className="sh-subsheet-handle" />
+            <div
+              className="sh-subsheet-panel"
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="sh-subsheet-header">
                 <button
                   type="button"
-                  className="sh-subsheet-close"
-                  onClick={() => setActiveSheet(null)}
-                  aria-label="Close"
-                >
-                  <X size={20} />
-                </button>
-                <h3 className="sh-subsheet-title">Font</h3>
-                <button
-                  type="button"
-                  className="sh-subsheet-select-btn"
+                  className="sh-subsheet-back"
                   onClick={() => setActiveSheet(null)}
                 >
-                  Select
+                  <ArrowLeft size={18} />
                 </button>
+                <span className="sh-subsheet-title">Pick Font</span>
+                <div style={{ width: 18 }} />
               </div>
 
-              {/* Grid of Font Boxes showing 'Text' + Style Name */}
               <div className="sh-font-grid">
-                {BUILT_IN_FONT_OPTIONS.map((font) => {
-                  const isSelected = currentFontId === font.id;
-                  const sampleText = applyStyleToText('Text', font.id);
+                {allFontList.map((f) => {
+                  const isSelected =
+                    currentFontId.toLowerCase() === f.id.toLowerCase();
+                  const isFontFamily = f.type === 'font' && f.fontFamily;
+                  const sampleText = isFontFamily
+                    ? 'Text'
+                    : f.map
+                    ? Array.from('Text')
+                        .map((c) => f.map?.[c] || c)
+                        .join('')
+                    : applyStyleToText('Text', f.id);
+
                   return (
                     <button
-                      key={font.id}
+                      key={f.id}
                       type="button"
-                      className={`sh-font-box ${isSelected ? 'sh-font-box-active' : ''}`}
-                      onClick={() => handleSelectFont(font.id, font.name)}
+                      className={`sh-font-card ${isSelected ? 'sh-font-card-active' : ''}`}
+                      onClick={() => handleSelectFont(f.id, f.name)}
                     >
-                      <span className="sh-font-sample">{sampleText}</span>
-                      <span className="sh-font-name">{font.name}</span>
-                      {isSelected && <div className="sh-font-indicator" />}
+                      <div className="sh-font-card-box">
+                        <span
+                          className="sh-font-card-sample"
+                          style={
+                            isFontFamily
+                              ? { fontFamily: `"${f.fontFamily}", sans-serif` }
+                              : undefined
+                          }
+                        >
+                          {sampleText}
+                        </span>
+                      </div>
+                      <div className="sh-font-card-label-row">
+                        <span className="sh-font-card-name">{f.name}</span>
+                        {f.isCustom && (
+                          <span className="sh-font-card-badge">
+                            {f.type === 'font' ? 'Font' : 'Custom'}
+                          </span>
+                        )}
+                      </div>
                     </button>
                   );
                 })}
@@ -429,73 +493,204 @@ export default function DisplayNameStyleModal({
         )}
 
         {/* =========================================================================
-            SUB-SHEET 2: EFFECT PICKER (Matches IMG-20261120-WA0009 & 400+ Gradients)
+            SUB-SHEET 2: EFFECT PICKER (Matches IMG-20261120-WA0009)
+            Discord Styles + Shinzi Unique Styles (Aurora, Cyber Glow, Glitchcore, etc.)
            ========================================================================= */}
         {activeSheet === 'effect' && (
           <div
             className="sh-subsheet-overlay"
             onClick={() => setActiveSheet(null)}
-            role="dialog"
-            aria-modal="true"
           >
-            <div className="sh-subsheet-panel" onClick={(e) => e.stopPropagation()}>
-              <div className="sh-subsheet-handle" />
+            <div
+              className="sh-subsheet-panel"
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="sh-subsheet-header">
                 <button
                   type="button"
-                  className="sh-subsheet-close"
-                  onClick={() => setActiveSheet(null)}
-                  aria-label="Close"
-                >
-                  <X size={20} />
-                </button>
-                <h3 className="sh-subsheet-title">Effect</h3>
-                <button
-                  type="button"
-                  className="sh-subsheet-select-btn"
+                  className="sh-subsheet-back"
                   onClick={() => setActiveSheet(null)}
                 >
-                  Select
+                  <ArrowLeft size={18} />
                 </button>
+                <span className="sh-subsheet-title">Pick Effect</span>
+                <div style={{ width: 18 }} />
               </div>
 
-              {/* Discord Main Effects (Standard, Gradient, Neon, Toon, Pop, Gummy, Prism) */}
-              <span className="sh-subsheet-section-title">DISCORD STYLES</span>
-              <div className="sh-effect-grid">
-                {DISPLAY_EFFECTS.map((eff) => {
+              {/* Section 1: Discord Styles */}
+              <div className="sh-subsheet-section-title">DISCORD STYLES</div>
+              <div className="sh-effects-grid">
+                {discordEffects.map((eff) => {
                   const isSelected = currentEffectId === eff.id;
                   return (
                     <button
                       key={eff.id}
                       type="button"
-                      className={`sh-effect-box ${isSelected ? 'sh-effect-box-active' : ''}`}
+                      className={`sh-effect-card ${isSelected ? 'sh-effect-card-active' : ''}`}
                       onClick={() => handleSelectEffect(eff)}
                     >
-                      <span
-                        className="sh-effect-sample"
-                        style={
-                          eff.id !== 'standard'
-                            ? {
-                                backgroundImage: eff.css,
-                                WebkitBackgroundClip: 'text',
-                                backgroundClip: 'text',
-                                WebkitTextFillColor: 'transparent',
-                                textShadow: eff.textShadow || undefined,
-                              }
-                            : { color: '#FFFFFF' }
-                        }
-                      >
-                        {eff.name}
-                      </span>
+                      <div className="sh-effect-card-box">
+                        <span
+                          className="sh-effect-sample"
+                          style={
+                            eff.id !== 'standard'
+                              ? {
+                                  backgroundImage: eff.css,
+                                  WebkitBackgroundClip: 'text',
+                                  backgroundClip: 'text',
+                                  WebkitTextFillColor: 'transparent',
+                                  textShadow: eff.textShadow || undefined,
+                                }
+                              : { color: '#FFFFFF' }
+                          }
+                        >
+                          Text
+                        </span>
+                      </div>
+                      <span className="sh-effect-card-name">{eff.name}</span>
                     </button>
                   );
                 })}
               </div>
 
-              {/* 400+ Web Gradients Section */}
+              {/* Section 2: Shinzi Styles */}
+              <div className="sh-subsheet-section-title" style={{ marginTop: 20 }}>
+                SHINZI UNIQUE STYLES
+              </div>
+              <div className="sh-effects-grid">
+                {shinziEffects.map((eff) => {
+                  const isSelected = currentEffectId === eff.id;
+                  return (
+                    <button
+                      key={eff.id}
+                      type="button"
+                      className={`sh-effect-card ${isSelected ? 'sh-effect-card-active' : ''}`}
+                      onClick={() => handleSelectEffect(eff)}
+                    >
+                      <div className="sh-effect-card-box">
+                        <span
+                          className="sh-effect-sample"
+                          style={{
+                            backgroundImage: eff.css,
+                            WebkitBackgroundClip: 'text',
+                            backgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent',
+                            textShadow: eff.textShadow || undefined,
+                          }}
+                        >
+                          Text
+                        </span>
+                      </div>
+                      <span className="sh-effect-card-name">{eff.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* =========================================================================
+            SUB-SHEET 3: COLOR CUSTOMIZER (Matches IMG-20261120-WA0010 + 400+ Web Gradients)
+            1. Two Color Boxes (Start & End) on the Gradient Track
+            2. Preset Swatches Bar + Reset
+            3. 400+ Web Gradients Library with Category Tabs
+           ========================================================================= */}
+        {activeSheet === 'color' && (
+          <div
+            className="sh-subsheet-overlay"
+            onClick={() => setActiveSheet(null)}
+          >
+            <div
+              className="sh-subsheet-panel"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="sh-subsheet-header">
+                <button
+                  type="button"
+                  className="sh-subsheet-back"
+                  onClick={() => setActiveSheet(null)}
+                >
+                  <ArrowLeft size={18} />
+                </button>
+                <span className="sh-subsheet-title">Pick Text Color</span>
+                <div style={{ width: 18 }} />
+              </div>
+
+              {/* Gradient Track with 2 custom boxes */}
+              <div className="sh-gradient-editor-card">
+                <div className="sh-gradient-editor-title">Custom 2-Color Gradient</div>
+                <div className="sh-gradient-track-row">
+                  {/* Left Box (Start Color) */}
+                  <div
+                    className="sh-color-picker-box-wrap"
+                    onClick={() => setColorPickerTarget('start')}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <div
+                      className="sh-color-picker-box"
+                      style={{ backgroundColor: currentColors[0] }}
+                    />
+                    <span className="sh-color-box-caption">Start</span>
+                  </div>
+
+                  {/* Gradient Preview Bar */}
+                  <div
+                    className="sh-gradient-bar-track"
+                    style={{
+                      background: `linear-gradient(90deg, ${currentColors[0]} 0%, ${currentColors[1]} 100%)`,
+                    }}
+                  />
+
+                  {/* Right Box (End Color) */}
+                  <div
+                    className="sh-color-picker-box-wrap"
+                    onClick={() => setColorPickerTarget('end')}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <div
+                      className="sh-color-picker-box"
+                      style={{ backgroundColor: currentColors[1] }}
+                    />
+                    <span className="sh-color-box-caption">End</span>
+                  </div>
+                </div>
+
+                {/* Quick Swatches Row */}
+                <div className="sh-swatches-row">
+                  {PRESET_GRADIENT_SWATCHES.map((swatch, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      className="sh-mini-swatch"
+                      style={{
+                        background: `linear-gradient(135deg, ${swatch[0]} 0%, ${swatch[1]} 100%)`,
+                      }}
+                      onClick={() => handleSelectColorSwatch(swatch)}
+                      title={`Preset ${idx + 1}`}
+                    />
+                  ))}
+                  <button
+                    type="button"
+                    className="sh-color-reset-btn"
+                    onClick={() =>
+                      handleSelectColorSwatch(['#FFFFFF', '#FFFFFF'])
+                    }
+                  >
+                    Reset
+                  </button>
+                </div>
+              </div>
+
+              {/* Divider into 400+ Web Gradients library */}
               <div className="sh-subsheet-divider" />
+
               <div className="sh-subsheet-categories-header">
-                <span className="sh-subsheet-section-title">400+ DESIGNER GRADIENTS</span>
+                <div className="sh-subsheet-section-title">
+                  400+ WEB GRADIENTS ({filteredGradients.length})
+                </div>
                 <div className="sh-category-pills">
                   {GRADIENT_CATEGORIES.map((cat) => (
                     <button
@@ -534,119 +729,18 @@ export default function DisplayNameStyleModal({
           </div>
         )}
 
-        {/* =========================================================================
-            SUB-SHEET 3: COLOR CUSTOMIZER (Matches IMG-20261120-WA0010 with 2 Boxes)
-            User specified: 2 custom boxes (Start Color & End Color) on the bar.
-            Tapping opens our circular color wheel titled 'Pick Text Color'!
-           ========================================================================= */}
-        {activeSheet === 'color' && (
-          <div
-            className="sh-subsheet-overlay"
-            onClick={() => setActiveSheet(null)}
-            role="dialog"
-            aria-modal="true"
-          >
-            <div className="sh-subsheet-panel" onClick={(e) => e.stopPropagation()}>
-              <div className="sh-subsheet-handle" />
-              <div className="sh-subsheet-header">
-                <button
-                  type="button"
-                  className="sh-subsheet-close"
-                  onClick={() => setActiveSheet(null)}
-                  aria-label="Close"
-                >
-                  <X size={20} />
-                </button>
-                <h3 className="sh-subsheet-title">Color</h3>
-                <button
-                  type="button"
-                  className="sh-subsheet-select-btn"
-                  onClick={() => setActiveSheet(null)}
-                >
-                  Select
-                </button>
-              </div>
-
-              {/* 2-Box Gradient Bar (Start Color left, End Color right) */}
-              <div className="sh-color-gradient-bar-wrap">
-                <div
-                  className="sh-color-gradient-track"
-                  style={{
-                    background: `linear-gradient(90deg, ${currentColors[0]} 0%, ${currentColors[1]} 100%)`,
-                  }}
-                >
-                  {/* Left Box (Start Color) */}
-                  <div
-                    className="sh-color-endpoint-box"
-                    style={{ backgroundColor: currentColors[0] }}
-                    onClick={() => setColorPickerTarget('start')}
-                    role="button"
-                    tabIndex={0}
-                    title="Change Start Color"
-                  >
-                    <span className="sh-color-endpoint-tag">1</span>
-                  </div>
-
-                  {/* Right Box (End Color) */}
-                  <div
-                    className="sh-color-endpoint-box"
-                    style={{ backgroundColor: currentColors[1] }}
-                    onClick={() => setColorPickerTarget('end')}
-                    role="button"
-                    tabIndex={0}
-                    title="Change End Color"
-                  >
-                    <span className="sh-color-endpoint-tag">2</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Preset Swatches Row */}
-              <div className="sh-color-swatches-row">
-                {PRESET_GRADIENT_SWATCHES.map((colors, i) => {
-                  const css = `linear-gradient(135deg, ${colors[0]} 0%, ${colors[1]} 100%)`;
-                  const isSelected =
-                    currentColors[0].toUpperCase() === colors[0].toUpperCase() &&
-                    currentColors[1].toUpperCase() === colors[1].toUpperCase();
-                  return (
-                    <button
-                      key={i}
-                      type="button"
-                      className={`sh-color-swatch-pill ${isSelected ? 'sh-color-swatch-pill-active' : ''}`}
-                      style={{ background: css }}
-                      onClick={() => handleSelectColorSwatch(colors)}
-                    >
-                      {isSelected && <Check size={14} color="#ffffff" strokeWidth={3} />}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Reset Button */}
-              <div className="sh-color-reset-wrap">
-                <button
-                  type="button"
-                  className="sh-color-reset-btn"
-                  onClick={() =>
-                    handleSelectColorSwatch(['#f45a18', '#ffd447'])
-                  }
-                >
-                  <RotateCcw size={16} />
-                  <span>Reset</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Circular Color Wheel Modal (Screenshot_20261120-165854_Shinzi) */}
+        {/* Circular Color Wheel Modal */}
         <ColorPickerModal
           isOpen={Boolean(colorPickerTarget)}
           title="Pick Text Color"
           initialColor={
-            colorPickerTarget === 'start' ? currentColors[0] : currentColors[1]
+            colorPickerTarget === 'start'
+              ? currentColors[0]
+              : currentColors[1]
           }
-          onSelect={handleColorWheelSelect}
+          onSelect={(newHex) => {
+            handleColorWheelSelect(newHex);
+          }}
           onClose={() => setColorPickerTarget(null)}
         />
       </div>

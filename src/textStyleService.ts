@@ -728,11 +728,16 @@ export function renderStyledContent(
 
 /**
  * Transforms plain text into the specified font/Unicode style (e.g. Ashetic, Journal, Arabic, Bold).
+ * For custom font-family files, plain text is returned (rendered with fontFamily CSS).
  */
 export function applyStyleToText(text: string, styleId?: string): string {
   if (!text || !styleId || styleId === 'standard') return text;
   const allStyles = getAllTextStyles();
   const cleanKey = styleId.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  const style = allStyles[cleanKey];
+  if (style?.type === 'font') {
+    return text;
+  }
   return transformString(text, cleanKey, allStyles);
 }
 
@@ -748,37 +753,67 @@ export function renderStyledDisplayName(
   } | null
 ): React.ReactNode {
   if (!rawName) return 'Shinzi User';
+  const allStyles = getAllTextStyles();
+  const cleanFontKey = style?.fontId ? style.fontId.toLowerCase().replace(/[^a-z0-9_-]/g, '') : '';
+  const fontDef = cleanFontKey ? allStyles[cleanFontKey] : undefined;
   const styledText = style?.fontId ? applyStyleToText(rawName, style.fontId) : rawName;
+  const fontFamily =
+    fontDef?.type === 'font' && fontDef.fontFamily
+      ? `"${fontDef.fontFamily}", sans-serif`
+      : undefined;
 
-  if (!style || !style.gradientCss || style.gradientCss === 'none' || style.effectId === 'standard') {
+  let textShadow: string | undefined;
+
+  // Discord styles
+  if (style?.effectId === 'neon') {
+    textShadow = '0 0 10px rgba(192, 132, 252, 0.75), 0 0 20px rgba(244, 114, 182, 0.5)';
+  } else if (style?.effectId === 'toon') {
+    textShadow = '1.5px 1.5px 0 #000, -1.5px -1.5px 0 #000, 1.5px -1.5px 0 #000, -1.5px 1.5px 0 #000';
+  } else if (style?.effectId === 'pop') {
+    textShadow = '2px 3px 0 rgba(0, 0, 0, 0.8), 0 0 12px rgba(52, 211, 153, 0.4)';
+  } else if (style?.effectId === 'gummy') {
+    textShadow = '0 2px 4px rgba(0, 0, 0, 0.4)';
+  } else if (style?.effectId === 'prism') {
+    textShadow = '0 0 12px rgba(244, 90, 24, 0.5)';
+  // Shinzi unique styles
+  } else if (style?.effectId === 'aurora') {
+    textShadow = '0 0 12px rgba(121, 40, 202, 0.7), 0 0 24px rgba(0, 112, 243, 0.4)';
+  } else if (style?.effectId === 'cyberglow') {
+    textShadow = '0 0 8px #00f3ff, 0 0 18px rgba(255, 0, 85, 0.65)';
+  } else if (style?.effectId === 'glitchcore') {
+    textShadow = '-2px 0 #ff003c, 2px 0 #00ffff, 0 1px 2px rgba(0,0,0,0.8)';
+  } else if (style?.effectId === 'retro3d') {
+    textShadow = '2px 2px 0px #ff0055, -2px -2px 0px #00e5ff';
+  } else if (style?.effectId === 'fireaura') {
+    textShadow = '0 0 8px #ff8c00, 0 0 20px #ff2200, 0 -2px 6px #ffd700';
+  } else if (style?.effectId === 'chromeliquid') {
+    textShadow = '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 2px rgba(0, 0, 0, 0.8)';
+  } else if (style?.effectId === 'hologram') {
+    textShadow = '0 0 10px rgba(120, 255, 214, 0.8), 0 0 20px rgba(0, 198, 255, 0.4)';
+  } else if (style?.effectId === 'comicpop') {
+    textShadow = '1px 1px 0 #ff3838, 2px 2px 0 #c56cf0, 3px 3px 0 #18dcff, 4px 4px 6px rgba(0,0,0,0.5)';
+  }
+
+  const hasGradient = Boolean(
+    style && style.gradientCss && style.gradientCss !== 'none' && style.effectId !== 'standard'
+  );
+
+  if (!hasGradient && !textShadow && !fontFamily) {
     return styledText;
   }
 
-  let textShadow: string | undefined;
-  if (style.effectId === 'neon') {
-    textShadow = '0 0 10px rgba(192, 132, 252, 0.75), 0 0 20px rgba(244, 114, 182, 0.5)';
-  } else if (style.effectId === 'toon') {
-    textShadow = '1.5px 1.5px 0 #000, -1.5px -1.5px 0 #000, 1.5px -1.5px 0 #000, -1.5px 1.5px 0 #000';
-  } else if (style.effectId === 'pop') {
-    textShadow = '2px 3px 0 rgba(0, 0, 0, 0.8), 0 0 12px rgba(52, 211, 153, 0.4)';
-  } else if (style.effectId === 'gummy') {
-    textShadow = '0 2px 4px rgba(0, 0, 0, 0.4)';
-  } else if (style.effectId === 'prism') {
-    textShadow = '0 0 12px rgba(244, 90, 24, 0.5)';
+  const spanStyle: React.CSSProperties = {
+    display: 'inline-block',
+    fontFamily,
+    textShadow,
+  };
+
+  if (hasGradient) {
+    spanStyle.backgroundImage = style!.gradientCss;
+    spanStyle.WebkitBackgroundClip = 'text';
+    spanStyle.backgroundClip = 'text';
+    spanStyle.WebkitTextFillColor = 'transparent';
   }
 
-  return React.createElement(
-    'span',
-    {
-      style: {
-        backgroundImage: style.gradientCss,
-        WebkitBackgroundClip: 'text',
-        backgroundClip: 'text',
-        WebkitTextFillColor: 'transparent',
-        display: 'inline-block',
-        textShadow,
-      },
-    },
-    styledText
-  );
+  return React.createElement('span', { style: spanStyle }, styledText);
 }
