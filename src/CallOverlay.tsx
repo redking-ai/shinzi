@@ -340,11 +340,13 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
       const callerAvatar = isCaller ? (call.receiverPhotoURL || '') : (call.callerPhotoURL || '');
 
       if (isIncoming) {
-        // IN-APP INCOMING CALL: Continuous non-stop vibration. Keep heads-up notification banner active!
+        // IN-APP INCOMING CALL: Continuous non-stop vibration & ringtone
         void cap.Plugins.ShinziNotification.startCallVibration?.().catch(() => {});
+        void cap.Plugins.ShinziNotification.startCallRingtone?.().catch(() => {});
       } else if (call.status === 'connected') {
-        // Connected call: stop vibration immediately
+        // Connected call: stop vibration & ringtone immediately
         void cap.Plugins.ShinziNotification.stopCallVibration?.().catch(() => {});
+        void cap.Plugins.ShinziNotification.stopCallRingtone?.().catch(() => {});
         // Inform native plugin that call is active (for background ongoing notification onPause)
         void cap.Plugins.ShinziNotification.setCallActiveState?.({
           active: true,
@@ -356,6 +358,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
       }
     } else {
       void cap.Plugins.ShinziNotification.stopCallVibration?.().catch(() => {});
+      void cap.Plugins.ShinziNotification.stopCallRingtone?.().catch(() => {});
       void cap.Plugins.ShinziNotification.clearCallNotification?.().catch(() => {});
       void cap.Plugins.ShinziNotification.setCallActiveState?.({ active: false }).catch(() => {});
     }

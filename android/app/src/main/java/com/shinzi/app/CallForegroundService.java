@@ -8,9 +8,11 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.graphics.Bitmap;
+import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.IBinder;
+import android.os.PowerManager;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 
@@ -18,6 +20,8 @@ public class CallForegroundService extends Service {
     public static final String ACTION_START_CALL = "com.shinzi.app.CALL_FOREGROUND_START";
     public static final String ACTION_STOP_CALL = "com.shinzi.app.CALL_FOREGROUND_STOP";
     public static final int NOTIF_ID = 8888;
+
+    private static PowerManager.WakeLock sWakeLock = null;
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -48,10 +52,27 @@ public class CallForegroundService extends Service {
         } catch (Throwable ignored) {}
     }
 
+    private void releaseCallResources() {
+        try {
+            AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+            if (am != null) {
+                am.setMode(AudioManager.MODE_NORMAL);
+            }
+        } catch (Throwable ignored) {}
+
+        if (sWakeLock != null && sWakeLock.isHeld()) {
+            try {
+                sWakeLock.release();
+            } catch (Throwable ignored) {}
+            sWakeLock = null;
+        }
+    }
+
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent == null || ACTION_STOP_CALL.equals(intent.getAction())) {
             stopForeground(true);
+            releaseCallResources();
             stopSelf();
             return START_NOT_STICKY;
         }
@@ -62,6 +83,25 @@ public class CallForegroundService extends Service {
             String avatarUrl = intent.getStringExtra("avatarUrl");
             String convId = intent.getStringExtra("convId");
             String callId = intent.getStringExtra("callId");
+
+            // Acquire CPU partial wakelock so WebRTC audio doesn't freeze in sleep/background
+            try {
+                PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+                if (pm != null && (sWakeLock == null || !sWakeLock.isHeld())) {
+                    sWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Shinzi:CallAudioWakeLock");
+                    sWakeLock.acquire(4 * 60 * 60 * 1000L); // 4 hours maximum
+                }
+            } catch (Throwable t) {
+                android.util.Log.e("CallForegroundService", "WakeLock error", t);
+            }
+
+            // Set system audio mode to communication for VoIP
+            try {
+                AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+                if (am != null) {
+                    am.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                }
+            } catch (Throwable ignored) {}
 
             ShinziNotificationPlugin.createCallNotificationChannel(this);
 
@@ -105,7 +145,10 @@ public class CallForegroundService extends Service {
             Notification notification = builder.build();
 
             try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    startForeground(NOTIF_ID, notification,
+                            ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL | ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL);
                 } else {
                     startForeground(NOTIF_ID, notification);
@@ -142,6 +185,7 @@ public class CallForegroundService extends Service {
     @Override
     public void onDestroy() {
         stopForeground(true);
+        releaseCallResources();
         super.onDestroy();
     }
 }

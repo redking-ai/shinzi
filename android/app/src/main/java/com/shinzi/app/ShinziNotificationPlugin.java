@@ -59,7 +59,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ShinziNotificationPlugin extends Plugin {
     public static final String CHANNEL_ID = "shinzi_messages";
     private static final String CHANNEL_NAME = "Direct Messages";
-    public static final String CALL_INCOMING_CHANNEL_ID = "shinzi_call_incoming_v3";
+    public static final String CALL_INCOMING_CHANNEL_ID = "shinzi_call_incoming_v4";
     public static final String CALL_ONGOING_CHANNEL_ID = "shinzi_call_ongoing_v2";
     private static final int CALL_NOTIFICATION_ID = 8888;
     private static ShinziNotificationPlugin instance;
@@ -273,6 +273,18 @@ public class ShinziNotificationPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void startCallRingtone(PluginCall call) {
+        startCallRingtoneNative(getContext());
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void stopCallRingtone(PluginCall call) {
+        stopCallRingtoneNative(getContext());
+        call.resolve();
+    }
+
+    @PluginMethod
     public void setCallActiveState(PluginCall call) {
         boolean active = Boolean.TRUE.equals(call.getBoolean("active", false));
         hasActiveCall = active;
@@ -409,6 +421,46 @@ public class ShinziNotificationPlugin extends Plugin {
         } catch (Exception ignored) {}
     }
 
+    private static Ringtone sCallRingtone = null;
+
+    public static synchronized void startCallRingtoneNative(Context context) {
+        if (context == null) return;
+        try {
+            stopCallRingtoneNative(context);
+            Uri ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
+            if (ringtoneUri == null) {
+                ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+            }
+            if (ringtoneUri != null) {
+                sCallRingtone = RingtoneManager.getRingtone(context.getApplicationContext(), ringtoneUri);
+                if (sCallRingtone != null) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                        AudioAttributes aa = new AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                                .build();
+                        sCallRingtone.setAudioAttributes(aa);
+                    }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        sCallRingtone.setLooping(true);
+                    }
+                    sCallRingtone.play();
+                }
+            }
+        } catch (Throwable t) {
+            android.util.Log.e("ShinziNotif", "Error starting call ringtone: " + t.getMessage());
+        }
+    }
+
+    public static synchronized void stopCallRingtoneNative(Context context) {
+        try {
+            if (sCallRingtone != null) {
+                sCallRingtone.stop();
+                sCallRingtone = null;
+            }
+        } catch (Throwable ignored) {}
+    }
+
     public static void showOngoingCallNotificationNative(
             Context context,
             String callerName,
@@ -466,8 +518,9 @@ public class ShinziNotificationPlugin extends Plugin {
             pending.put("type", safeType);
             pendingCall = pending;
 
-            // Continuous Non-Stop Looping Vibration
+            // Continuous Non-Stop Looping Vibration & Loud Ringtone
             startCallVibrationNative(context);
+            startCallRingtoneNative(context);
 
             Intent openIntent = new Intent(context, MainActivity.class);
             openIntent.setAction(Intent.ACTION_VIEW);
@@ -568,6 +621,7 @@ public class ShinziNotificationPlugin extends Plugin {
         lastIncomingCallId = "";
         lastIncomingCallTime = 0;
         stopCallVibrationNative(context);
+        stopCallRingtoneNative(context);
         if (context != null) {
             CallForegroundService.stop(context);
             try {
@@ -648,6 +702,7 @@ public class ShinziNotificationPlugin extends Plugin {
                 try {
                     manager.deleteNotificationChannel("shinzi_calls");
                     manager.deleteNotificationChannel("shinzi_call_incoming_v2");
+                    manager.deleteNotificationChannel("shinzi_call_incoming_v3");
                 } catch (Exception ignored) {}
 
                 // 1. High priority incoming call channel with loud ringtone & vibration

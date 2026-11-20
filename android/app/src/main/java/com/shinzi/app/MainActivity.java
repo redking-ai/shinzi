@@ -270,9 +270,14 @@ public class MainActivity extends BridgeActivity {
     public void onPause() {
         super.onPause();
         ShinziNotificationPlugin.isAppForeground = false;
-        // When user exits/minimizes app during active call, display ongoing call notification with Hang Up button
+        // When user exits/minimizes app during active call, keep WebView and timers alive and show notification
         if (ShinziNotificationPlugin.hasActiveCall) {
             try {
+                WebView webView = getBridge().getWebView();
+                if (webView != null) {
+                    webView.onResume();
+                    webView.resumeTimers();
+                }
                 ShinziNotificationPlugin.showOngoingCallNotificationNative(
                         this,
                         ShinziNotificationPlugin.activeCallCallerName,
@@ -280,6 +285,21 @@ public class MainActivity extends BridgeActivity {
                         ShinziNotificationPlugin.activeCallConvId,
                         ShinziNotificationPlugin.activeCallId
                 );
+            } catch (Throwable ignored) {}
+        }
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        // Prevent WebView from being stopped during active VoIP calls
+        if (ShinziNotificationPlugin.hasActiveCall) {
+            try {
+                WebView webView = getBridge().getWebView();
+                if (webView != null) {
+                    webView.onResume();
+                    webView.resumeTimers();
+                }
             } catch (Throwable ignored) {}
         }
     }
