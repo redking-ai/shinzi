@@ -3098,7 +3098,8 @@ const handleSearchMessage = async (target: Rec) => {
   };
 
   const sendMessage = async () => {
-    if (!uid || !selected?.id || sendingRef.current) return;
+    if (!uid || !selected?.id) return;
+    if (stagedMedia.length > 0 && sendingRef.current) return;
 
     if (editingMessage) {
       const msgId = editingMessage.id;
@@ -3310,20 +3311,39 @@ const handleSearchMessage = async (target: Rec) => {
       }
     }
 
-    sendingRef.current = true;
-    setSending(true);
+    // Instantly clear input, draft & reply target (0ms) so typing next message is immediate with zero lag or echo
+    const textToSend = text;
+    const rawToSend = rawText;
+    const targetReply =
+      replyTarget && messages.some((m) => m.id === replyTarget.id)
+        ? replyTarget
+        : null;
+
+    setMessageText('');
+    setReplyTarget(null);
+    if (draftTimer.current) window.clearTimeout(draftTimer.current);
+    if (selected?.id) {
+      try {
+        localStorage.removeItem(`shinzi_draft_${selected.id}`);
+      } catch {}
+    }
+    if (inputRef.current) {
+      inputRef.current.value = '';
+      inputRef.current.style.height = 'auto';
+    }
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      isNearBottomRef.current = true;
+      setShowScrollBottom(false);
+    }
+    void publishTyping(false);
 
     try {
-      const targetReply =
-        replyTarget && messages.some((m) => m.id === replyTarget.id)
-          ? replyTarget
-          : null;
-
-      const usedStyles = getUsedStylesData(rawText);
+      const usedStyles = getUsedStylesData(rawToSend);
 
       const messageData: Rec = {
         type: 'text',
-        text,
+        text: textToSend,
         senderId: uid,
         senderName: profile?.displayName || profile?.username || 'User',
         senderUsername: profile?.username || '',
@@ -3347,7 +3367,7 @@ const handleSearchMessage = async (target: Rec) => {
 
       const updates: Rec = {
         lastMessageId: messageRef.id,
-        lastMessageText: text,
+        lastMessageText: textToSend,
         lastMessageAt: serverTimestamp(),
         lastSenderId: uid,
         lastSenderName: profile?.displayName || profile?.username || 'You',
@@ -3355,49 +3375,24 @@ const handleSearchMessage = async (target: Rec) => {
       };
 
       // Mark mentioned users (and all participants if @here is present) as urgent; leave everyone else alone.
-      const hasHere = /(^|[^a-zA-Z0-9_])@here(?![a-zA-Z0-9_])/i.test(text);
+      const hasHere = /(^|[^a-zA-Z0-9_])@here(?![a-zA-Z0-9_])/i.test(textToSend);
 
       (activeConv?.memberIds || []).forEach((memberId: string) => {
         if (memberId === uid) return;
         const memberProfile = activeConv?.memberProfiles?.[memberId];
         if (
           hasHere ||
-          isMentioned(text, memberProfile?.username, memberProfile?.displayName)
+          isMentioned(textToSend, memberProfile?.username, memberProfile?.displayName)
         ) {
           updates[`urgentFor.${memberId}`] = true;
         }
       });
 
       await updateDoc(doc(db, 'conversations', selected.id), updates);
-      triggerPushForDirectMessage(messageRef.id, text);
-
-      if (draftTimer.current) window.clearTimeout(draftTimer.current);
-      if (selected?.id) {
-        try {
-          localStorage.removeItem(`shinzi_draft_${selected.id}`);
-        } catch {}
-      }
-
-      setMessageText('');
-      setReplyTarget(null);
-      if (scrollRef.current) {
-        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        isNearBottomRef.current = true;
-        setShowScrollBottom(false);
-      }
-      if (inputRef.current) {
-        inputRef.current.style.height = 'auto';
-        if (screen === 'conversation' && selected?.id) {
-          inputRef.current.focus({ preventScroll: true });
-        }
-      }
-      void publishTyping(false);
+      triggerPushForDirectMessage(messageRef.id, textToSend);
     } catch (error) {
       console.error('Send message error:', error);
       notify('Message not sent', messageOf(error, 'Unable to send this message.'));
-    } finally {
-      sendingRef.current = false;
-      setSending(false);
     }
   };
 
