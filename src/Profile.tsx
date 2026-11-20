@@ -41,6 +41,7 @@ import {
   WEB_GRADIENTS_LIBRARY,
   type DisplayNameStyleConfig,
 } from './webGradientsData';
+import './DisplayNameStyleModal.css';
 import './Profile.css';
 
 type AnyRecord = Record<string, any>;
