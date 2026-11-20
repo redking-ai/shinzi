@@ -90,6 +90,12 @@ export default function DisplayNameStyleModal({
     map?: Record<string, string>;
   }
 
+  // Extract clean ASCII base text so ANY font style (Unicode or custom font) works properly
+  const baseDisplayName = useMemo(
+    () => cleanRawText(rawDisplayName || 'Shinzi User'),
+    [rawDisplayName]
+  );
+
   // All dynamic styles (built-in + custom uploaded fonts like bbh)
   const allStylesMap = useMemo(() => {
     return typeof window !== 'undefined' ? getAllTextStyles() : {};
@@ -114,12 +120,6 @@ export default function DisplayNameStyleModal({
   const previewFontFamily = isCustomFontFamily
     ? `"${activeFontDef.fontFamily}", sans-serif`
     : undefined;
-
-  // Extract clean ASCII base text so ANY font style (Unicode or custom font) works properly
-  const baseDisplayName = useMemo(
-    () => cleanRawText(rawDisplayName || 'Shinzi User'),
-    [rawDisplayName]
-  );
 
   // Live preview text with font transformation
   const previewText = applyStyleToText(baseDisplayName, currentFontId);

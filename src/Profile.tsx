@@ -1766,23 +1766,25 @@ useEffect(() => {
       />
 
       {/* Display Name Style Modal (IMG-20261120-WA0011 & WA0012) */}
-      <DisplayNameStyleModal
-        isOpen={showDisplayNameStyleModal}
-        rawDisplayName={editForm.displayName || userData?.displayName || 'Shinzi User'}
-        username={editForm.username || userData?.username || 'username'}
-        pronouns={editForm.pronouns || userData?.pronouns}
-        avatarUrl={profileImageUri || userData?.photoURL}
-        bannerUrl={bannerImageUri || userData?.bannerUrl}
-        initialStyle={editForm.displayNameStyle || userData?.displayNameStyle}
-        onApply={(newStyle) => {
-          setEditForm((prev) => ({
-            ...prev,
-            displayNameStyle: newStyle,
-          }));
-          setShowDisplayNameStyleModal(false);
-        }}
-        onClose={() => setShowDisplayNameStyleModal(false)}
-      />
+      {showDisplayNameStyleModal && (
+        <DisplayNameStyleModal
+          isOpen={showDisplayNameStyleModal}
+          rawDisplayName={editForm.displayName || userData?.displayName || 'Shinzi User'}
+          username={editForm.username || userData?.username || 'username'}
+          pronouns={editForm.pronouns || userData?.pronouns}
+          avatarUrl={profileImageUri || userData?.photoURL}
+          bannerUrl={bannerImageUri || userData?.bannerUrl}
+          initialStyle={editForm.displayNameStyle || userData?.displayNameStyle}
+          onApply={(newStyle) => {
+            setEditForm((prev) => ({
+              ...prev,
+              displayNameStyle: newStyle,
+            }));
+            setShowDisplayNameStyleModal(false);
+          }}
+          onClose={() => setShowDisplayNameStyleModal(false)}
+        />
+      )}
     </main>
   );
 }
