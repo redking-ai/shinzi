@@ -87,6 +87,7 @@ export default function DisplayNameStyleModal({
     type?: string;
     isCustom?: boolean;
     fontFamily?: string;
+    fontDataUrl?: string;
     map?: Record<string, string>;
   }
 
