@@ -29,6 +29,7 @@ import ErrorBoundary from './ErrorBoundary';
 import { AppErrorManager } from './ErrorScreens';
 import { getCachedProfile, setCachedProfile, navigateTo } from './profileCache';
 import { updateUserPresence } from './presenceService';
+import { setActiveUserForTextStyles } from './textStyleService';
 
 import logo from './assets/hero.png';
 
@@ -153,6 +154,11 @@ useEffect(() => {
       }
     }
   }, [user, signupBusy, profileExists, currentPath]);
+
+  // Sync custom text styles & fonts with cloud account
+  useEffect(() => {
+    setActiveUserForTextStyles(user?.uid || null);
+  }, [user?.uid]);
 
   // Presence heartbeat & online/offline tracker
   useEffect(() => {

@@ -144,6 +144,12 @@ const BUILT_IN_STYLES: Record<string, TextStyleDefinition> = {
       U: '𝔘', V: '𝔙', W: '𝔚', X: '𝔛', Y: '𝔜', Z: 'ℨ',
     },
   },
+  bbhbogle: {
+    id: 'bbhbogle',
+    name: 'BBH Bogle',
+    type: 'font',
+    fontFamily: 'BBH Bogle',
+  },
 };
 
 // Recognized Google Fonts dictionary for instant cross-device mapping
@@ -214,8 +220,64 @@ export function getCustomStyles(): Record<string, TextStyleDefinition> {
   }
 }
 
+let activeUid: string | null = null;
+
+export function setActiveUserForTextStyles(uid: string | null): void {
+  activeUid = uid;
+  if (uid) {
+    void syncCustomStylesWithFirestore(uid);
+  }
+}
+
+export async function syncCustomStylesWithFirestore(uid: string): Promise<void> {
+  if (!uid || typeof window === 'undefined') return;
+  try {
+    const { doc, getDocs, setDoc, collection } = await import('firebase/firestore');
+    const { db } = await import('./firebaseConfig');
+
+    const colRef = collection(db, 'users', uid, 'customStyles');
+    const snap = await getDocs(colRef);
+    const remoteStyles: Record<string, TextStyleDefinition> = {};
+    snap.forEach((d) => {
+      remoteStyles[d.id] = d.data() as TextStyleDefinition;
+    });
+
+    const localStyles = getCustomStyles();
+    let localChanged = false;
+
+    // Download remote styles into local cache
+    for (const [id, def] of Object.entries(remoteStyles)) {
+      if (!localStyles[id]) {
+        localStyles[id] = def;
+        localChanged = true;
+      }
+      if (def.type === 'font' && def.fontFamily) {
+        registerFontFace(def.fontFamily, def.fontDataUrl);
+      }
+    }
+
+    if (localChanged) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(localStyles));
+      } catch {}
+    }
+
+    // Upload local custom styles to remote Firestore
+    for (const [id, def] of Object.entries(localStyles)) {
+      if (!remoteStyles[id]) {
+        await setDoc(doc(db, 'users', uid, 'customStyles', id), def).catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.warn('Custom text styles Firestore sync warning:', err);
+  }
+}
+
 export function getAllTextStyles(): Record<string, TextStyleDefinition> {
   const custom = getCustomStyles();
+  if (typeof window !== 'undefined') {
+    registerFontFace('BBH Bogle');
+  }
   return { ...BUILT_IN_STYLES, ...custom };
 }
 
@@ -232,6 +294,13 @@ export function saveCustomStyle(name: string, map: Record<string, string>): Text
   current[cleanId] = styleDef;
   if (typeof window !== 'undefined') {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+  }
+  if (activeUid) {
+    import('firebase/firestore').then(({ doc, setDoc }) => {
+      import('./firebaseConfig').then(({ db }) => {
+        void setDoc(doc(db, 'users', activeUid!, 'customStyles', cleanId), styleDef).catch(() => {});
+      });
+    });
   }
   return styleDef;
 }
@@ -252,6 +321,13 @@ export function saveCustomFontStyle(name: string, dataUrl: string, fontFamilyOve
   if (typeof window !== 'undefined') {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
   }
+  if (activeUid) {
+    import('firebase/firestore').then(({ doc, setDoc }) => {
+      import('./firebaseConfig').then(({ db }) => {
+        void setDoc(doc(db, 'users', activeUid!, 'customStyles', cleanId), styleDef).catch(() => {});
+      });
+    });
+  }
   return styleDef;
 }
 
@@ -260,6 +336,13 @@ export function deleteCustomStyle(id: string): void {
   delete current[id];
   if (typeof window !== 'undefined') {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+  }
+  if (activeUid) {
+    import('firebase/firestore').then(({ doc, deleteDoc }) => {
+      import('./firebaseConfig').then(({ db }) => {
+        void deleteDoc(doc(db, 'users', activeUid!, 'customStyles', id)).catch(() => {});
+      });
+    });
   }
 }
 
@@ -749,9 +832,12 @@ export function cleanRawText(text: string): string {
     }
   }
 
-  return Array.from(nfkd)
+  const base = Array.from(nfkd)
     .map((ch) => reverseMap[ch] || ch)
     .join('');
+
+  // 3. Collapse spaced-out aesthetic text (e.g. "A l y a" -> "Alya", "S h i n z i" -> "Shinzi")
+  return base.replace(/(?<=\b[a-zA-Z0-9])\s+(?=[a-zA-Z0-9]\b)/g, '');
 }
 
 /**
@@ -786,6 +872,9 @@ export function renderStyledDisplayName(
   const allStyles = getAllTextStyles();
   const cleanFontKey = style?.fontId ? style.fontId.toLowerCase().replace(/[^a-z0-9_-]/g, '') : '';
   const fontDef = cleanFontKey ? allStyles[cleanFontKey] : undefined;
+  if (fontDef?.type === 'font' && fontDef.fontFamily) {
+    registerFontFace(fontDef.fontFamily, fontDef.fontDataUrl);
+  }
   const baseName = cleanRawText(rawName);
   const styledText = style?.fontId ? applyStyleToText(baseName, style.fontId) : baseName;
   const fontFamily =
@@ -826,7 +915,7 @@ export function renderStyledDisplayName(
   }
 
   const hasGradient = Boolean(
-    style && style.gradientCss && style.gradientCss !== 'none' && style.effectId !== 'standard'
+    style && style.gradientCss && style.gradientCss !== 'none'
   );
 
   if (!hasGradient && !textShadow && !fontFamily) {

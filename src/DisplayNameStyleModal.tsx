@@ -8,7 +8,7 @@ import {
   type TextStyleEffect,
   type GradientPreset,
 } from './webGradientsData';
-import { applyStyleToText, cleanRawText, getAllTextStyles } from './textStyleService';
+import { applyStyleToText, cleanRawText, getAllTextStyles, registerFontFace } from './textStyleService';
 import { extractMaterialYouTheme } from './materialYouTheme';
 import './DisplayNameStyleModal.css';
 
@@ -105,6 +105,11 @@ export default function DisplayNameStyleModal({
     const map = allStylesMap;
     const standardDef: FontItem = { id: 'standard', name: 'Standard', type: 'standard' };
     const customList: FontItem[] = Object.values(map).filter((s) => s.id !== 'standard');
+    customList.forEach((f) => {
+      if (f.type === 'font' && f.fontFamily) {
+        registerFontFace(f.fontFamily, f.fontDataUrl);
+      }
+    });
     return [standardDef, ...customList];
   }, [allStylesMap]);
 

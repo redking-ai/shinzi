@@ -108,6 +108,8 @@ import {
   renderStyledContent,
   getUsedStylesData,
   importIncomingStyleData,
+  cleanRawText,
+  renderStyledDisplayName,
 } from './textStyleService';
 import './Chat.css';
 
@@ -5561,7 +5563,14 @@ const handleSearchMessage = async (target: Rec) => {
               }
               size="xs"
             />
-            <span className="shc-dc-reply-sender">{quotedSender}:</span>
+            <span className="shc-dc-reply-sender">
+              {renderStyledDisplayName(
+                cleanRawText(quotedSender),
+                quotedSenderId === uid
+                  ? profile?.displayNameStyle
+                  : (quotedSenderId === activeDmTargetUid ? liveTargetProfile?.displayNameStyle : null) || userLiveProfiles[quotedSenderId]?.displayNameStyle
+              )}:
+            </span>
             <span className="shc-dc-reply-text">
               {original ? renderReplyContent(original, quotedText) : renderReplyFromReplyTo(item.replyTo, quotedText)}
             </span>
@@ -5622,7 +5631,7 @@ const handleSearchMessage = async (target: Rec) => {
                   onDoubleClick={(event) => event.stopPropagation()}
                   aria-label={`Open ${authorName}'s profile`}
                 >
-                  {renderStyledContent(authorName)}
+                  {renderStyledDisplayName(cleanRawText(authorName), authorProfile?.displayNameStyle)}
                 </button>
                 <span className="shc-dc-timestamp">
                   {formatDiscordTimestamp(item.createdAt)}
@@ -5852,7 +5861,9 @@ const handleSearchMessage = async (target: Rec) => {
                 <span className="shc-conv-body">
                   <span className="shc-conv-top">
                     <span className={unread ? 'shc-conv-name shc-unread' : 'shc-conv-name'}>
-                      {name}
+                      {item.type === 'group'
+                        ? name
+                        : renderStyledDisplayName(cleanRawText(name), otherProfile?.displayNameStyle)}
                     </span>
                     <span className="shc-conv-time">{formatTime(item.lastMessageAt)}</span>
                   </span>
@@ -6246,7 +6257,9 @@ const handleSearchMessage = async (target: Rec) => {
               aria-label={`Open ${name}'s profile`}
             >
               <strong>
-                <span className="shc-chat-title-name">{name}</span>
+                <span className="shc-chat-title-name">
+                  {renderStyledDisplayName(cleanRawText(name), targetProfile?.displayNameStyle)}
+                </span>
                 <ChevronRight size={16} aria-hidden="true" />
               </strong>
             </button>
@@ -6359,11 +6372,18 @@ const handleSearchMessage = async (target: Rec) => {
                 <span className="shc-reply-bar-sender">
                   Replying to{' '}
                   <span className="shc-reply-bar-target-name">
-                    {(replyTarget.senderName ||
-                      replyTarget.senderUsername ||
-                      (replyTarget.senderId === uid
-                        ? profile?.displayName || profile?.username || 'You'
-                        : 'User'))}:
+                    {renderStyledDisplayName(
+                      cleanRawText(
+                        replyTarget.senderName ||
+                        replyTarget.senderUsername ||
+                        (replyTarget.senderId === uid
+                          ? profile?.displayName || profile?.username || 'You'
+                          : 'User')
+                      ),
+                      replyTarget.senderId === uid
+                        ? profile?.displayNameStyle
+                        : (replyTarget.senderId === activeDmTargetUid ? liveTargetProfile?.displayNameStyle : null) || userLiveProfiles[replyTarget.senderId]?.displayNameStyle
+                    )}:
                   </span>
                 </span>
                 <span className="shc-reply-bar-text">
