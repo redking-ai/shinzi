@@ -1,4 +1,6 @@
 import React from 'react';
+import { doc, getDocs, setDoc, deleteDoc, collection } from 'firebase/firestore';
+import { db } from './firebaseConfig';
 
 /**
  * Shinzi Text Style Engine (ts)
@@ -232,9 +234,6 @@ export function setActiveUserForTextStyles(uid: string | null): void {
 export async function syncCustomStylesWithFirestore(uid: string): Promise<void> {
   if (!uid || typeof window === 'undefined') return;
   try {
-    const { doc, getDocs, setDoc, collection } = await import('firebase/firestore');
-    const { db } = await import('./firebaseConfig');
-
     const colRef = collection(db, 'users', uid, 'customStyles');
     const snap = await getDocs(colRef);
     const remoteStyles: Record<string, TextStyleDefinition> = {};
@@ -296,11 +295,7 @@ export function saveCustomStyle(name: string, map: Record<string, string>): Text
     localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
   }
   if (activeUid) {
-    import('firebase/firestore').then(({ doc, setDoc }) => {
-      import('./firebaseConfig').then(({ db }) => {
-        void setDoc(doc(db, 'users', activeUid!, 'customStyles', cleanId), styleDef).catch(() => {});
-      });
-    });
+    void setDoc(doc(db, 'users', activeUid, 'customStyles', cleanId), styleDef).catch(() => {});
   }
   return styleDef;
 }
@@ -322,11 +317,7 @@ export function saveCustomFontStyle(name: string, dataUrl: string, fontFamilyOve
     localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
   }
   if (activeUid) {
-    import('firebase/firestore').then(({ doc, setDoc }) => {
-      import('./firebaseConfig').then(({ db }) => {
-        void setDoc(doc(db, 'users', activeUid!, 'customStyles', cleanId), styleDef).catch(() => {});
-      });
-    });
+    void setDoc(doc(db, 'users', activeUid, 'customStyles', cleanId), styleDef).catch(() => {});
   }
   return styleDef;
 }
@@ -338,11 +329,7 @@ export function deleteCustomStyle(id: string): void {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
   }
   if (activeUid) {
-    import('firebase/firestore').then(({ doc, deleteDoc }) => {
-      import('./firebaseConfig').then(({ db }) => {
-        void deleteDoc(doc(db, 'users', activeUid!, 'customStyles', id)).catch(() => {});
-      });
-    });
+    void deleteDoc(doc(db, 'users', activeUid, 'customStyles', id)).catch(() => {});
   }
 }
 
