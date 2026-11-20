@@ -583,7 +583,8 @@ useEffect(() => {
   const handleSurpriseMe = async () => {
     setExtractingTheme(true);
     try {
-      const imgUri = profileImageUri || bannerImageUri || userData?.photoURL || userData?.bannerUrl;
+      // Prioritize banner if present for wider color spectrum, fallback to avatar
+      const imgUri = bannerImageUri || profileImageUri || userData?.bannerUrl || userData?.photoURL;
       const extracted = await extractMaterialYouTheme(imgUri);
       setEditForm((prev) => ({
         ...prev,
