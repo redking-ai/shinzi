@@ -882,33 +882,45 @@ class CallEngine {
             const myName = this.isCaller ? (this.activeCall.callerName || 'Shinzi') : (this.activeCall.receiverName || 'Shinzi');
             const screenImg = new Image();
             let hasDecodedFrame = false;
+            let isRendering = false;
+            let lastDrawnSrc = '';
 
             const drawScreen = async () => {
+              if (isRendering) return;
+              isRendering = true;
               frameCount++;
 
-              // 1. If native Android MediaProjection screen capture is active, paint the real device screen
-              if (isNativeAndroid && typeof cap?.Plugins?.ShinziNotification?.getLatestScreenFrame === 'function') {
-                try {
+              try {
+                // 1. If native Android MediaProjection screen capture is active, paint the real device screen
+                if (isNativeAndroid && typeof cap?.Plugins?.ShinziNotification?.getLatestScreenFrame === 'function') {
                   const res = await cap.Plugins.ShinziNotification.getLatestScreenFrame();
                   if (res?.frame) {
-                    screenImg.onload = () => {
-                      hasDecodedFrame = true;
-                      if (screenImg.naturalWidth > 0 && canvas.width !== screenImg.naturalWidth) {
-                        canvas.width = screenImg.naturalWidth;
-                        canvas.height = screenImg.naturalHeight;
-                      }
+                    if (res.frame !== lastDrawnSrc) {
+                      lastDrawnSrc = res.frame;
+                      await new Promise<void>((resolve) => {
+                        screenImg.onload = () => {
+                          hasDecodedFrame = true;
+                          if (screenImg.naturalWidth > 0 && canvas.width !== screenImg.naturalWidth) {
+                            canvas.width = screenImg.naturalWidth;
+                            canvas.height = screenImg.naturalHeight;
+                          }
+                          ctx.drawImage(screenImg, 0, 0);
+                          resolve();
+                        };
+                        screenImg.onerror = () => resolve();
+                        screenImg.src = res.frame;
+                      });
+                    } else if (hasDecodedFrame && screenImg.naturalWidth > 0) {
                       ctx.drawImage(screenImg, 0, 0);
-                    };
-                    screenImg.src = res.frame;
+                    }
                     return;
                   }
-                } catch {}
-              }
+                }
 
-              if (hasDecodedFrame && screenImg.naturalWidth > 0) {
-                ctx.drawImage(screenImg, 0, 0);
-                return;
-              }
+                if (hasDecodedFrame && screenImg.naturalWidth > 0) {
+                  ctx.drawImage(screenImg, 0, 0);
+                  return;
+                }
 
               // 2. Fallback visualizer if native frame is not yet available
               const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
@@ -956,7 +968,12 @@ class CallEngine {
               ctx.fillStyle = '#949ba4';
               const timeStr = new Date().toLocaleTimeString();
               ctx.fillText(`Live Stream Active • 60FPS • ${timeStr}`, centerX, centerY + 170);
-            };
+            } catch (err) {
+              console.warn('[CallEngine] drawScreen error:', err);
+            } finally {
+              isRendering = false;
+            }
+          };
 
             drawScreen();
             try {

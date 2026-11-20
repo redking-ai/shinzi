@@ -681,6 +681,9 @@ public class ShinziNotificationPlugin extends Plugin {
         call.resolve();
     }
 
+    private static volatile byte[] sLastScreenFrameRef = null;
+    private static volatile String sCachedScreenFrameB64 = "";
+
     @PluginMethod
     public void getLatestScreenFrame(PluginCall call) {
         byte[] frame = ScreenCaptureService.latestJpegFrame;
@@ -688,8 +691,11 @@ public class ShinziNotificationPlugin extends Plugin {
         JSObject ret = new JSObject();
         ret.put("capturing", capturing);
         if (frame != null && frame.length > 0) {
-            String b64 = android.util.Base64.encodeToString(frame, android.util.Base64.NO_WRAP);
-            ret.put("frame", "data:image/jpeg;base64," + b64);
+            if (frame != sLastScreenFrameRef) {
+                sLastScreenFrameRef = frame;
+                sCachedScreenFrameB64 = "data:image/jpeg;base64," + android.util.Base64.encodeToString(frame, android.util.Base64.NO_WRAP);
+            }
+            ret.put("frame", sCachedScreenFrameB64);
         } else {
             ret.put("frame", "");
         }
