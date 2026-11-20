@@ -399,8 +399,8 @@
 .sh-style-apply-btn {
   width: 100%;
   height: 48px;
-  background-color: #5865f2;
-  color: #ffffff;
+  background-color: #ffffff !important;
+  color: #000000 !important;
   border: none;
   border-radius: 24px;
   font-size: 15px;
@@ -550,8 +550,8 @@
 
 .sh-font-card-active,
 .sh-font-box-active {
-  border-color: #5865f2 !important;
-  background-color: rgba(88, 101, 242, 0.12) !important;
+  border-color: #ffffff !important;
+  background-color: rgba(255, 255, 255, 0.08) !important;
 }
 
 .sh-font-card-box {
@@ -644,8 +644,8 @@
 
 .sh-effect-card-active,
 .sh-effect-box-active {
-  border-color: #5865f2 !important;
-  background-color: rgba(88, 101, 242, 0.12) !important;
+  border-color: #ffffff !important;
+  background-color: rgba(255, 255, 255, 0.08) !important;
 }
 
 .sh-effect-card-box {
@@ -815,9 +815,9 @@
 }
 
 .sh-category-pill-active {
-  background-color: #5865f2 !important;
-  color: #ffffff !important;
-  border-color: #5865f2 !important;
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  border-color: #ffffff !important;
 }
 
 .sh-web-gradient-grid {
@@ -847,8 +847,8 @@
 }
 
 .sh-web-gradient-card-active {
-  border-color: #5865f2 !important;
-  background-color: rgba(88, 101, 242, 0.12) !important;
+  border-color: #ffffff !important;
+  background-color: rgba(255, 255, 255, 0.08) !important;
 }
 
 .sh-web-gradient-chip {

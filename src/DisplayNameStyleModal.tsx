@@ -8,7 +8,7 @@ import {
   type TextStyleEffect,
   type GradientPreset,
 } from './webGradientsData';
-import { applyStyleToText, getAllTextStyles } from './textStyleService';
+import { applyStyleToText, cleanRawText, getAllTextStyles } from './textStyleService';
 import { extractMaterialYouTheme } from './materialYouTheme';
 import './DisplayNameStyleModal.css';
 
@@ -115,8 +115,14 @@ export default function DisplayNameStyleModal({
     ? `"${activeFontDef.fontFamily}", sans-serif`
     : undefined;
 
+  // Extract clean ASCII base text so ANY font style (Unicode or custom font) works properly
+  const baseDisplayName = useMemo(
+    () => cleanRawText(rawDisplayName || 'Shinzi User'),
+    [rawDisplayName]
+  );
+
   // Live preview text with font transformation
-  const previewText = applyStyleToText(rawDisplayName || 'Shinzi User', currentFontId);
+  const previewText = applyStyleToText(baseDisplayName, currentFontId);
 
   // Live preview CSS
   const isStyled = currentEffectId !== 'standard' && currentGradientCss !== 'none';
@@ -158,7 +164,7 @@ export default function DisplayNameStyleModal({
     setActiveSheet(null);
   };
 
-  // WebGradient Preset Selection (Does NOT overwrite selected effect!)
+  // WebGradient Preset Selection (Does NOT overwrite selected effect, and closes sheet!)
   const handleSelectWebGradient = (preset: GradientPreset) => {
     setCurrentColors(preset.colors);
     setCurrentGradientCss(preset.css);
@@ -167,6 +173,7 @@ export default function DisplayNameStyleModal({
     if (currentEffectId === 'standard') {
       setCurrentEffectId('gradient');
     }
+    setActiveSheet(null);
   };
 
   // Custom Colors updated via color wheel
@@ -183,6 +190,7 @@ export default function DisplayNameStyleModal({
     if (currentEffectId === 'standard') {
       setCurrentEffectId('gradient');
     }
+    setColorPickerTarget(null);
   };
 
   // Quick Preset Swatch Clicked in Color Sheet
@@ -193,6 +201,7 @@ export default function DisplayNameStyleModal({
     if (currentEffectId === 'standard') {
       setCurrentEffectId('gradient');
     }
+    setActiveSheet(null);
   };
 
   // Surprise Me Handler (Material You Image Analysis)
@@ -441,7 +450,13 @@ export default function DisplayNameStyleModal({
                   <ArrowLeft size={18} />
                 </button>
                 <span className="sh-subsheet-title">Pick Font</span>
-                <div style={{ width: 18 }} />
+                <button
+                  type="button"
+                  className="sh-subsheet-select-btn"
+                  onClick={() => setActiveSheet(null)}
+                >
+                  Select
+                </button>
               </div>
 
               <div className="sh-font-grid">
@@ -514,7 +529,13 @@ export default function DisplayNameStyleModal({
                   <ArrowLeft size={18} />
                 </button>
                 <span className="sh-subsheet-title">Pick Effect</span>
-                <div style={{ width: 18 }} />
+                <button
+                  type="button"
+                  className="sh-subsheet-select-btn"
+                  onClick={() => setActiveSheet(null)}
+                >
+                  Select
+                </button>
               </div>
 
               {/* Section 1: Discord Styles */}
@@ -614,7 +635,13 @@ export default function DisplayNameStyleModal({
                   <ArrowLeft size={18} />
                 </button>
                 <span className="sh-subsheet-title">Pick Text Color</span>
-                <div style={{ width: 18 }} />
+                <button
+                  type="button"
+                  className="sh-subsheet-select-btn"
+                  onClick={() => setActiveSheet(null)}
+                >
+                  Select
+                </button>
               </div>
 
               {/* Gradient Track with 2 custom boxes */}
@@ -624,7 +651,10 @@ export default function DisplayNameStyleModal({
                   {/* Left Box (Start Color) */}
                   <div
                     className="sh-color-picker-box-wrap"
-                    onClick={() => setColorPickerTarget('start')}
+                    onClick={() => {
+                      setActiveSheet(null);
+                      setColorPickerTarget('start');
+                    }}
                     role="button"
                     tabIndex={0}
                   >
@@ -646,7 +676,10 @@ export default function DisplayNameStyleModal({
                   {/* Right Box (End Color) */}
                   <div
                     className="sh-color-picker-box-wrap"
-                    onClick={() => setColorPickerTarget('end')}
+                    onClick={() => {
+                      setActiveSheet(null);
+                      setColorPickerTarget('end');
+                    }}
                     role="button"
                     tabIndex={0}
                   >

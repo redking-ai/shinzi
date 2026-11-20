@@ -727,18 +727,48 @@ export function renderStyledContent(
 }
 
 /**
+ * Strips previous Unicode text styling and converts back to clean ASCII text.
+ * Uses NFKD Unicode decomposition (handles fullwidth, bold, fraktur/script, etc.)
+ * plus reverse lookup against all built-in style character maps (Arabic, Weird, etc.).
+ */
+export function cleanRawText(text: string): string {
+  if (!text) return '';
+  // 1. Unicode decomposition handles fullwidth (Ｓｈｉｎｚｉ -> Shinzi), math bold (𝐒𝐡𝐢𝐧𝐳𝐢 -> Shinzi), etc.
+  const nfkd = text.normalize('NFKD');
+
+  // 2. Reverse lookup against all style maps for custom glyphs (e.g. Cyrillic/Arabic pseudo-fonts)
+  const allStyles = getAllTextStyles();
+  const reverseMap: Record<string, string> = {};
+  for (const style of Object.values(allStyles)) {
+    if (style.map) {
+      for (const [asciiChar, styledChar] of Object.entries(style.map)) {
+        if (!reverseMap[styledChar]) {
+          reverseMap[styledChar] = asciiChar;
+        }
+      }
+    }
+  }
+
+  return Array.from(nfkd)
+    .map((ch) => reverseMap[ch] || ch)
+    .join('');
+}
+
+/**
  * Transforms plain text into the specified font/Unicode style (e.g. Ashetic, Journal, Arabic, Bold).
  * For custom font-family files, plain text is returned (rendered with fontFamily CSS).
  */
 export function applyStyleToText(text: string, styleId?: string): string {
-  if (!text || !styleId || styleId === 'standard') return text;
+  if (!text) return text;
+  const baseText = cleanRawText(text);
+  if (!styleId || styleId === 'standard') return baseText;
   const allStyles = getAllTextStyles();
   const cleanKey = styleId.toLowerCase().replace(/[^a-z0-9_-]/g, '');
   const style = allStyles[cleanKey];
   if (style?.type === 'font') {
-    return text;
+    return baseText;
   }
-  return transformString(text, cleanKey, allStyles);
+  return transformString(baseText, cleanKey, allStyles);
 }
 
 /**
@@ -756,7 +786,8 @@ export function renderStyledDisplayName(
   const allStyles = getAllTextStyles();
   const cleanFontKey = style?.fontId ? style.fontId.toLowerCase().replace(/[^a-z0-9_-]/g, '') : '';
   const fontDef = cleanFontKey ? allStyles[cleanFontKey] : undefined;
-  const styledText = style?.fontId ? applyStyleToText(rawName, style.fontId) : rawName;
+  const baseName = cleanRawText(rawName);
+  const styledText = style?.fontId ? applyStyleToText(baseName, style.fontId) : baseName;
   const fontFamily =
     fontDef?.type === 'font' && fontDef.fontFamily
       ? `"${fontDef.fontFamily}", sans-serif`
