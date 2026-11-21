@@ -3786,6 +3786,16 @@ const handleSearchMessage = async (target: Rec) => {
         profileAssetId: finalProfileAssetId,
       });
 
+      if (data.displayNameStyle) {
+        setUserLiveProfiles((prev) => ({
+          ...prev,
+          [userSnap.id]: {
+            ...(prev[userSnap.id] || {}),
+            ...data,
+          },
+        }));
+      }
+
       if (uid && targetUid) {
         try {
           const reqSnap = await getDoc(doc(db, 'friendRequests', `${uid}_${targetUid}`));
@@ -5943,7 +5953,12 @@ const handleSearchMessage = async (target: Rec) => {
             size="md"
           />
           <span className="shc-person-info">
-            <strong>{item.displayName || item.username || 'User'}</strong>
+            <strong>
+              {renderStyledDisplayName(
+                cleanRawText(item.displayName || item.username || 'User'),
+                item.displayNameStyle || userLiveProfiles[item.id]?.displayNameStyle
+              )}
+            </strong>
             <span>@{item.username || 'user'}</span>
           </span>
           <MessageCircle size={21} />
@@ -5979,7 +5994,12 @@ const handleSearchMessage = async (target: Rec) => {
           />
 
           <span className="shc-person-info">
-            <strong>{displayName}</strong>
+            <strong>
+              {renderStyledDisplayName(
+                cleanRawText(displayName),
+                live?.displayNameStyle || item.fromProfile?.displayNameStyle || item.displayNameStyle
+              )}
+            </strong>
             <span>
               {kind === 'friendRequests' ? 'Friend request' : 'DM request'}
               {' · '}@{username}
@@ -6108,7 +6128,14 @@ const handleSearchMessage = async (target: Rec) => {
               />
 
               <span className="shc-person-info">
-                <strong>{searchResult.displayName || searchResult.username || 'User'}</strong>
+                <strong>
+                  {renderStyledDisplayName(
+                    cleanRawText(searchResult.displayName || searchResult.username || 'User'),
+                    searchResult.id === uid
+                      ? profile?.displayNameStyle
+                      : (searchResult.displayNameStyle || userLiveProfiles[searchResult.id]?.displayNameStyle)
+                  )}
+                </strong>
                 <span>@{searchResult.username || 'user'}</span>
               </span>
             </button>
@@ -6778,7 +6805,12 @@ const handleSearchMessage = async (target: Rec) => {
                       size="sm"
                     />
                     <span className="shc-person-info">
-                      <strong>{friend.displayName || friend.username || 'User'}</strong>
+                      <strong>
+                        {renderStyledDisplayName(
+                          cleanRawText(friend.displayName || friend.username || 'User'),
+                          friend.displayNameStyle || userLiveProfiles[friend.id]?.displayNameStyle
+                        )}
+                      </strong>
                       <span>@{friend.username || 'user'}</span>
                     </span>
                     <span className={added ? 'shc-pill shc-pill-on' : 'shc-pill'}>
