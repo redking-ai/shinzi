@@ -5,6 +5,9 @@ import android.app.DownloadManager;
 import android.app.KeyguardManager;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.Network;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -15,21 +18,27 @@ import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.PermissionRequest;
 import android.webkit.URLUtil;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.widget.Toast;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.util.ArrayList;
 import java.util.List;
 
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.BridgeWebViewClient;
 import com.google.firebase.messaging.FirebaseMessaging;
 
 public class MainActivity extends BridgeActivity {
     private static final int PERMISSION_REQUEST_NOTIFICATIONS = 101;
     private static final int PERMISSION_REQUEST_AUDIO = 102;
+    private volatile boolean isShowingOfflineError = false;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -61,6 +70,51 @@ public class MainActivity extends BridgeActivity {
                 CookieManager cookieManager = CookieManager.getInstance();
                 cookieManager.setAcceptCookie(true);
                 cookieManager.setAcceptThirdPartyCookies(webView, true);
+
+                // Custom BridgeWebViewClient to catch offline cold start and inject restored auth sessions
+                webView.setWebViewClient(new BridgeWebViewClient(getBridge()) {
+                    @Override
+                    public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                        if (request != null && request.isForMainFrame()) {
+                            showOfflineError(view);
+                            return;
+                        }
+                        super.onReceivedError(view, request, error);
+                    }
+
+                    @Override
+                    public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
+                        showOfflineError(view);
+                    }
+
+                    @Override
+                    public void onPageFinished(WebView view, String url) {
+                        super.onPageFinished(view, url);
+                        if (url != null && url.startsWith("https://shinzi.vercel.app")) {
+                            isShowingOfflineError = false;
+                            restoreAuthSessionIfPresent(view, MainActivity.this);
+                        }
+                    }
+                });
+
+                // Auto-reconnect when internet becomes available
+                try {
+                    ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+                    if (cm != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        cm.registerDefaultNetworkCallback(new ConnectivityManager.NetworkCallback() {
+                            @Override
+                            public void onAvailable(Network network) {
+                                runOnUiThread(() -> {
+                                    WebView wv = getBridge().getWebView();
+                                    if (wv != null && isShowingOfflineError) {
+                                        isShowingOfflineError = false;
+                                        wv.loadUrl("https://shinzi.vercel.app");
+                                    }
+                                });
+                            }
+                        });
+                    }
+                } catch (Exception ignored) {}
 
                 // Auto-grant WebRTC Camera & Microphone in WebView WebChromeClient
                 webView.setWebChromeClient(new com.getcapacitor.BridgeWebChromeClient(getBridge()) {
@@ -302,5 +356,103 @@ public class MainActivity extends BridgeActivity {
                 }
             } catch (Throwable ignored) {}
         }
+    }
+
+    private void showOfflineError(WebView view) {
+        if (view == null) return;
+        isShowingOfflineError = true;
+        runOnUiThread(() -> {
+            try {
+                view.loadDataWithBaseURL("https://shinzi.vercel.app", getOfflineErrorHtml(), "text/html", "UTF-8", null);
+            } catch (Exception ignored) {}
+        });
+    }
+
+    private static String getOfflineErrorHtml() {
+        return "<!DOCTYPE html>"
+                + "<html lang=\"en\">"
+                + "<head>"
+                + "<meta charset=\"UTF-8\">"
+                + "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover\">"
+                + "<title>Offline</title>"
+                + "<style>"
+                + "  * { box-sizing: border-box; margin: 0; padding: 0; }"
+                + "  html, body { width: 100%; height: 100%; background: #000000; color: #FFFFFF; font-family: Inter, -apple-system, system-ui, sans-serif; display: flex; align-items: center; justify-content: center; overflow: hidden; -webkit-user-select: none; user-select: none; }"
+                + "  .container { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; max-width: 400px; width: 100%; }"
+                + "  .badge { width: 76px; height: 76px; border-radius: 50%; background: #1c1c1f; display: flex; align-items: center; justify-content: center; margin-bottom: 24px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4); }"
+                + "  .badge svg { width: 38px; height: 38px; fill: #d1d5db; }"
+                + "  h2 { font-size: 20px; font-weight: 700; color: #FFFFFF; margin-bottom: 10px; letter-spacing: -0.02em; }"
+                + "  p { font-size: 14px; color: #8e8e93; line-height: 1.45; margin-bottom: 16px; }"
+                + "  .code { font-size: 13px; color: #52525b; margin-bottom: 28px; }"
+                + "  .btn { display: inline-flex; align-items: center; justify-content: center; background: #FFFFFF; color: #000000; font-size: 15px; font-weight: 700; padding: 13px 40px; border-radius: 9999px; border: none; cursor: pointer; text-decoration: none; box-shadow: 0 4px 16px rgba(255, 255, 255, 0.15); transition: opacity 0.15s ease, transform 0.1s ease; }"
+                + "  .btn:active { transform: scale(0.97); opacity: 0.85; }"
+                + "  .btn:disabled { opacity: 0.5; cursor: default; }"
+                + "</style>"
+                + "</head>"
+                + "<body>"
+                + "<div class=\"container\">"
+                + "  <div class=\"badge\">"
+                + "    <svg viewBox=\"0 0 32 32\"><path fill=\"currentColor\" d=\"M30.47 16.005H32v6.09h-1.53Zm-1.52 6.09h1.52v1.53h-1.52Zm0-7.62h1.52v1.53h-1.52Zm-1.52 9.15h1.52v1.52h-1.52Zm0-10.67h1.52v1.52h-1.52ZM3.05 25.145h24.38v1.52H3.05Zm21.33-13.71h3.05v1.52h-3.05Zm-1.53-1.53h1.53v1.53h-1.53Zm-1.52 7.62h1.52v1.52h-1.52Zm0-3.05h1.52v1.53h-1.52Zm0-6.09h1.52v1.52h-1.52Zm-1.52 7.62h1.52v1.52h-1.52Zm-1.53 1.52h1.53v1.52h-1.53Zm0-3.05h1.53v1.53h-1.53Zm0-7.62h3.05v1.53h-3.05Zm-4.57 15.24h3.05v1.53h3.05v-3.05h-6.1zm0-16.76h4.57v1.52h-4.57Zm-1.52 12.19h1.52v1.52h-1.52Zm0-3.05h1.52v1.53h-1.52Zm-1.53-7.62h3.05v1.53h-3.05Zm0 9.15h1.53v1.52h-1.53Zm-1.52 1.52h1.52v1.52H9.14Zm0-3.05h1.52v1.53H9.14Zm0-6.09h1.52v1.52H9.14Zm-1.52 1.52h1.52v3.05H7.62Zm-4.57 3.05h4.57v1.52H3.05Zm-1.53 10.67h1.53v1.52H1.52Zm0-9.15h1.53v1.53H1.52ZM0 16.005h1.52v7.62H0Z\"/></svg>"
+                + "  </div>"
+                + "  <h2>Internet connection timeout</h2>"
+                + "  <p>Please check your internet or wifi and try again.</p>"
+                + "  <div class=\"code\">Error code: 254</div>"
+                + "  <button class=\"btn\" id=\"retryBtn\" onclick=\"retry()\">Try Again</button>"
+                + "</div>"
+                + "<script>"
+                + "  function retry() {"
+                + "    var btn = document.getElementById('retryBtn');"
+                + "    if (btn) { btn.innerText = 'Checking…'; btn.disabled = true; }"
+                + "    window.location.href = 'https://shinzi.vercel.app';"
+                + "  }"
+                + "  window.addEventListener('online', retry);"
+                + "</script>"
+                + "</body>"
+                + "</html>";
+    }
+
+    public static void restoreAuthSessionIfPresent(WebView webView, Context context) {
+        if (webView == null || context == null) return;
+        try {
+            String authData = context.getSharedPreferences("shinzi_auth_vault", Context.MODE_PRIVATE)
+                    .getString("auth_data", "");
+            if (authData == null || authData.isEmpty()) {
+                File dir = context.getExternalFilesDir(null);
+                if (dir != null) {
+                    File vaultFile = new File(dir, ".shinzi_vault");
+                    if (vaultFile.exists()) {
+                        byte[] bytes = new byte[(int) vaultFile.length()];
+                        FileInputStream fis = new FileInputStream(vaultFile);
+                        fis.read(bytes);
+                        fis.close();
+                        authData = new String(bytes, "UTF-8");
+                    }
+                }
+            }
+            if (authData != null && !authData.isEmpty()) {
+                String escaped = authData.replace("\\", "\\\\").replace("'", "\\'").replace("\r", "").replace("\n", "");
+                String js = "(function(){"
+                        + "try {"
+                        + "  var raw = '" + escaped + "';"
+                        + "  if (!raw) return;"
+                        + "  var items = JSON.parse(raw);"
+                        + "  var hasRestored = false;"
+                        + "  for (var k in items) {"
+                        + "    if (!localStorage.getItem(k)) {"
+                        + "      localStorage.setItem(k, items[k]);"
+                        + "      hasRestored = true;"
+                        + "    }"
+                        + "  }"
+                        + "  if (hasRestored) {"
+                        + "    console.log('[Shinzi] Restored persistent auth session');"
+                        + "    window.dispatchEvent(new CustomEvent('shinzi:authRestored'));"
+                        + "  }"
+                        + "} catch(e) {"
+                        + "  console.error('[Shinzi] Restore error:', e);"
+                        + "}"
+                        + "})();";
+                webView.evaluateJavascript(js, null);
+            }
+        } catch (Exception ignored) {}
     }
 }

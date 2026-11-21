@@ -162,6 +162,12 @@ export const MultiDeviceErrorScreen: React.FC<MultiDeviceErrorProps> = ({
 
   const handleLogout = async () => {
     try {
+      try {
+        const ShinziNotification = (window as any).Capacitor?.Plugins?.ShinziNotification;
+        if (ShinziNotification?.clearAuthBackup) {
+          await ShinziNotification.clearAuthBackup();
+        }
+      } catch {}
       sessionStorage.removeItem(SESSION_KEY);
       localStorage.removeItem('shinzi_auth_user');
       await signOut(auth);

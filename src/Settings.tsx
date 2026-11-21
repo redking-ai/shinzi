@@ -172,6 +172,12 @@ export default function Settings({ onBack }: SettingsProps) {
 
   const handleLogout = async () => {
     try {
+      try {
+        const ShinziNotification = (window as any).Capacitor?.Plugins?.ShinziNotification;
+        if (ShinziNotification?.clearAuthBackup) {
+          await ShinziNotification.clearAuthBackup();
+        }
+      } catch {}
       await signOut(auth);
       onBack();
       window.location.reload();

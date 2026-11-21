@@ -89,8 +89,18 @@ const [profileExists, setProfileExists] =
   });
 
   // ==========================================================
-  // FIREBASE AUTH
+  // FIREBASE AUTH & PERSISTENT SESSION BACKUP (Fix #1)
   // ==========================================================
+
+  useEffect(() => {
+    const handleAuthRestored = () => {
+      if (!auth.currentUser) {
+        window.location.reload();
+      }
+    };
+    window.addEventListener('shinzi:authRestored', handleAuthRestored);
+    return () => window.removeEventListener('shinzi:authRestored', handleAuthRestored);
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(
@@ -98,6 +108,30 @@ const [profileExists, setProfileExists] =
       (firebaseUser) => {
         setUser(firebaseUser);
         setAuthLoading(false);
+
+        if (firebaseUser) {
+          // Backup auth session keys to Android vault for persistence across reinstalls (Fix #1)
+          try {
+            const authItems: Record<string, string> = {};
+            for (let i = 0; i < localStorage.length; i++) {
+              const k = localStorage.key(i);
+              if (k && (k.startsWith('firebase:authUser:') || k === 'shinzi_status_mode' || k.startsWith('shinzi_cache_'))) {
+                const val = localStorage.getItem(k);
+                if (val) authItems[k] = val;
+              }
+            }
+            if (Object.keys(authItems).length > 0) {
+              const ShinziNotification = (window as any).Capacitor?.Plugins?.ShinziNotification;
+              if (ShinziNotification?.saveAuthBackup) {
+                ShinziNotification.saveAuthBackup({
+                  uid: firebaseUser.uid,
+                  email: firebaseUser.email || '',
+                  authData: JSON.stringify(authItems),
+                }).catch(() => {});
+              }
+            }
+          } catch {}
+        }
       }
     );
 

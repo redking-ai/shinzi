@@ -144,6 +144,77 @@ public class ShinziNotificationPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void saveAuthBackup(PluginCall call) {
+        String authData = call.getString("authData", "");
+        String uid = call.getString("uid", "");
+        String email = call.getString("email", "");
+        if (authData != null && !authData.isEmpty()) {
+            // 1. Save in SharedPreferences (backed up by Android Auto Backup)
+            getContext().getSharedPreferences("shinzi_auth_vault", Context.MODE_PRIVATE)
+                    .edit()
+                    .putString("auth_data", authData)
+                    .putString("uid", uid != null ? uid : "")
+                    .putString("email", email != null ? email : "")
+                    .putLong("saved_at", System.currentTimeMillis())
+                    .apply();
+
+            // 2. Also persist in external app-specific storage which is preserved across reinstalls
+            try {
+                File dir = getContext().getExternalFilesDir(null);
+                if (dir != null) {
+                    File vaultFile = new File(dir, ".shinzi_vault");
+                    FileOutputStream fos = new FileOutputStream(vaultFile);
+                    fos.write(authData.getBytes("UTF-8"));
+                    fos.close();
+                }
+            } catch (Exception ignored) {}
+        }
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void clearAuthBackup(PluginCall call) {
+        getContext().getSharedPreferences("shinzi_auth_vault", Context.MODE_PRIVATE)
+                .edit()
+                .clear()
+                .apply();
+        try {
+            File dir = getContext().getExternalFilesDir(null);
+            if (dir != null) {
+                File vaultFile = new File(dir, ".shinzi_vault");
+                if (vaultFile.exists()) {
+                    vaultFile.delete();
+                }
+            }
+        } catch (Exception ignored) {}
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void getAuthBackup(PluginCall call) {
+        JSObject ret = new JSObject();
+        String authData = getContext().getSharedPreferences("shinzi_auth_vault", Context.MODE_PRIVATE)
+                .getString("auth_data", "");
+        if (authData == null || authData.isEmpty()) {
+            try {
+                File dir = getContext().getExternalFilesDir(null);
+                if (dir != null) {
+                    File vaultFile = new File(dir, ".shinzi_vault");
+                    if (vaultFile.exists()) {
+                        byte[] bytes = new byte[(int) vaultFile.length()];
+                        java.io.FileInputStream fis = new java.io.FileInputStream(vaultFile);
+                        fis.read(bytes);
+                        fis.close();
+                        authData = new String(bytes, "UTF-8");
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+        ret.put("authData", authData != null ? authData : "");
+        call.resolve(ret);
+    }
+
+    @PluginMethod
     public void isBatteryOptimizationIgnored(PluginCall call) {
         JSObject ret = new JSObject();
         boolean ignored = true;
