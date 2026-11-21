@@ -126,6 +126,8 @@ class CallEngine {
   public remoteVolumeLevel: number = 0;
 
   // UI Event Callbacks
+  public rtcStatus: RTCIceConnectionState = 'new';
+  public onRtcStatusChange: ((status: RTCIceConnectionState) => void) | null = null;
   public onCallStateChange: ((call: CallSession | null) => void) | null = null;
   public onLocalStreamReady: ((stream: MediaStream | null) => void) | null = null;
   public onRemoteStreamReady: ((stream: MediaStream | null) => void) | null = null;
@@ -389,8 +391,12 @@ class CallEngine {
       this.candidateQueue = [];
 
       this.peerConnection.oniceconnectionstatechange = () => {
-        const state = this.peerConnection?.iceConnectionState;
+        const state = this.peerConnection?.iceConnectionState || 'new';
         console.log('[CallEngine] ICE Connection State:', state);
+        this.rtcStatus = state;
+        if (this.onRtcStatusChange) {
+          this.onRtcStatusChange(state);
+        }
         if (state === 'failed') {
           console.warn('[CallEngine] ICE failed across NAT. Initiating ICE restart...');
           void this.handleIceFailure();
@@ -530,8 +536,12 @@ class CallEngine {
       this.candidateQueue = [];
 
       this.peerConnection.oniceconnectionstatechange = () => {
-        const state = this.peerConnection?.iceConnectionState;
+        const state = this.peerConnection?.iceConnectionState || 'new';
         console.log('[CallEngine] ICE Connection State:', state);
+        this.rtcStatus = state;
+        if (this.onRtcStatusChange) {
+          this.onRtcStatusChange(state);
+        }
         if (state === 'failed') {
           console.warn('[CallEngine] ICE failed across NAT. Initiating ICE restart...');
           void this.handleIceFailure();
@@ -1214,8 +1224,17 @@ class CallEngine {
     }
   }
 
+  public async retryConnection() {
+    console.log('[CallEngine] Manual RTC reconnect triggered by user');
+    this.rtcStatus = 'checking';
+    if (this.onRtcStatusChange) this.onRtcStatusChange('checking');
+    await this.handleIceFailure();
+  }
+
   // 13. Full Cleanup
   public cleanup() {
+    this.rtcStatus = 'new';
+    if (this.onRtcStatusChange) this.onRtcStatusChange('new');
     const cap = (window as any).Capacitor;
     if (typeof cap?.Plugins?.ShinziNotification?.stopNativeScreenCapture === 'function') {
       void cap.Plugins.ShinziNotification.stopNativeScreenCapture().catch(() => {});

@@ -16,6 +16,7 @@ import {
   RefreshCw,
   ArrowLeft,
   Check,
+  WifiOff,
 } from 'lucide-react';
 import { callEngine, type CallSession } from './callService';
 import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
@@ -126,6 +127,9 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   const [localVideoActive, setLocalVideoActive] = useState<boolean>(false);
   const [screenShareActive, setScreenShareActive] = useState<boolean>(false);
 
+  // Peer connection state tracking
+  const [rtcStatus, setRtcStatus] = useState<RTCIceConnectionState>(callEngine.rtcStatus || 'new');
+
   // Subscribe to call engine events
   useEffect(() => {
     callEngine.onCallStateChange = (newCall) => {
@@ -140,6 +144,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
       }
     };
 
+    callEngine.onRtcStatusChange = (status) => setRtcStatus(status);
     callEngine.onLocalStreamReady = (s) => setLocalStream(s);
     callEngine.onRemoteStreamReady = (s) => setRemoteStream(s);
     callEngine.onScreenStreamReady = (s) => setScreenStream(s);
@@ -150,6 +155,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
 
     return () => {
       callEngine.onCallStateChange = null;
+      callEngine.onRtcStatusChange = null;
       callEngine.onLocalStreamReady = null;
       callEngine.onRemoteStreamReady = null;
       callEngine.onScreenStreamReady = null;
@@ -759,6 +765,27 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
             <UserPlus size={22} />
           </button>
         </div>
+
+        {/* Peer Connection Error / Status Alert Banner */}
+        {call.status === 'connected' && (rtcStatus === 'failed' || rtcStatus === 'disconnected') && (
+          <button
+            type="button"
+            className="shc-rtc-status-banner shc-rtc-failed"
+            onClick={() => void callEngine.retryConnection()}
+            title="Tap to reconnect peer connection"
+          >
+            <WifiOff size={14} className="shc-pulse-icon" />
+            <span>Peer Failed • Tap to Reconnect</span>
+            <RefreshCw size={12} />
+          </button>
+        )}
+
+        {call.status === 'connected' && rtcStatus === 'checking' && (
+          <div className="shc-rtc-status-banner shc-rtc-connecting">
+            <span className="shc-rtc-dot" />
+            <span>Connecting Peer RTC...</span>
+          </div>
+        )}
 
         {/* Split Participant Grid */}
         <div className="shc-call-grid">

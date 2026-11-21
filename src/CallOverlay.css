@@ -244,6 +244,48 @@ video::-internal-media-controls-overlay-cast-button {
   pointer-events: none !important;
 }
 
+/* Peer Connection Status Banner */
+.shc-rtc-status-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 14px;
+  margin: 6px 16px 0 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  animation: fadeIn 0.25s ease;
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.shc-rtc-status-banner.shc-rtc-failed {
+  background: rgba(218, 55, 60, 0.22);
+  color: #ff7377;
+  border: 1px solid rgba(218, 55, 60, 0.6);
+}
+
+.shc-rtc-status-banner.shc-rtc-connecting {
+  background: rgba(240, 178, 50, 0.2);
+  color: #f0b232;
+  border: 1px solid rgba(240, 178, 50, 0.5);
+}
+
+.shc-rtc-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f0b232;
+  animation: pulse 0.8s infinite alternate;
+}
+
+.shc-pulse-icon {
+  animation: pulse 0.8s infinite alternate;
+}
+
 /* Screen Sharing Box */
 .shc-screen-sharing-box {
   display: flex;
