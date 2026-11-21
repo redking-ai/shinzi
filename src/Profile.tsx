@@ -1001,7 +1001,7 @@ useEffect(() => {
         style={
           hasCustomTheme
             ? ({
-                background: `linear-gradient(180deg, ${effectiveTheme.primary || '#000000'} 0%, ${effectiveTheme.secondary || '#000000'} 100%)`,
+                background: 'transparent',
                 borderColor: effectiveTheme.accent ? `${effectiveTheme.accent}44` : undefined,
                 boxShadow: effectiveTheme.accent ? `0 16px 48px ${effectiveTheme.accent}24` : undefined,
                 '--sh-theme-accent':
