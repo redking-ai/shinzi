@@ -224,17 +224,23 @@
   background-color: #0b0e14;
 }
 
-.shc-video-feed::-webkit-media-controls,
-.shc-video-feed::-webkit-media-controls-start-playback-button,
-.shc-video-feed::-webkit-media-controls-play-button,
-.shc-video-feed::-webkit-media-controls-enclosure,
-.shc-fullscreen-video::-webkit-media-controls,
-.shc-fullscreen-video::-webkit-media-controls-start-playback-button,
-.shc-fullscreen-video::-webkit-media-controls-play-button,
-.shc-fullscreen-video::-webkit-media-controls-enclosure {
+video::-webkit-media-controls,
+video::-webkit-media-controls-start-playback-button,
+video::-webkit-media-controls-play-button,
+video::-webkit-media-controls-overlay-play-button,
+video::-webkit-media-controls-enclosure,
+video::-webkit-media-controls-panel,
+video::-webkit-media-controls-timeline,
+video::-webkit-media-controls-current-time-display,
+video::-webkit-media-controls-time-remaining-display,
+video::-webkit-media-controls-mute-button,
+video::-webkit-media-controls-volume-slider,
+video::-webkit-media-controls-toggle-closed-captions-button,
+video::-internal-media-controls-overlay-cast-button {
   display: none !important;
   -webkit-appearance: none !important;
   opacity: 0 !important;
+  visibility: hidden !important;
   pointer-events: none !important;
 }
 

@@ -51,13 +51,21 @@ const ICE_SERVERS: RTCConfiguration = {
     { urls: 'stun:stun2.l.google.com:19302' },
     { urls: 'stun:stun3.l.google.com:19302' },
     { urls: 'stun:stun4.l.google.com:19302' },
+    { urls: 'stun:stun.cloudflare.com:3478' },
     {
       urls: [
         'turn:openrelay.metered.ca:80',
+        'turn:openrelay.metered.ca:80?transport=tcp',
         'turn:openrelay.metered.ca:443',
         'turn:openrelay.metered.ca:443?transport=tcp',
         'turns:openrelay.metered.ca:443',
         'turns:openrelay.metered.ca:443?transport=tcp',
+        'turn:standard.relay.metered.ca:80',
+        'turn:standard.relay.metered.ca:80?transport=tcp',
+        'turn:standard.relay.metered.ca:443',
+        'turn:standard.relay.metered.ca:443?transport=tcp',
+        'turns:standard.relay.metered.ca:443',
+        'turns:standard.relay.metered.ca:443?transport=tcp',
       ],
       username: 'openrelayproject',
       credential: 'openrelayproject',
@@ -81,12 +89,12 @@ function enhanceOpusSdp(sdp: string): string {
           .replace(/;?sprop-stereo=\d/, '')
           .replace(/;?maxaveragebitrate=\d+/, '')
           .replace(/;?cbr=\d/, '');
-        return `a=fmtp:${pt} ${clean};useinbandfec=1;stereo=0;sprop-stereo=0;maxaveragebitrate=64000;cbr=1`;
+        return `a=fmtp:${pt} ${clean};useinbandfec=1;stereo=0;sprop-stereo=0;maxaveragebitrate=32000;cbr=1`;
       });
     } else {
       enhanced = enhanced.replace(
         new RegExp(`(a=rtpmap:${pt} opus\/48000[^\\r\\n]*)`),
-        `$1\r\na=fmtp:${pt} useinbandfec=1;stereo=0;sprop-stereo=0;maxaveragebitrate=64000;cbr=1`
+        `$1\r\na=fmtp:${pt} useinbandfec=1;stereo=0;sprop-stereo=0;maxaveragebitrate=32000;cbr=1`
       );
     }
   }
@@ -153,27 +161,6 @@ class CallEngine {
         video: type === 'video' ? true : false,
       });
     }
-  }
-
-  // Create silent dummy video track to pre-negotiate active sendrecv video m-line for seamless camera toggling & screen sharing
-  private createSilentVideoTrack(): MediaStreamTrack | null {
-    try {
-      const canvas = document.createElement('canvas');
-      canvas.width = 16;
-      canvas.height = 16;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.fillStyle = '#0b0e14';
-        ctx.fillRect(0, 0, 16, 16);
-      }
-      const stream = (canvas as any).captureStream ? (canvas as any).captureStream(5) : null;
-      if (stream && stream.getVideoTracks().length > 0) {
-        const track = stream.getVideoTracks()[0];
-        track.enabled = true;
-        return track;
-      }
-    } catch {}
-    return null;
   }
 
   // 1. Audio Level Analyzer (Levels 0 to 4)
@@ -401,6 +388,15 @@ class CallEngine {
       this.peerConnection = new RTCPeerConnection(ICE_SERVERS);
       this.candidateQueue = [];
 
+      this.peerConnection.oniceconnectionstatechange = () => {
+        const state = this.peerConnection?.iceConnectionState;
+        console.log('[CallEngine] ICE Connection State:', state);
+        if (state === 'failed') {
+          console.warn('[CallEngine] ICE failed across NAT. Initiating ICE restart...');
+          void this.handleIceFailure();
+        }
+      };
+
       // Add local audio track
       const audioTrack = this.localStream.getAudioTracks()[0];
       if (audioTrack) {
@@ -409,8 +405,8 @@ class CallEngine {
         this.peerConnection.addTransceiver('audio', { direction: 'sendrecv' });
       }
 
-      // Add local video track or pre-negotiate with silent dummy track
-      const videoTrack = this.localStream.getVideoTracks()[0] || this.createSilentVideoTrack();
+      // Add local video track or pre-allocate video transceiver without dummy stall track
+      const videoTrack = this.localStream.getVideoTracks()[0];
       if (videoTrack) {
         this.videoSender = this.peerConnection.addTrack(videoTrack, this.localStream);
       } else {
@@ -533,6 +529,15 @@ class CallEngine {
       this.peerConnection = new RTCPeerConnection(ICE_SERVERS);
       this.candidateQueue = [];
 
+      this.peerConnection.oniceconnectionstatechange = () => {
+        const state = this.peerConnection?.iceConnectionState;
+        console.log('[CallEngine] ICE Connection State:', state);
+        if (state === 'failed') {
+          console.warn('[CallEngine] ICE failed across NAT. Initiating ICE restart...');
+          void this.handleIceFailure();
+        }
+      };
+
       // Add local audio track
       const audioTrack = this.localStream.getAudioTracks()[0];
       if (audioTrack) {
@@ -541,8 +546,8 @@ class CallEngine {
         this.peerConnection.addTransceiver('audio', { direction: 'sendrecv' });
       }
 
-      // Add local video track or pre-negotiate with silent dummy track
-      const videoTrack = this.localStream.getVideoTracks()[0] || this.createSilentVideoTrack();
+      // Add local video track or pre-allocate video transceiver without dummy stall track
+      const videoTrack = this.localStream.getVideoTracks()[0];
       if (videoTrack) {
         this.videoSender = this.peerConnection.addTrack(videoTrack, this.localStream);
       } else {
@@ -597,14 +602,7 @@ class CallEngine {
         await this.peerConnection.setLocalDescription(enhancedAnswer);
 
         // Drain any ICE candidates received before answer
-        if (this.candidateQueue.length > 0) {
-          for (const queued of this.candidateQueue) {
-            try {
-              await this.peerConnection.addIceCandidate(new RTCIceCandidate(queued));
-            } catch {}
-          }
-          this.candidateQueue = [];
-        }
+        await this.drainCandidateQueue();
 
         const updates = {
           'activeCall.answer': { type: enhancedAnswer.type, sdp: enhancedAnswer.sdp },
@@ -725,14 +723,8 @@ class CallEngine {
         track.stop();
         this.localStream?.removeTrack(track);
       });
-      // Replace with silent dummy track on WebRTC video sender so remote sees camera turned off
       if (this.videoSender) {
-        const dummy = this.createSilentVideoTrack();
-        if (dummy) {
-          await this.videoSender.replaceTrack(dummy).catch(() => {});
-        } else {
-          await this.videoSender.replaceTrack(null).catch(() => {});
-        }
+        await this.videoSender.replaceTrack(null).catch(() => {});
       }
       const field = this.isCaller ? 'activeCall.callerVideoOn' : 'activeCall.receiverVideoOn';
       if (this.activeCall.convId) {
@@ -846,8 +838,8 @@ class CallEngine {
       this.screenStream = null;
       if (this.onScreenStreamReady) this.onScreenStreamReady(null);
 
-      // Revert video sender to active camera track or dummy track
-      const camTrack = this.localStream?.getVideoTracks()[0] || this.createSilentVideoTrack();
+      // Revert video sender to active camera track or null
+      const camTrack = this.localStream?.getVideoTracks()[0] || null;
       if (this.videoSender) {
         await this.videoSender.replaceTrack(camTrack).catch(() => {});
       }
@@ -1118,21 +1110,40 @@ class CallEngine {
         }
 
         // Handle WebRTC Answer for Caller
-        if (this.isCaller && callData.answer && this.peerConnection && !this.peerConnection.currentRemoteDescription) {
-          try {
-            const answerDesc = new RTCSessionDescription(callData.answer);
-            await this.peerConnection.setRemoteDescription(answerDesc);
-            // Drain any queued ICE candidates received before answer arrived
-            if (this.candidateQueue.length > 0) {
-              for (const queued of this.candidateQueue) {
-                try {
-                  await this.peerConnection.addIceCandidate(new RTCIceCandidate(queued));
-                } catch {}
-              }
-              this.candidateQueue = [];
+        if (this.isCaller && callData.answer && this.peerConnection) {
+          const currentRemoteSdp = this.peerConnection.remoteDescription?.sdp;
+          if (!currentRemoteSdp || currentRemoteSdp !== callData.answer.sdp) {
+            try {
+              const answerDesc = new RTCSessionDescription(callData.answer);
+              await this.peerConnection.setRemoteDescription(answerDesc);
+              await this.drainCandidateQueue();
+            } catch (e) {
+              console.warn('[CallEngine] setRemoteDescription error:', e);
             }
-          } catch (e) {
-            console.warn('[CallEngine] setRemoteDescription error:', e);
+          }
+        }
+
+        // Handle updated offer / ICE restart for Receiver
+        if (!this.isCaller && callData.offer && this.peerConnection && this.peerConnection.remoteDescription) {
+          if (callData.offer.sdp && callData.offer.sdp !== this.peerConnection.remoteDescription.sdp) {
+            try {
+              console.log('[CallEngine] Receiver applying updated offer / ICE restart...');
+              await this.peerConnection.setRemoteDescription(new RTCSessionDescription(callData.offer));
+              const answer = await this.peerConnection.createAnswer();
+              const enhancedAnswer = new RTCSessionDescription({
+                type: answer.type,
+                sdp: enhanceOpusSdp(answer.sdp || ''),
+              });
+              await this.peerConnection.setLocalDescription(enhancedAnswer);
+              await this.drainCandidateQueue();
+              if (callData.convId) {
+                void updateDoc(doc(db, 'conversations', callData.convId), {
+                  'activeCall.answer': { type: enhancedAnswer.type, sdp: enhancedAnswer.sdp },
+                }).catch(() => {});
+              }
+            } catch (err) {
+              console.warn('[CallEngine] Receiver ICE restart offer handling error:', err);
+            }
           }
         }
 
@@ -1144,12 +1155,14 @@ class CallEngine {
               const candStr = JSON.stringify(cand);
               if (!this.processedCandidates.has(candStr)) {
                 this.processedCandidates.add(candStr);
-                if (!this.peerConnection.remoteDescription) {
+                if (!this.peerConnection.remoteDescription || !this.peerConnection.remoteDescription.type) {
                   this.candidateQueue.push(cand);
                 } else {
                   try {
                     await this.peerConnection.addIceCandidate(new RTCIceCandidate(cand));
-                  } catch {}
+                  } catch {
+                    this.candidateQueue.push(cand);
+                  }
                 }
               }
             }
@@ -1164,6 +1177,41 @@ class CallEngine {
         console.warn('[CallEngine] listenToCall error:', err);
       }
     );
+  }
+
+  private async drainCandidateQueue() {
+    if (!this.peerConnection || !this.peerConnection.remoteDescription) return;
+    const queued = [...this.candidateQueue];
+    this.candidateQueue = [];
+    for (const cand of queued) {
+      try {
+        await this.peerConnection.addIceCandidate(new RTCIceCandidate(cand));
+      } catch (e) {
+        console.warn('[CallEngine] addIceCandidate from queue error:', e);
+      }
+    }
+  }
+
+  private async handleIceFailure() {
+    if (!this.peerConnection || !this.activeCall || this.activeCall.status !== 'connected') return;
+    try {
+      if (this.isCaller) {
+        console.log('[CallEngine] Caller initiating ICE restart...');
+        const offer = await this.peerConnection.createOffer({ iceRestart: true });
+        const enhancedOffer = new RTCSessionDescription({
+          type: offer.type,
+          sdp: enhanceOpusSdp(offer.sdp || ''),
+        });
+        await this.peerConnection.setLocalDescription(enhancedOffer);
+        if (this.activeCall.convId) {
+          void updateDoc(doc(db, 'conversations', this.activeCall.convId), {
+            'activeCall.offer': { type: enhancedOffer.type, sdp: enhancedOffer.sdp },
+          }).catch(() => {});
+        }
+      }
+    } catch (e) {
+      console.warn('[CallEngine] handleIceFailure error:', e);
+    }
   }
 
   // 13. Full Cleanup

@@ -121,6 +121,11 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   const screenShareVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
 
+  // Video active state tracking (prevents Android WebView gray play button placeholder)
+  const [remoteVideoActive, setRemoteVideoActive] = useState<boolean>(false);
+  const [localVideoActive, setLocalVideoActive] = useState<boolean>(false);
+  const [screenShareActive, setScreenShareActive] = useState<boolean>(false);
+
   // Subscribe to call engine events
   useEffect(() => {
     callEngine.onCallStateChange = (newCall) => {
@@ -479,7 +484,8 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   const attachStreamToVideo = (
     el: HTMLVideoElement | null,
     stream: MediaStream | null,
-    isMuted: boolean = true
+    isMuted: boolean = true,
+    onReady?: () => void
   ) => {
     if (!el) return;
     if (el.srcObject !== stream) {
@@ -494,26 +500,44 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
       const playVideo = () => {
         const p = el.play();
         if (p !== undefined) {
-          p.catch(() => {});
+          p.then(() => {
+            if (onReady) onReady();
+          }).catch(() => {});
         }
       };
       el.onloadedmetadata = playVideo;
+      el.onloadeddata = () => {
+        if (onReady) onReady();
+      };
+      el.onplaying = () => {
+        if (onReady) onReady();
+      };
       playVideo();
     }
   };
 
   // Bind media streams to HTML video elements
   useEffect(() => {
-    attachStreamToVideo(remoteVideoRef.current, remoteStream, true);
+    if (!call?.callerVideoOn && !call?.receiverVideoOn) {
+      setRemoteVideoActive(false);
+      setLocalVideoActive(false);
+    }
+    attachStreamToVideo(remoteVideoRef.current, remoteStream, true, () => setRemoteVideoActive(true));
   }, [remoteStream, call?.callerVideoOn, call?.receiverVideoOn]);
 
   useEffect(() => {
-    attachStreamToVideo(localVideoRef.current, localStream, true);
+    if (!call?.callerVideoOn && !call?.receiverVideoOn) {
+      setLocalVideoActive(false);
+    }
+    attachStreamToVideo(localVideoRef.current, localStream, true, () => setLocalVideoActive(true));
   }, [localStream, call?.callerVideoOn, call?.receiverVideoOn]);
 
   useEffect(() => {
+    if (!call?.callerScreenSharing && !call?.receiverScreenSharing) {
+      setScreenShareActive(false);
+    }
     const activeScreen = screenStream || remoteStream;
-    attachStreamToVideo(screenShareVideoRef.current, activeScreen, true);
+    attachStreamToVideo(screenShareVideoRef.current, activeScreen, true, () => setScreenShareActive(true));
   }, [screenStream, remoteStream, call?.callerScreenSharing, call?.receiverScreenSharing]);
 
   useEffect(() => {
@@ -678,12 +702,16 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
         <video
           ref={(el) => {
             screenShareVideoRef.current = el;
-            attachStreamToVideo(el, screenStream || remoteStream, true);
+            attachStreamToVideo(el, screenStream || remoteStream, true, () => setScreenShareActive(true));
           }}
           autoPlay
           playsInline
           muted
           className="shc-fullscreen-video"
+          style={{
+            opacity: screenShareActive ? 1 : 0,
+            transition: 'opacity 0.25s ease',
+          }}
         />
       </div>
     );
@@ -745,65 +773,77 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
               }
             }}
           >
-            {isOppositeScreenSharing ? (
-              // Live Shared Screen
+            {/* Base Voice Avatar + Waves (always present, never flashes gray) */}
+            <div className="shc-avatar-wave-container">
+              <img
+                src={oppositeAvatar || '/icon-192.png'}
+                alt={oppositeName || 'User'}
+                className="shc-participant-avatar"
+              />
+
+              {/* Ringing Phone badge if opposite user hasn't picked up (20261116_190741) */}
+              {isOutgoingRinging && (
+                <div className="shc-ringing-badge" title="Ringing...">
+                  <PhoneCall size={18} />
+                </div>
+              )}
+
+              {/* 4-Level Dynamic Sound Waves */}
+              {remoteSpeakingLevel >= 1 && <div className="shc-voice-wave shc-wave-1" />}
+              {remoteSpeakingLevel >= 2 && <div className="shc-voice-wave shc-wave-2" />}
+              {remoteSpeakingLevel >= 3 && <div className="shc-voice-wave shc-wave-3" />}
+              {remoteSpeakingLevel >= 4 && <div className="shc-voice-wave shc-wave-4" />}
+
+              {/* Mute Badge if opposite user is muted */}
+              {isOppositeMuted && (
+                <div className="shc-muted-badge" title="Muted">
+                  <MicOff size={15} />
+                </div>
+              )}
+            </div>
+
+            {/* Live Shared Screen (Fades in smoothly only when active frames render) */}
+            {isOppositeScreenSharing && (
               <>
                 <video
                   ref={(el) => {
                     screenShareVideoRef.current = el;
-                    attachStreamToVideo(el, screenStream || remoteStream, true);
+                    attachStreamToVideo(el, screenStream || remoteStream, true, () => setScreenShareActive(true));
                   }}
                   autoPlay
                   playsInline
                   muted
                   className="shc-video-feed"
+                  style={{
+                    opacity: screenShareActive ? 1 : 0,
+                    transition: 'opacity 0.25s ease',
+                    zIndex: 2,
+                  }}
                 />
-                <span className="shc-screen-expand-hint">Tap to expand full screen</span>
+                <span className="shc-screen-expand-hint" style={{ zIndex: 3 }}>Tap to expand full screen</span>
               </>
-            ) : isOppositeVideoOn ? (
-              // 1080p Video Feed
+            )}
+
+            {/* 1080p Video Feed (Fades in smoothly only when active frames render) */}
+            {!isOppositeScreenSharing && isOppositeVideoOn && (
               <video
                 ref={(el) => {
                   remoteVideoRef.current = el;
-                  attachStreamToVideo(el, remoteStream, true);
+                  attachStreamToVideo(el, remoteStream, true, () => setRemoteVideoActive(true));
                 }}
                 autoPlay
                 playsInline
                 muted
                 className="shc-video-feed"
+                style={{
+                  opacity: remoteVideoActive ? 1 : 0,
+                  transition: 'opacity 0.25s ease',
+                  zIndex: 2,
+                }}
               />
-            ) : (
-              // Voice Avatar + Animated GIF + Waves (20261116_190719)
-              <div className="shc-avatar-wave-container">
-                <img
-                  src={oppositeAvatar || '/icon-192.png'}
-                  alt={oppositeName || 'User'}
-                  className="shc-participant-avatar"
-                />
-
-                {/* Ringing Phone badge if opposite user hasn't picked up (20261116_190741) */}
-                {isOutgoingRinging && (
-                  <div className="shc-ringing-badge" title="Ringing...">
-                    <PhoneCall size={18} />
-                  </div>
-                )}
-
-                {/* 4-Level Dynamic Sound Waves */}
-                {remoteSpeakingLevel >= 1 && <div className="shc-voice-wave shc-wave-1" />}
-                {remoteSpeakingLevel >= 2 && <div className="shc-voice-wave shc-wave-2" />}
-                {remoteSpeakingLevel >= 3 && <div className="shc-voice-wave shc-wave-3" />}
-                {remoteSpeakingLevel >= 4 && <div className="shc-voice-wave shc-wave-4" />}
-
-                {/* Mute Badge if opposite user is muted */}
-                {isOppositeMuted && (
-                  <div className="shc-muted-badge" title="Muted">
-                    <MicOff size={15} />
-                  </div>
-                )}
-              </div>
             )}
 
-            <div className="shc-participant-name-pill">
+            <div className="shc-participant-name-pill" style={{ zIndex: 3 }}>
               <span>{oppositeName || 'Friend'}</span>
             </div>
           </div>
@@ -812,49 +852,54 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
           <div
             className={`shc-participant-tile ${localSpeakingLevel > 0 ? 'speaking' : ''}`}
           >
-            {isMyScreenSharing ? (
-              // Sharing Screen Notice (20261116_194418)
-              <div className="shc-screen-sharing-box">
+            {/* Base Voice Avatar + Waves */}
+            <div className="shc-avatar-wave-container">
+              <img
+                src={myAvatar}
+                alt={myName}
+                className="shc-participant-avatar"
+              />
+
+              {/* 4-Level Sound Waves for Me */}
+              {localSpeakingLevel >= 1 && <div className="shc-voice-wave shc-wave-1" />}
+              {localSpeakingLevel >= 2 && <div className="shc-voice-wave shc-wave-2" />}
+              {localSpeakingLevel >= 3 && <div className="shc-voice-wave shc-wave-3" />}
+              {localSpeakingLevel >= 4 && <div className="shc-voice-wave shc-wave-4" />}
+
+              {/* Muted Badge */}
+              {isSelfMuted && (
+                <div className="shc-muted-badge" title="Muted">
+                  <MicOff size={15} />
+                </div>
+              )}
+            </div>
+
+            {isMyScreenSharing && (
+              <div className="shc-screen-sharing-box" style={{ zIndex: 2 }}>
                 <ScreenShare size={48} className="shc-screen-share-icon" />
                 <span style={{ fontSize: 16, fontWeight: 600 }}>You are sharing screen</span>
               </div>
-            ) : isMyVideoOn ? (
-              // Self Camera 1080p Preview
+            )}
+
+            {!isMyScreenSharing && isMyVideoOn && (
               <video
                 ref={(el) => {
                   localVideoRef.current = el;
-                  attachStreamToVideo(el, localStream, true);
+                  attachStreamToVideo(el, localStream, true, () => setLocalVideoActive(true));
                 }}
                 autoPlay
                 playsInline
                 muted
                 className="shc-video-feed"
+                style={{
+                  opacity: localVideoActive ? 1 : 0,
+                  transition: 'opacity 0.25s ease',
+                  zIndex: 2,
+                }}
               />
-            ) : (
-              // Voice Avatar + Waves
-              <div className="shc-avatar-wave-container">
-                <img
-                  src={myAvatar}
-                  alt={myName}
-                  className="shc-participant-avatar"
-                />
-
-                {/* 4-Level Sound Waves for Me */}
-                {localSpeakingLevel >= 1 && <div className="shc-voice-wave shc-wave-1" />}
-                {localSpeakingLevel >= 2 && <div className="shc-voice-wave shc-wave-2" />}
-                {localSpeakingLevel >= 3 && <div className="shc-voice-wave shc-wave-3" />}
-                {localSpeakingLevel >= 4 && <div className="shc-voice-wave shc-wave-4" />}
-
-                {/* Muted Badge */}
-                {isSelfMuted && (
-                  <div className="shc-muted-badge" title="Muted">
-                    <MicOff size={15} />
-                  </div>
-                )}
-              </div>
             )}
 
-            <div className="shc-participant-name-pill">
+            <div className="shc-participant-name-pill" style={{ zIndex: 3 }}>
               {isSelfMuted && <MicOff size={14} color="#da373c" />}
               <span>{myName}</span>
             </div>
