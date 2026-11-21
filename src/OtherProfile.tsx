@@ -616,7 +616,16 @@ export default function OtherProfile({
       : undefined;
 
   return (
-    <main className="sh-profile-page sh-other-profile-page">
+    <main
+      className="sh-profile-page sh-other-profile-page"
+      style={
+        hasCustomTheme
+          ? {
+              background: `linear-gradient(180deg, ${theme.primary || '#000000'} 0%, ${theme.secondary || '#000000'} 100%)`,
+            }
+          : undefined
+      }
+    >
       {error && (
         <div className="sh-profile-alert" role="alert">
           <span>{error}</span>

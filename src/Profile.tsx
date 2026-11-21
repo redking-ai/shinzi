@@ -986,7 +986,16 @@ useEffect(() => {
   );
 
   return (
-    <main className="sh-profile-page">
+    <main
+      className="sh-profile-page"
+      style={
+        hasCustomTheme
+          ? {
+              background: `linear-gradient(180deg, ${effectiveTheme.primary || '#000000'} 0%, ${effectiveTheme.secondary || '#000000'} 100%)`,
+            }
+          : undefined
+      }
+    >
       <section
         className={`sh-profile-card ${hasCustomTheme ? 'sh-profile-custom-theme' : ''}`}
         style={

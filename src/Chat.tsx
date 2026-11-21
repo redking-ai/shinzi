@@ -1116,11 +1116,13 @@ function Sheet({
   title,
   onClose,
   tall = false,
+  className = '',
   children,
 }: {
   title: string;
   onClose: () => void;
   tall?: boolean;
+  className?: string;
   children: ReactNode;
 }) {
   return (
@@ -1131,7 +1133,7 @@ function Sheet({
       }}
     >
       <div
-        className={tall ? 'shc-sheet shc-sheet-tall' : 'shc-sheet'}
+        className={`${tall ? 'shc-sheet shc-sheet-tall' : 'shc-sheet'} ${className}`.trim()}
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -6724,26 +6726,28 @@ const handleSearchMessage = async (target: Rec) => {
       )}
 
       {showGroup && (
-        <Sheet title="Create group" tall onClose={() => setShowGroup(false)}>
-          <input
-            className="shc-input"
-            placeholder="Group name"
-            value={groupName}
-            maxLength={60}
-            onChange={(e) => setGroupName(e.target.value)}
-          />
+        <Sheet title="Create group" tall onClose={() => setShowGroup(false)} className="shc-sheet-group">
+          <div className="shc-group-top">
+            <input
+              className="shc-input"
+              placeholder="Group name"
+              value={groupName}
+              maxLength={60}
+              onChange={(e) => setGroupName(e.target.value)}
+            />
 
-          <textarea
-            className="shc-input shc-input-multi"
-            placeholder="Description"
-            value={groupDescription}
-            maxLength={300}
-            onChange={(e) => setGroupDescription(e.target.value)}
-          />
+            <textarea
+              className="shc-input shc-input-multi"
+              placeholder="Description"
+              value={groupDescription}
+              maxLength={300}
+              onChange={(e) => setGroupDescription(e.target.value)}
+            />
 
-          <h3 className="shc-label">Add friends</h3>
+            <h3 className="shc-label">Add friends</h3>
+          </div>
 
-          <div className="shc-picker">
+          <div className="shc-picker shc-group-picker">
             {friends.length === 0 ? (
               <EmptyState
                 icon={<Users size={40} />}
@@ -6786,18 +6790,20 @@ const handleSearchMessage = async (target: Rec) => {
             )}
           </div>
 
-          <p className="shc-count">
-            {Object.values(groupSelected).filter(Boolean).length} added
-          </p>
+          <div className="shc-group-sticky-footer">
+            <p className="shc-count">
+              {Object.values(groupSelected).filter(Boolean).length} added
+            </p>
 
-          <button
-            type="button"
-            className="shc-primary"
-            disabled={creatingGroup}
-            onClick={() => void createGroup()}
-          >
-            {creatingGroup ? <span className="shc-spinner shc-spinner-sm" /> : 'Create group'}
-          </button>
+            <button
+              type="button"
+              className="shc-primary"
+              disabled={creatingGroup}
+              onClick={() => void createGroup()}
+            >
+              {creatingGroup ? <span className="shc-spinner shc-spinner-sm" /> : 'Create group'}
+            </button>
+          </div>
         </Sheet>
       )}
 

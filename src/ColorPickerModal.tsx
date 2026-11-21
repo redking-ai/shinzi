@@ -24,14 +24,14 @@ const PRESET_SWATCHES = [
 ];
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-  let clean = hex.replace(/^#/, '').trim();
+  let clean = hex.replace(/[^0-9a-fA-F]/g, '').trim();
   if (clean.length === 3) {
     clean = clean
       .split('')
       .map((c) => c + c)
       .join('');
   }
-  if (!/^[0-9a-fA-F]{6}$/.test(clean)) return null;
+  if (clean.length !== 6) return null;
   const num = parseInt(clean, 16);
   return {
     r: (num >> 16) & 255,
@@ -152,9 +152,10 @@ export default function ColorPickerModal({
   // Initialize values when opened
   useEffect(() => {
     if (!isOpen) return;
-    const clean = initialColor && initialColor.trim() ? initialColor.trim() : '#000000';
-    setCurrentColor(clean.toUpperCase());
-    setHexInput(clean.toUpperCase());
+    const hexOnly = (initialColor || '').replace(/[^0-9a-fA-F]/g, '').slice(0, 6).toUpperCase();
+    const clean = hexOnly ? '#' + hexOnly : '#000000';
+    setCurrentColor(clean);
+    setHexInput(clean);
 
     const rgb = hexToRgb(clean) || { r: 0, g: 0, b: 0 };
     const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
@@ -317,22 +318,44 @@ export default function ColorPickerModal({
     }
   };
 
-  // Handle manual typing of #hex code
+  // Handle manual typing of #hex code (sanitizes multiple #, paste with #, etc.)
   const handleHexInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let val = e.target.value.toUpperCase();
-    if (!val.startsWith('#')) {
-      val = '#' + val;
-    }
+    const raw = e.target.value;
+    const hexOnly = raw.replace(/[^0-9a-fA-F]/g, '').slice(0, 6).toUpperCase();
+    const val = '#' + hexOnly;
     setHexInput(val);
 
-    const rgb = hexToRgb(val);
-    if (rgb) {
-      const hex = rgbToHex(rgb.r, rgb.g, rgb.b);
-      setCurrentColor(hex);
-      const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
-      setHue(hsv.h);
-      setSaturation(hsv.s);
-      setValue(hsv.v);
+    if (hexOnly.length === 3 || hexOnly.length === 6) {
+      const rgb = hexToRgb(val);
+      if (rgb) {
+        const hex = rgbToHex(rgb.r, rgb.g, rgb.b);
+        setCurrentColor(hex);
+        const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+        setHue(hsv.h);
+        setSaturation(hsv.s);
+        setValue(hsv.v);
+      }
+    }
+  };
+
+  const handleHexPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const pasted = e.clipboardData.getData('text');
+    const hexOnly = pasted.replace(/[^0-9a-fA-F]/g, '').slice(0, 6).toUpperCase();
+    if (hexOnly) {
+      e.preventDefault();
+      const val = '#' + hexOnly;
+      setHexInput(val);
+      if (hexOnly.length === 3 || hexOnly.length === 6) {
+        const rgb = hexToRgb(val);
+        if (rgb) {
+          const hex = rgbToHex(rgb.r, rgb.g, rgb.b);
+          setCurrentColor(hex);
+          const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+          setHue(hsv.h);
+          setSaturation(hsv.s);
+          setValue(hsv.v);
+        }
+      }
     }
   };
 
@@ -388,7 +411,8 @@ export default function ColorPickerModal({
             className="sh-color-picker-hex-input"
             value={hexInput}
             onChange={handleHexInputChange}
-            maxLength={7}
+            onPaste={handleHexPaste}
+            maxLength={10}
             placeholder="#000000"
             autoCapitalize="characters"
             autoCorrect="off"
