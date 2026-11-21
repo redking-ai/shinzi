@@ -7,6 +7,7 @@
 
 import {
   doc,
+  getDoc,
   setDoc,
   updateDoc,
   onSnapshot,
@@ -15,6 +16,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 import { sendWebPushToUser } from './pushService';
+import { getAbsoluteApiUrl } from './apiUtils';
 
 export interface CallSession {
   id: string;
@@ -44,7 +46,7 @@ export interface CallSession {
   endedAt?: any;
 }
 
-const ICE_SERVERS: RTCConfiguration = {
+const DEFAULT_ICE_SERVERS: RTCConfiguration = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
@@ -82,21 +84,66 @@ const ICE_SERVERS: RTCConfiguration = {
       username: 'openrelayproject',
       credential: 'openrelayproject',
     },
-    {
-      urls: [
-        'turn:staticauth.openrelay.metered.ca:80',
-        'turn:staticauth.openrelay.metered.ca:80?transport=tcp',
-        'turn:staticauth.openrelay.metered.ca:443',
-        'turn:staticauth.openrelay.metered.ca:443?transport=tcp',
-        'turns:staticauth.openrelay.metered.ca:443',
-        'turns:staticauth.openrelay.metered.ca:443?transport=tcp',
-      ],
-      username: 'openrelayproject',
-      credential: 'openrelayprojectsecret',
-    },
   ],
   iceCandidatePoolSize: 10,
 };
+
+let cachedIceServers: RTCConfiguration | null = null;
+let lastIceFetchTime = 0;
+
+export async function getLiveIceServers(): Promise<RTCConfiguration> {
+  const now = Date.now();
+  if (cachedIceServers && now - lastIceFetchTime < 3600000) {
+    return cachedIceServers;
+  }
+
+  // 1. Check Firestore system/webrtc for dynamically configured TURN server
+  try {
+    const sysSnap = await getDoc(doc(db, 'system', 'webrtc'));
+    if (sysSnap.exists()) {
+      const data = sysSnap.data();
+      if (Array.isArray(data.iceServers) && data.iceServers.length > 0) {
+        cachedIceServers = { iceServers: data.iceServers, iceCandidatePoolSize: 10 };
+        lastIceFetchTime = now;
+        return cachedIceServers;
+      }
+      if (data.meteredApiKey) {
+        const domain = data.meteredDomain || 'service';
+        const res = await fetch(`https://${domain}.metered.ca/api/v1/turn/credentials?apiKey=${data.meteredApiKey}`);
+        if (res.ok) {
+          const list = await res.json();
+          if (Array.isArray(list) && list.length > 0) {
+            cachedIceServers = { iceServers: list, iceCandidatePoolSize: 10 };
+            lastIceFetchTime = now;
+            return cachedIceServers;
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[CallEngine] Firestore webrtc config check error:', e);
+  }
+
+  // 2. Check backend Vercel API /api/turn-credentials
+  try {
+    const apiUrl = getAbsoluteApiUrl('/api/turn-credentials');
+    const res = await fetch(apiUrl);
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.ok && Array.isArray(data.iceServers) && data.iceServers.length > 0) {
+        cachedIceServers = { iceServers: data.iceServers, iceCandidatePoolSize: 10 };
+        lastIceFetchTime = now;
+        return cachedIceServers;
+      }
+    }
+  } catch (e) {
+    console.warn('[CallEngine] Backend turn-credentials fetch error:', e);
+  }
+
+  cachedIceServers = DEFAULT_ICE_SERVERS;
+  lastIceFetchTime = now;
+  return cachedIceServers;
+}
 
 function enhanceOpusSdp(sdp: string): string {
   if (!sdp) return sdp;
@@ -411,7 +458,8 @@ class CallEngine {
         this.peerConnection.close();
         this.peerConnection = null;
       }
-      this.peerConnection = new RTCPeerConnection(ICE_SERVERS);
+      const iceConfig = await getLiveIceServers();
+      this.peerConnection = new RTCPeerConnection(iceConfig);
       this.candidateQueue = [];
 
       this.peerConnection.oniceconnectionstatechange = () => {
@@ -556,8 +604,20 @@ class CallEngine {
         this.peerConnection.close();
         this.peerConnection = null;
       }
-      this.peerConnection = new RTCPeerConnection(ICE_SERVERS);
+      const iceConfig = await getLiveIceServers();
+      this.peerConnection = new RTCPeerConnection(iceConfig);
       this.candidateQueue = [];
+
+      // Enqueue any candidates already gathered by the caller
+      if (Array.isArray(call.callerCandidates)) {
+        for (const cand of call.callerCandidates) {
+          const candStr = JSON.stringify(cand);
+          if (!this.processedCandidates.has(candStr)) {
+            this.processedCandidates.add(candStr);
+            this.candidateQueue.push(cand);
+          }
+        }
+      }
 
       this.peerConnection.oniceconnectionstatechange = () => {
         const state = this.peerConnection?.iceConnectionState || 'new';
@@ -1182,21 +1242,19 @@ class CallEngine {
         }
 
         // Sync ICE candidates
-        if (this.peerConnection) {
-          const candidates = this.isCaller ? callData.receiverCandidates : callData.callerCandidates;
-          if (Array.isArray(candidates)) {
-            for (const cand of candidates) {
-              const candStr = JSON.stringify(cand);
-              if (!this.processedCandidates.has(candStr)) {
-                this.processedCandidates.add(candStr);
-                if (!this.peerConnection.remoteDescription || !this.peerConnection.remoteDescription.type) {
+        const candidates = this.isCaller ? callData.receiverCandidates : callData.callerCandidates;
+        if (Array.isArray(candidates)) {
+          for (const cand of candidates) {
+            const candStr = JSON.stringify(cand);
+            if (!this.processedCandidates.has(candStr)) {
+              this.processedCandidates.add(candStr);
+              if (!this.peerConnection || !this.peerConnection.remoteDescription || !this.peerConnection.remoteDescription.type) {
+                this.candidateQueue.push(cand);
+              } else {
+                try {
+                  await this.peerConnection.addIceCandidate(new RTCIceCandidate(cand));
+                } catch {
                   this.candidateQueue.push(cand);
-                } else {
-                  try {
-                    await this.peerConnection.addIceCandidate(new RTCIceCandidate(cand));
-                  } catch {
-                    this.candidateQueue.push(cand);
-                  }
                 }
               }
             }

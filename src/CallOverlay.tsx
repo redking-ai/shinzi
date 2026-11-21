@@ -503,9 +503,11 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
     el.setAttribute('playsinline', 'true');
     el.setAttribute('webkit-playsinline', 'true');
     if (stream) {
-      const checkAndTriggerReady = () => {
-        if (el.videoWidth > 0 && el.readyState >= 2) {
-          if (onReady) onReady();
+      let triggered = false;
+      const trigger = () => {
+        if (!triggered && onReady) {
+          triggered = true;
+          onReady();
         }
       };
 
@@ -518,12 +520,25 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
 
       el.onloadedmetadata = () => {
         playVideo();
-        checkAndTriggerReady();
+        trigger();
       };
-      el.onloadeddata = checkAndTriggerReady;
-      el.onplaying = checkAndTriggerReady;
-      el.ontimeupdate = checkAndTriggerReady;
+      el.onloadeddata = trigger;
+      el.oncanplay = trigger;
+      el.onplaying = trigger;
+      el.ontimeupdate = () => {
+        if (el.videoWidth > 0) trigger();
+      };
       playVideo();
+
+      // Fallback: If video tracks are live, trigger ready after brief frame decode delay
+      const hasLiveTrack = stream.getVideoTracks().some((t) => t.readyState === 'live');
+      if (hasLiveTrack) {
+        setTimeout(() => {
+          playVideo();
+          trigger();
+        }, 150);
+        setTimeout(trigger, 400);
+      }
     }
   };
 
@@ -819,7 +834,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
                   muted
                   className="shc-video-feed"
                   style={{
-                    display: screenShareActive ? 'block' : 'none',
+                    visibility: screenShareActive ? 'visible' : 'hidden',
                     opacity: screenShareActive ? 1 : 0,
                     transition: 'opacity 0.25s ease',
                     zIndex: 2,
@@ -845,7 +860,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
                   muted
                   className="shc-video-feed"
                   style={{
-                    display: remoteVideoActive ? 'block' : 'none',
+                    visibility: remoteVideoActive ? 'visible' : 'hidden',
                     opacity: remoteVideoActive ? 1 : 0,
                     transition: 'opacity 0.25s ease',
                     zIndex: 2,
@@ -915,7 +930,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
                   muted
                   className="shc-video-feed"
                   style={{
-                    display: localVideoActive ? 'block' : 'none',
+                    visibility: localVideoActive ? 'visible' : 'hidden',
                     opacity: localVideoActive ? 1 : 0,
                     transition: 'opacity 0.25s ease',
                     zIndex: 2,
