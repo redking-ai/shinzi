@@ -3,6 +3,7 @@ import './Settings.css';
 import { auth } from './firebaseConfig';
 import { signOut } from 'firebase/auth';
 import TextStylesModal from './TextStylesModal';
+import RestrictedAccounts from './RestrictedAccounts';
 import {
   ArrowLeft,
   User,
@@ -82,6 +83,7 @@ export default function Settings({ onBack }: SettingsProps) {
     }
   });
   const [showTextStyles, setShowTextStyles] = useState(false);
+  const [showRestrictedAccounts, setShowRestrictedAccounts] = useState(false);
   const [toastText, setToastText] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
   const [deviceName, setDeviceName] = useState('Samsung A20');
@@ -186,6 +188,10 @@ export default function Settings({ onBack }: SettingsProps) {
     }
   };
 
+  if (showRestrictedAccounts) {
+    return <RestrictedAccounts onBack={() => setShowRestrictedAccounts(false)} />;
+  }
+
   return (
     <div className="sh-settings-page">
       {/* Top Header */}
@@ -287,7 +293,7 @@ export default function Settings({ onBack }: SettingsProps) {
             <button
               type="button"
               className="sh-settings-item"
-              onClick={() => showToast('Restricted accounts')}
+              onClick={() => setShowRestrictedAccounts(true)}
             >
               <div className="sh-settings-item-left">
                 <span className="sh-settings-item-icon">

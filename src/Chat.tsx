@@ -14,6 +14,8 @@ import {
   addDoc,
   arrayUnion,
   collection,
+  deleteDoc,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -64,6 +66,7 @@ import {
   Trash2,
   User,
   UserPlus,
+  UserX,
   Users,
   Video,
   X,
@@ -1939,6 +1942,46 @@ export default function Chat({ onNavigate }: ChatProps) {
     return otherMemberId(selectedConversation);
   }, [selectedConversation, otherMemberId]);
 
+  const [isBlockedByMe, setIsBlockedByMe] = useState(false);
+
+  useEffect(() => {
+    if (!uid || !activeDmTargetUid) {
+      setIsBlockedByMe(false);
+      return;
+    }
+
+    const unsubBlock = onSnapshot(
+      doc(db, 'users', uid, 'blocked', activeDmTargetUid),
+      (snap) => {
+        setIsBlockedByMe(snap.exists());
+      },
+      () => setIsBlockedByMe(false)
+    );
+
+    return () => unsubBlock();
+  }, [uid, activeDmTargetUid]);
+
+  const conversationBlockedByMe = Boolean(uid && selectedConversation?.blockedBy?.[uid]);
+  const conversationBlockedByThem = Boolean(activeDmTargetUid && selectedConversation?.blockedBy?.[activeDmTargetUid]);
+  const effectiveBlockedByMe = isBlockedByMe || conversationBlockedByMe;
+  const effectiveBlockedByThem = conversationBlockedByThem;
+
+  const handleUnblockDirectUser = async () => {
+    if (!uid || !activeDmTargetUid) return;
+    try {
+      await deleteDoc(doc(db, 'users', uid, 'blocked', activeDmTargetUid));
+      if (selectedConversation?.id) {
+        await updateDoc(doc(db, 'conversations', selectedConversation.id), {
+          [`blockedBy.${uid}`]: deleteField(),
+        }).catch(() => {});
+      }
+      setIsBlockedByMe(false);
+      notify('User Unblocked', 'You can now message this user again.');
+    } catch (err) {
+      console.warn('[Chat] Failed to unblock user:', err);
+    }
+  };
+
   const [liveTargetProfile, setLiveTargetProfile] = useState<Rec | null>(null);
   const [userLiveAvatars, setUserLiveAvatars] = useState<Record<string, string>>({});
   const [userLiveProfiles, setUserLiveProfiles] = useState<Record<string, Rec>>(() => {
@@ -3101,6 +3144,10 @@ const handleSearchMessage = async (target: Rec) => {
 
   const sendMessage = async () => {
     if (!uid || !selected?.id) return;
+    if (effectiveBlockedByMe || effectiveBlockedByThem) {
+      notify('Blocked', 'You cannot message this user while blocked.');
+      return;
+    }
     if (stagedMedia.length > 0 && sendingRef.current) return;
 
     if (editingMessage) {
@@ -4176,6 +4223,10 @@ const handleSearchMessage = async (target: Rec) => {
     if (!uid || !selected?.id) return;
     const activeConv = selectedConversation || selected;
     if (!activeConv) return;
+    if (effectiveBlockedByMe || effectiveBlockedByThem) {
+      notify('Blocked', 'You cannot message this user while blocked.');
+      return;
+    }
 
     sendingRef.current = true;
     setSending(true);
@@ -4614,6 +4665,10 @@ const handleSearchMessage = async (target: Rec) => {
     if (!uid || !selected?.id) return;
     const activeConv = selectedConversation || selected;
     if (!activeConv) return;
+    if (effectiveBlockedByMe || effectiveBlockedByThem) {
+      notify('Blocked', 'You cannot message this user while blocked.');
+      return;
+    }
 
     sendingRef.current = true;
     setSending(true);
@@ -4804,6 +4859,10 @@ const handleSearchMessage = async (target: Rec) => {
 
     const recorder = mediaRecorderRef.current;
     if (!recorder) return;
+    if (effectiveBlockedByMe || effectiveBlockedByThem) {
+      notify('Blocked', 'You cannot message this user while blocked.');
+      return;
+    }
 
     const audioBlob = await new Promise<Blob>((resolve) => {
       recorder.onstop = () => {
@@ -6575,100 +6634,143 @@ const handleSearchMessage = async (target: Rec) => {
               isKeyboardOpen ? 'shc-composer shc-composer-kb' : 'shc-composer'
             }
           >
-            <div className="shc-composer-input-box">
-              <button
-                type="button"
-                className="shc-composer-icon-btn shc-composer-attach-btn"
-                onClick={() => setShowAttach(true)}
-                aria-label="Attach"
-              >
-                <Plus size={22} />
-              </button>
-
-              <div className={`shc-composer-text-wrap ${hasMentions ? 'shc-composer-has-mentions' : ''}`}>
-                {hasMentions && (
-                  <div ref={backdropRef} className="shc-composer-backdrop" aria-hidden="true">
-                    {renderMentionColoredText(messageText)}
-                  </div>
-                )}
-                <textarea
-                  ref={inputRef}
-                  value={messageText}
-                  onChange={(e) => {
-                    handleMessageChange(e.target.value, e.target);
-                    syncBackdropScroll();
-                  }}
-                  onScroll={syncBackdropScroll}
-                  onSelect={(e) => {
-                    const target = e.target as HTMLTextAreaElement;
-                    const ctx = getMentionContext(target.value, target.selectionStart ?? target.value.length);
-                    if (ctx) {
-                      setMentionQuery(ctx.query);
-                      setMentionSelectedIndex(0);
-                    } else {
-                      setMentionQuery(null);
+            {effectiveBlockedByMe ? (
+              <div className="shc-blocked-composer-box">
+                <div className="shc-blocked-avatar-wrap">
+                  <img
+                    src={
+                      getAbsoluteApiUrl(
+                        liveTargetProfile?.photoURL ||
+                        userLiveProfiles[activeDmTargetUid || '']?.photoURL ||
+                        selectedConversation?.memberProfiles?.[activeDmTargetUid || '']?.photoURL
+                      ) || '/icon-192.png'
                     }
-                  }}
-                  placeholder={composerPlaceholder}
-                  maxLength={MAX_MESSAGE_LENGTH}
-                  onKeyDown={onComposerKey}
-                  rows={1}
-                  className="shc-composer-textarea"
-                  onFocus={() => {
-                    // Force lock: only auto-scroll on focus if user is already near bottom
-                    if (isNearBottomRef.current) {
-                      window.requestAnimationFrame(() => {
-                        if (scrollRef.current) {
-                          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-                        }
-                      });
-                    }
-                  }}
-                />
+                    alt=""
+                    className="shc-blocked-avatar"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = '/icon-192.png';
+                    }}
+                  />
+                </div>
+                <div className="shc-blocked-info">
+                  <div className="shc-blocked-title">You blocked this user. You can't message.</div>
+                  <div className="shc-blocked-subtitle">Tap Unblock to message again.</div>
+                </div>
+                <button
+                  type="button"
+                  className="shc-unblock-btn"
+                  onClick={() => void handleUnblockDirectUser()}
+                >
+                  <UserX size={18} />
+                  <span>Unblock</span>
+                </button>
               </div>
-
-              <button
-                type="button"
-                className="shc-composer-icon-btn shc-composer-emoji-btn"
-                onClick={() => {
-                  setActionMessage(null);
-                  setShowEmojiPicker((p) => !p);
-                }}
-                aria-label="Toggle emoji picker"
-              >
-                <Smile size={21} />
-              </button>
-
-              {!messageText.trim() && stagedMedia.length === 0 ? (
+            ) : effectiveBlockedByThem ? (
+              <div className="shc-blocked-composer-box">
+                <div className="shc-blocked-avatar-wrap">
+                  <Ban size={24} color="#f23f43" />
+                </div>
+                <div className="shc-blocked-info">
+                  <div className="shc-blocked-title">You cannot message this user.</div>
+                  <div className="shc-blocked-subtitle">This conversation is unavailable.</div>
+                </div>
+              </div>
+            ) : (
+              <div className="shc-composer-input-box">
                 <button
                   type="button"
-                  className={`shc-composer-icon-btn shc-composer-voice-btn ${recording ? 'shc-rec-on' : ''}`}
-                  onClick={toggleRecordingUI}
-                  aria-label={recording ? 'Stop recording' : 'Record voice message'}
+                  className="shc-composer-icon-btn shc-composer-attach-btn"
+                  onClick={() => setShowAttach(true)}
+                  aria-label="Attach"
                 >
-                  {recording ? <Square size={20} /> : <Mic size={21} />}
+                  <Plus size={22} />
                 </button>
-              ) : (
+
+                <div className={`shc-composer-text-wrap ${hasMentions ? 'shc-composer-has-mentions' : ''}`}>
+                  {hasMentions && (
+                    <div ref={backdropRef} className="shc-composer-backdrop" aria-hidden="true">
+                      {renderMentionColoredText(messageText)}
+                    </div>
+                  )}
+                  <textarea
+                    ref={inputRef}
+                    value={messageText}
+                    onChange={(e) => {
+                      handleMessageChange(e.target.value, e.target);
+                      syncBackdropScroll();
+                    }}
+                    onScroll={syncBackdropScroll}
+                    onSelect={(e) => {
+                      const target = e.target as HTMLTextAreaElement;
+                      const ctx = getMentionContext(target.value, target.selectionStart ?? target.value.length);
+                      if (ctx) {
+                        setMentionQuery(ctx.query);
+                        setMentionSelectedIndex(0);
+                      } else {
+                        setMentionQuery(null);
+                      }
+                    }}
+                    placeholder={composerPlaceholder}
+                    maxLength={MAX_MESSAGE_LENGTH}
+                    onKeyDown={onComposerKey}
+                    rows={1}
+                    className="shc-composer-textarea"
+                    onFocus={() => {
+                      // Force lock: only auto-scroll on focus if user is already near bottom
+                      if (isNearBottomRef.current) {
+                        window.requestAnimationFrame(() => {
+                          if (scrollRef.current) {
+                            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+                          }
+                        });
+                      }
+                    }}
+                  />
+                </div>
+
                 <button
                   type="button"
-                  className="shc-composer-icon-btn shc-composer-send-btn shc-send-active"
-                  disabled={sending || (Boolean(targetUid) && dmRequestState === 'incoming')}
-                  onPointerDown={(e) => {
-                    // Crucial for mobile virtual keyboards:
-                    // Calling preventDefault on pointerdown stops the button tap from blurring the textarea,
-                    // keeping the mobile keyboard open.
-                    e.preventDefault();
+                  className="shc-composer-icon-btn shc-composer-emoji-btn"
+                  onClick={() => {
+                    setActionMessage(null);
+                    setShowEmojiPicker((p) => !p);
                   }}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                  }}
-                  onClick={() => void sendMessage()}
-                  aria-label="Send"
+                  aria-label="Toggle emoji picker"
                 >
-                  {sending ? <span className="shc-spinner shc-spinner-sm" /> : <Send size={20} />}
+                  <Smile size={21} />
                 </button>
-              )}
-            </div>
+
+                {!messageText.trim() && stagedMedia.length === 0 ? (
+                  <button
+                    type="button"
+                    className={`shc-composer-icon-btn shc-composer-voice-btn ${recording ? 'shc-rec-on' : ''}`}
+                    onClick={toggleRecordingUI}
+                    aria-label={recording ? 'Stop recording' : 'Record voice message'}
+                  >
+                    {recording ? <Square size={20} /> : <Mic size={21} />}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="shc-composer-icon-btn shc-composer-send-btn shc-send-active"
+                    disabled={sending || (Boolean(targetUid) && dmRequestState === 'incoming')}
+                    onPointerDown={(e) => {
+                      // Crucial for mobile virtual keyboards:
+                      // Calling preventDefault on pointerdown stops the button tap from blurring the textarea,
+                      // keeping the mobile keyboard open.
+                      e.preventDefault();
+                    }}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                    }}
+                    onClick={() => void sendMessage()}
+                    aria-label="Send"
+                  >
+                    {sending ? <span className="shc-spinner shc-spinner-sm" /> : <Send size={20} />}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           {messageText.length > MAX_MESSAGE_LENGTH * 0.85 && (

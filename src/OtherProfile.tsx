@@ -2,14 +2,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   onSnapshot,
   runTransaction,
   serverTimestamp,
   setDoc,
+  updateDoc,
 } from 'firebase/firestore';
-import { ArrowLeft, Ban, Clock3, Ellipsis, MessageCircle, Phone, UserPlus, UserRound, VolumeX } from 'lucide-react';
+import { ArrowLeft, Ban, Clock3, Ellipsis, Info, MessageCircle, MessageSquare, Phone, UserPlus, UserRound, UserX, VolumeX } from 'lucide-react';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { auth, db } from './firebaseConfig';
 import { getAbsoluteApiUrl } from './apiUtils';
@@ -164,6 +166,7 @@ export default function OtherProfile({
     muted: false,
   });
 
+  const [showBlockModal, setShowBlockModal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -478,11 +481,36 @@ export default function OtherProfile({
 
       if (active) {
         await deleteDoc(relationshipRef);
+        if (targetUid && currentUser?.uid) {
+          const dmId1 = `dm_${currentUser.uid}_${targetUid}`;
+          const dmId2 = `dm_${targetUid}_${currentUser.uid}`;
+          void updateDoc(doc(db, 'conversations', dmId1), {
+            [`blockedBy.${currentUser.uid}`]: deleteField(),
+          }).catch(() => {});
+          void updateDoc(doc(db, 'conversations', dmId2), {
+            [`blockedBy.${currentUser.uid}`]: deleteField(),
+          }).catch(() => {});
+        }
       } else {
         await setDoc(relationshipRef, {
           uid: targetUid,
-          createdAt: serverTimestamp(),
+          targetUid,
+          displayName: userData?.displayName || userData?.username || 'User',
+          username: userData?.username || '',
+          photoURL: userData?.photoURL || avatar || '',
+          profileAssetId: userData?.profileAssetId || null,
+          createdAt: Date.now(),
         });
+        if (targetUid && currentUser?.uid) {
+          const dmId1 = `dm_${currentUser.uid}_${targetUid}`;
+          const dmId2 = `dm_${targetUid}_${currentUser.uid}`;
+          void updateDoc(doc(db, 'conversations', dmId1), {
+            [`blockedBy.${currentUser.uid}`]: true,
+          }).catch(() => {});
+          void updateDoc(doc(db, 'conversations', dmId2), {
+            [`blockedBy.${currentUser.uid}`]: true,
+          }).catch(() => {});
+        }
       }
 
       setRelationship((previous) => ({
@@ -704,8 +732,20 @@ export default function OtherProfile({
               <VolumeX size={16} aria-hidden="true" />
               <span>{relationship.muted ? 'Unmute user' : 'Mute user'}</span>
             </button>
-            <button role="menuitem" className="sh-danger-action" disabled={busy || !currentUser} onClick={() => void toggleRelationship('blocked')}>
-              <Ban size={16} aria-hidden="true" />
+            <button
+              role="menuitem"
+              className="sh-danger-action"
+              disabled={busy || !currentUser}
+              onClick={() => {
+                setMenuOpen(false);
+                if (relationship.blocked) {
+                  void toggleRelationship('blocked');
+                } else {
+                  setShowBlockModal(true);
+                }
+              }}
+            >
+              {relationship.blocked ? <UserX size={16} aria-hidden="true" /> : <Ban size={16} aria-hidden="true" />}
               <span>{relationship.blocked ? 'Unblock user' : 'Block user'}</span>
             </button>
           </div>
@@ -859,24 +899,99 @@ export default function OtherProfile({
           </div>
         </div>
 
-        <div className="sh-profile-footer-actions">
-          <span
-            className={
-              relationship.muted ? 'sh-status-on' : ''
-            }
-          >
-            {relationship.muted ? 'Muted' : ''}
-          </span>
-
-          <span
-            className={
-              relationship.blocked ? 'sh-status-danger' : ''
-            }
-          >
-            {relationship.blocked ? 'Blocked' : ''}
-          </span>
-        </div>
+        {relationship.muted ? (
+          <div className="sh-profile-footer-actions">
+            <span className="sh-status-on">Muted</span>
+          </div>
+        ) : null}
       </section>
+
+      {/* Block Confirmation Bottom Sheet (matching IMG-20261122-WA0037) */}
+      {showBlockModal && (
+        <div className="sh-block-modal-backdrop" onClick={() => setShowBlockModal(false)}>
+          <div
+            className="sh-block-modal-sheet"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="sh-block-modal-handle" />
+
+            <div className="sh-block-modal-avatar-container">
+              <div className="sh-block-modal-avatar-wrap">
+                <img
+                  src={avatar || '/icon-192.png'}
+                  alt=""
+                  className="sh-block-modal-avatar"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = '/icon-192.png';
+                  }}
+                />
+                <div className="sh-block-modal-badge">
+                  <Ban size={15} color="#ffffff" />
+                </div>
+              </div>
+            </div>
+
+            <h2 className="sh-block-modal-title">
+              Block {userData?.displayName || userData?.username || 'user'}?
+            </h2>
+            <p className="sh-block-modal-subtitle">
+              It will stop direct messages and less accesses
+            </p>
+
+            <div className="sh-block-modal-info-box">
+              <div className="sh-block-modal-row">
+                <div className="sh-block-modal-icon-cell">
+                  <MessageSquare size={19} color="#949ba4" />
+                </div>
+                <div className="sh-block-modal-text-cell">
+                  Stop direct message completely
+                </div>
+              </div>
+
+              <div className="sh-block-modal-row">
+                <div className="sh-block-modal-icon-cell">
+                  <Ban size={19} color="#949ba4" />
+                </div>
+                <div className="sh-block-modal-text-cell">
+                  Stop suggesting users and activities
+                </div>
+              </div>
+
+              <div className="sh-block-modal-row">
+                <div className="sh-block-modal-icon-cell">
+                  <Info size={19} color="#949ba4" />
+                </div>
+                <div className="sh-block-modal-text-cell">
+                  The user still can show your profile and old chats
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="sh-block-modal-confirm-btn"
+              disabled={busy}
+              onClick={() => {
+                setShowBlockModal(false);
+                void toggleRelationship('blocked');
+              }}
+            >
+              <UserX size={19} />
+              <span>Block</span>
+            </button>
+
+            <button
+              type="button"
+              className="sh-block-modal-cancel-btn"
+              onClick={() => setShowBlockModal(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

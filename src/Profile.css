@@ -1677,19 +1677,7 @@
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
 }
 
-/* Top bump on thought bubble */
-.sh-status-bubble::before {
-  content: "";
-  position: absolute;
-  left: 12px;
-  top: -5px;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #2b2d31;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  border-left: 1px solid rgba(255, 255, 255, 0.1);
-}
+/* Top bump removed per Screenshot_20261122-210447_Shinzi */
 
 .sh-status-plus-circle {
   width: 18px;
@@ -2094,3 +2082,181 @@
   transform: scale(0.98);
 }
 
+
+/* ===== Block User Confirmation Bottom Sheet (matching IMG-20261122-WA0037) ===== */
+.sh-block-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  z-index: 10001;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+@media (min-width: 600px) {
+  .sh-block-modal-backdrop {
+    align-items: center;
+  }
+}
+
+.sh-block-modal-sheet {
+  width: 100%;
+  max-width: 440px;
+  background: #1e1f22;
+  border-radius: 20px 20px 0 0;
+  padding: 16px 20px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.6);
+  animation: shSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (min-width: 600px) {
+  .sh-block-modal-sheet {
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+}
+
+.sh-block-modal-handle {
+  width: 40px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  margin-bottom: 16px;
+}
+
+.sh-block-modal-avatar-container {
+  position: relative;
+  margin-bottom: 14px;
+}
+
+.sh-block-modal-avatar-wrap {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: #2b2d31;
+  overflow: visible;
+  position: relative;
+}
+
+.sh-block-modal-avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #1e1f22;
+}
+
+.sh-block-modal-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #4e5058;
+  border: 2.5px solid #1e1f22;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sh-block-modal-title {
+  font-size: 19px;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0 0 6px 0;
+  text-align: center;
+}
+
+.sh-block-modal-subtitle {
+  font-size: 13.5px;
+  color: #949ba4;
+  margin: 0 0 18px 0;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.sh-block-modal-info-box {
+  width: 100%;
+  background: #2b2d31;
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sh-block-modal-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sh-block-modal-icon-cell {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sh-block-modal-text-cell {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #dbdee1;
+  line-height: 1.35;
+}
+
+.sh-block-modal-confirm-btn {
+  width: 100%;
+  height: 44px;
+  border-radius: 10px;
+  background: #da373c;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.sh-block-modal-confirm-btn:hover {
+  background: #c02e33;
+}
+
+.sh-block-modal-confirm-btn:active {
+  transform: scale(0.98);
+}
+
+.sh-block-modal-cancel-btn {
+  width: 100%;
+  height: 38px;
+  background: transparent;
+  color: #949ba4;
+  font-size: 14px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  margin-top: 6px;
+  transition: color 0.15s ease;
+}
+
+.sh-block-modal-cancel-btn:hover {
+  color: #ffffff;
+}

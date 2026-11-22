@@ -4124,3 +4124,74 @@ button {
   border: 1px solid #282828 !important;
   cursor: not-allowed !important;
 }
+
+/* ===== Blocked Composer Box in Direct Message ===== */
+.shc-blocked-composer-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 16px 20px;
+  background: #1e1f22;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.shc-blocked-avatar-wrap {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #2b2d31;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 2px;
+}
+
+.shc-blocked-avatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.shc-blocked-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #f2f3f5;
+  margin: 0;
+}
+
+.shc-blocked-subtitle {
+  font-size: 12.5px;
+  color: #949ba4;
+  margin: 2px 0 0;
+}
+
+.shc-unblock-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #4e5058;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 20px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 6px;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.shc-unblock-btn:hover {
+  background: #6d6f78;
+}
+
+.shc-unblock-btn:active {
+  transform: scale(0.97);
+}
