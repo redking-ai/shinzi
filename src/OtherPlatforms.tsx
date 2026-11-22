@@ -8,6 +8,10 @@ import {
   updatePlatformToggles,
   disconnectPlatform,
   savePlatformConnection,
+  getSpotifyAuthUrl,
+  fetchSpotifyProfile,
+  fetchSpotifyCurrentlyPlaying,
+  updateSpotifyPresence,
 } from './spotifyService';
 import SpotifyConfirmationModal from './SpotifyConfirmationModal';
 
@@ -23,6 +27,65 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
   const [authConnecting, setAuthConnecting] = useState(false);
 
   const currentUser = auth.currentUser;
+
+  // Listen for hash token after Spotify OAuth redirect (e.g. #access_token=...)
+  useEffect(() => {
+    if (!currentUser) return;
+
+    if (window.location.hash && window.location.hash.includes('access_token')) {
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const accessToken = hashParams.get('access_token');
+      if (accessToken) {
+        // Clear hash from url
+        window.history.replaceState(null, '', window.location.pathname);
+
+        // Fetch user profile and save connection
+        (async () => {
+          try {
+            const profile = await fetchSpotifyProfile(accessToken);
+            const currentPlaying = await fetchSpotifyCurrentlyPlaying(accessToken);
+
+            const newConn: PlatformConnection = {
+              platformId: 'spotify',
+              username: profile.displayName,
+              displayName: profile.displayName,
+              profileUrl: profile.profileUrl,
+              accessToken,
+              displayOnProfile: true,
+              displayAsStatus: true,
+              connectedAt: Date.now(),
+              presence: currentPlaying,
+            };
+
+            await savePlatformConnection(currentUser.uid, newConn);
+            setShowAuthConfirm(true);
+          } catch (e) {
+            console.error('[OtherPlatforms] Error saving Spotify OAuth token:', e);
+          }
+        })();
+      }
+    }
+  }, [currentUser]);
+
+  // Periodic polling for active Spotify track if accessToken is present
+  useEffect(() => {
+    if (!currentUser) return;
+    const spotifyConn = connections.spotify;
+    if (!spotifyConn || !spotifyConn.accessToken) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const presence = await fetchSpotifyCurrentlyPlaying(spotifyConn.accessToken!);
+        if (presence) {
+          await updateSpotifyPresence(currentUser.uid, presence);
+        }
+      } catch (err) {
+        console.warn('[OtherPlatforms] Polling Spotify presence error:', err);
+      }
+    }, 15000); // every 15s
+
+    return () => clearInterval(pollInterval);
+  }, [currentUser, connections.spotify]);
 
   useEffect(() => {
     if (!currentUser) {
@@ -66,35 +129,12 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
     if (!currentUser) return;
     setAuthConnecting(true);
 
-    // Simulate authenticating Spotify (or using web prompt/dialog)
-    const mockSpotifyUser = 'Spotify Lover';
-    const mockConnection: PlatformConnection = {
-      platformId: 'spotify',
-      username: 'spotify_user',
-      displayName: mockSpotifyUser,
-      profileUrl: 'https://open.spotify.com/user/spotify',
-      displayOnProfile: true,
-      displayAsStatus: true,
-      connectedAt: Date.now(),
-      presence: {
-        isPlaying: true,
-        trackName: 'Noche Eterna - Ultra Slowed',
-        artistName: 'Flame Runner, RVNGE',
-        albumArtUrl: 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=150&auto=format&fit=crop&q=80',
-        durationMs: 109000, // 01:49
-        progressMs: 45000,  // 00:45
-        trackUrl: 'https://open.spotify.com',
-        updatedAt: Date.now(),
-      },
-    };
-
     try {
-      await savePlatformConnection(currentUser.uid, mockConnection);
-      setShowAddSheet(false);
-      setShowAuthConfirm(true);
+      // Direct real OAuth redirect to Spotify
+      const authUrl = getSpotifyAuthUrl();
+      window.location.href = authUrl;
     } catch (err) {
-      console.error('Failed to connect Spotify:', err);
-    } finally {
+      console.error('Failed to redirect to Spotify:', err);
       setAuthConnecting(false);
     }
   };

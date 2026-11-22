@@ -17,25 +17,83 @@ export interface PlatformConnection {
   username: string;
   displayName: string;
   profileUrl: string;
+  accessToken?: string;
   displayOnProfile: boolean;
   displayAsStatus: boolean;
   connectedAt: number;
   presence?: SpotifyPresenceData | null;
 }
 
-// Client-side Spotify Integration and Demo Simulation Support
-const SPOTIFY_CLIENT_ID = '3ec1f3c4e5e23310a5b3ff5c'; // fallback or user-provided clientId
+export const SPOTIFY_CLIENT_ID = 'fa5ce3a5bd7c4926863809cf6dab28d8';
 
-export function getSpotifyAuthUrl(redirectUri: string): string {
+export function getSpotifyAuthUrl(): string {
+  const redirectUri = window.location.origin;
   const scopes = [
     'user-read-currently-playing',
     'user-read-playback-state',
     'user-read-recently-played',
+    'user-read-private',
+    'user-read-email',
   ].join('%20');
   
   return `https://accounts.spotify.com/authorize?client_id=${SPOTIFY_CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(
     redirectUri
   )}&scope=${scopes}&show_dialog=true`;
+}
+
+export async function fetchSpotifyProfile(accessToken: string): Promise<{ displayName: string; profileUrl: string }> {
+  try {
+    const res = await fetch('https://api.spotify.com/v1/me', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        displayName: data.display_name || data.id || 'Spotify User',
+        profileUrl: data.external_urls?.spotify || 'https://open.spotify.com',
+      };
+    }
+  } catch (err) {
+    console.warn('[spotifyService] Failed to fetch Spotify profile:', err);
+  }
+  return { displayName: 'Spotify User', profileUrl: 'https://open.spotify.com' };
+}
+
+export async function fetchSpotifyCurrentlyPlaying(accessToken: string): Promise<SpotifyPresenceData | null> {
+  try {
+    const res = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (res.status === 204 || res.status === 200) {
+      if (res.status === 204) {
+        return {
+          isPlaying: false,
+          trackName: '',
+          artistName: '',
+          albumArtUrl: '',
+          durationMs: 0,
+          progressMs: 0,
+          trackUrl: '',
+          updatedAt: Date.now(),
+        };
+      }
+      const data = await res.json();
+      if (!data || !data.item) return null;
+      return {
+        isPlaying: Boolean(data.is_playing),
+        trackName: data.item.name || '',
+        artistName: data.item.artists?.map((a: any) => a.name).join(', ') || '',
+        albumArtUrl: data.item.album?.images?.[0]?.url || '',
+        durationMs: data.item.duration_ms || 0,
+        progressMs: data.progress_ms || 0,
+        trackUrl: data.item.external_urls?.spotify || '',
+        updatedAt: Date.now(),
+      };
+    }
+  } catch (err) {
+    console.warn('[spotifyService] Error fetching currently playing:', err);
+  }
+  return null;
 }
 
 export async function getUserConnections(uid: string): Promise<Record<string, PlatformConnection>> {
