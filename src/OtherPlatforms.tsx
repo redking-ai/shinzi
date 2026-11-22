@@ -42,7 +42,7 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
 
       (async () => {
         try {
-          const redirectUri = window.location.origin;
+          const redirectUri = getCleanRedirectUri();
           const { accessToken } = await exchangeCodeForToken(SPOTIFY_CLIENT_ID, code, redirectUri);
           if (accessToken) {
             const profile = await fetchSpotifyProfile(accessToken);
@@ -164,12 +164,26 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
     }
   };
 
+  const getCleanRedirectUri = () => {
+    // If running in Capacitor or on vercel, ensure it matches Spotify configuration
+    const origin = window.location.origin;
+    if (origin.includes('vercel.app')) {
+      return 'https://shinzi.vercel.app/';
+    }
+    if (origin.includes('web.app')) {
+      return 'https://shinzi-fba29.web.app';
+    }
+    if (origin.startsWith('capacitor://') || origin.startsWith('http://localhost')) {
+      return 'capacitor://localhost';
+    }
+    return `${origin}/`;
+  };
   const handleConnectSpotify = async () => {
     if (!currentUser) return;
     setAuthConnecting(true);
 
     try {
-      const redirectUri = window.location.origin;
+      const redirectUri = getCleanRedirectUri();
       await redirectToSpotifyAuthorize(SPOTIFY_CLIENT_ID, redirectUri);
     } catch (err) {
       console.error('Failed to redirect to Spotify:', err);
