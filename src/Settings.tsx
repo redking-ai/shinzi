@@ -4,6 +4,7 @@ import { auth } from './firebaseConfig';
 import { signOut } from 'firebase/auth';
 import TextStylesModal from './TextStylesModal';
 import RestrictedAccounts from './RestrictedAccounts';
+import OtherPlatforms from './OtherPlatforms';
 import {
   ArrowLeft,
   User,
@@ -84,6 +85,7 @@ export default function Settings({ onBack }: SettingsProps) {
   });
   const [showTextStyles, setShowTextStyles] = useState(false);
   const [showRestrictedAccounts, setShowRestrictedAccounts] = useState(false);
+  const [showOtherPlatforms, setShowOtherPlatforms] = useState(false);
   const [toastText, setToastText] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
   const [deviceName, setDeviceName] = useState('Samsung A20');
@@ -192,6 +194,10 @@ export default function Settings({ onBack }: SettingsProps) {
     return <RestrictedAccounts onBack={() => setShowRestrictedAccounts(false)} />;
   }
 
+  if (showOtherPlatforms) {
+    return <OtherPlatforms onBack={() => setShowOtherPlatforms(false)} />;
+  }
+
   return (
     <div className="sh-settings-page">
       {/* Top Header */}
@@ -276,7 +282,7 @@ export default function Settings({ onBack }: SettingsProps) {
             <button
               type="button"
               className="sh-settings-item"
-              onClick={() => showToast('Other platforms')}
+              onClick={() => setShowOtherPlatforms(true)}
             >
               <div className="sh-settings-item-left">
                 <span className="sh-settings-item-icon">

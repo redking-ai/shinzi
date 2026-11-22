@@ -48,6 +48,7 @@ import {
   ExternalLink,
   Flag,
   Gamepad2,
+  Headphones,
   Image as ImageIcon,
   MessageCircle,
   MessagesSquare,
@@ -76,6 +77,7 @@ import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import type { CategoryButtonRenderProps } from 'emoji-picker-react';
 import { auth, db } from './firebaseConfig';
 import { getAbsoluteApiUrl } from './apiUtils';
+import { subscribeUserConnections, PlatformConnection } from './spotifyService';
 import { useDriveStore } from './driveStore';
 import { navigateTo as navigateToUrl, setCachedProfile } from './profileCache';
 import {
@@ -1984,6 +1986,18 @@ export default function Chat({ onNavigate }: ChatProps) {
   };
 
   const [liveTargetProfile, setLiveTargetProfile] = useState<Rec | null>(null);
+  const [activeDmConnections, setActiveDmConnections] = useState<Record<string, PlatformConnection>>({});
+
+  useEffect(() => {
+    if (!activeDmTargetUid) {
+      setActiveDmConnections({});
+      return;
+    }
+    const unsub = subscribeUserConnections(activeDmTargetUid, (data) => {
+      setActiveDmConnections(data);
+    });
+    return () => unsub();
+  }, [activeDmTargetUid]);
   const [userLiveAvatars, setUserLiveAvatars] = useState<Record<string, string>>({});
   const [userLiveProfiles, setUserLiveProfiles] = useState<Record<string, Rec>>(() => {
     const initial: Record<string, Rec> = {};
@@ -6350,6 +6364,15 @@ const handleSearchMessage = async (target: Rec) => {
                 </span>
                 <ChevronRight size={16} aria-hidden="true" />
               </strong>
+              {/* If listening to Spotify and displayAsStatus is on: show (headphone icon) listening to Spotify in green (IMG-20261123-WA0004) */}
+              {!isGroup &&
+                activeDmConnections.spotify?.displayAsStatus &&
+                activeDmConnections.spotify.presence?.isPlaying && (
+                  <span className="shc-chat-status-listening">
+                    <Headphones size={13} strokeWidth={2.2} />
+                    <span>Listening to Spotify</span>
+                  </span>
+                )}
             </button>
           ) : (
             <div className="shc-chat-title">

@@ -20,6 +20,9 @@ import {
 import { auth, db } from './firebaseConfig';
 import { useDriveStore, type DriveFolderType } from './driveStore';
 import MediaCropModal from './MediaCropModal';
+import { Icon } from '@iconify/react';
+import SpotifyListeningCard from './SpotifyListeningCard';
+import { subscribeUserConnections, PlatformConnection } from './spotifyService';
 import Settings from './Settings';
 import ColorPickerModal from './ColorPickerModal';
 import { extractMaterialYouTheme, DEFAULT_THEME_COLORS, type ProfileThemeColors } from './materialYouTheme';
@@ -123,6 +126,15 @@ export default function Profile() {
     const user = auth.currentUser;
     return user ? getCachedProfile(user.uid) : null;
   });
+  const [platformConnections, setPlatformConnections] = useState<Record<string, PlatformConnection>>({});
+
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+    const unsub = subscribeUserConnections(currentUser.uid, (data) => {
+      setPlatformConnections(data);
+    });
+    return () => unsub();
+  }, [currentUser?.uid]);
   const [loading, setLoading] = useState<boolean>(() => {
     const user = auth.currentUser;
     return user ? !getCachedProfile(user.uid) : true;
@@ -1472,6 +1484,12 @@ useEffect(() => {
           </section>
         ) : (
               <div className="sh-profile-content">
+                {/* Spotify Live Listening Card (IMG-20261123-WA0002) */}
+                {platformConnections.spotify?.displayOnProfile &&
+                  platformConnections.spotify.presence?.isPlaying && (
+                    <SpotifyListeningCard presence={platformConnections.spotify.presence} />
+                  )}
+
                 <div className="sh-profile-info-card">
                   {userData.bio ? (
                     <div className="sh-info-card-section">
@@ -1486,6 +1504,34 @@ useEffect(() => {
                       {dateLabel(userData.createdAt || currentUser?.metadata?.creationTime)}
                     </p>
                   </div>
+
+                  {/* Other Platforms Section (IMG-20261123-WA0001) */}
+                  {Object.values(platformConnections).some((c) => c.displayOnProfile) && (
+                    <div className="sh-info-card-section">
+                      <h3 className="sh-info-card-label">Other Platforms</h3>
+                      <div className="sh-profile-platforms-section">
+                        {Object.values(platformConnections)
+                          .filter((c) => c.displayOnProfile)
+                          .map((conn) => (
+                            <a
+                              key={conn.platformId}
+                              href={conn.profileUrl || '#'}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="sh-profile-platform-item"
+                            >
+                              <div className="sh-profile-platform-left">
+                                <Icon icon="logos:spotify-icon" width={22} height={22} />
+                                <span className="sh-profile-platform-name">
+                                  {conn.displayName || conn.username || 'Spotify User'}
+                                </span>
+                              </div>
+                              <Icon icon="lucide:arrow-up-right" width={18} height={18} color="#949ba4" />
+                            </a>
+                          ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
         )}

@@ -633,3 +633,506 @@
 .sh-restricted-unblock-btn:active {
   transform: scale(0.97);
 }
+
+/* ==========================================================
+   OTHER PLATFORMS & SPOTIFY STYLES (IMG-20261123-WA0001 - WA0006)
+   ========================================================== */
+
+.sh-other-platforms-page {
+  background: #000000;
+}
+
+.sh-op-subhead-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 4px 16px;
+}
+
+.sh-op-subhead-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.sh-op-add-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  border-radius: 8px;
+  transition: background 0.15s ease;
+}
+
+.sh-op-add-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.sh-op-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 50vh;
+  text-align: center;
+}
+
+.sh-op-empty-text {
+  font-size: 15px;
+  color: #949ba4;
+  margin: 0;
+}
+
+.sh-op-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sh-op-card {
+  background: #111215;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 16px;
+  box-sizing: border-box;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
+}
+
+.sh-op-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sh-op-card-user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sh-op-card-display-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.sh-op-card-remove-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
+}
+
+.sh-op-card-remove-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.sh-op-card-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  margin: 14px 0;
+}
+
+.sh-op-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+}
+
+.sh-op-toggle-label {
+  font-size: 14px;
+  color: #ffffff;
+}
+
+/* Switch styling matching Discord (IMG-20261123-WA0006) */
+.sh-op-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+
+.sh-op-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.sh-op-slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: #4e5058;
+  transition: 0.2s;
+  border-radius: 24px;
+}
+
+.sh-op-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.2s;
+  border-radius: 50%;
+}
+
+.sh-op-switch input:checked + .sh-op-slider {
+  background-color: #5865f2;
+}
+
+.sh-op-switch input:checked + .sh-op-slider:before {
+  transform: translateX(20px);
+}
+
+/* Add New Platform Bottom Sheet Modal (IMG-20261123-WA0005) */
+.sh-op-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 10000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.sh-op-sheet {
+  width: 100%;
+  max-width: 600px;
+  background: #1e1f22;
+  border-top-left-radius: 18px;
+  border-top-right-radius: 18px;
+  padding: 12px 18px 32px;
+  box-sizing: border-box;
+  animation: shOpSheetSlideUp 0.2s ease-out;
+}
+
+@keyframes shOpSheetSlideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.sh-op-sheet-handle {
+  width: 36px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 2px;
+  margin: 0 auto 16px;
+}
+
+.sh-op-sheet-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #f2f3f5;
+  text-align: center;
+  margin: 0 0 18px;
+}
+
+.sh-op-sheet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sh-op-sheet-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: #2b2d31;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  cursor: pointer;
+  color: #ffffff;
+  transition: background 0.15s ease;
+}
+
+.sh-op-sheet-item:hover {
+  background: #35373c;
+}
+
+.sh-op-sheet-item-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sh-op-sheet-item-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+/* Spotify Confirmation Modal (IMG-20261123-WA0003) */
+.sh-sp-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 10050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.sh-sp-confirm-card {
+  width: min(380px, 92%);
+  background: #111215;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  padding: 32px 24px 24px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
+}
+
+.sh-sp-confirm-icons-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.sh-sp-confirm-hero-wrap {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.sh-sp-confirm-hero-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.sh-sp-confirm-chain-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sh-sp-confirm-spotify-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sh-sp-confirm-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0 0 10px;
+  line-height: 1.35;
+}
+
+.sh-sp-green {
+  color: #1ed760;
+}
+
+.sh-sp-confirm-desc {
+  font-size: 13.5px;
+  color: #949ba4;
+  margin: 0 0 24px;
+}
+
+.sh-sp-confirm-close-btn {
+  width: 100%;
+  background: #5865f2;
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 20px;
+  font-size: 14.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.sh-sp-confirm-close-btn:hover {
+  background: #4752c4;
+}
+
+/* ==========================================================
+   PROFILE OTHER PLATFORMS & SPOTIFY LISTENING CARD (IMG-20261123-WA0001, WA0002)
+   ========================================================== */
+
+/* Other Platforms Section in Profile */
+.sh-profile-platforms-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.sh-profile-platform-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: #111215;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  text-decoration: none;
+  color: #ffffff;
+  transition: background 0.15s ease;
+}
+
+.sh-profile-platform-item:hover {
+  background: #18191e;
+}
+
+.sh-profile-platform-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sh-profile-platform-name {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #f2f3f5;
+}
+
+/* Spotify Listening Box (IMG-20261123-WA0002) */
+.sh-sp-listening-card {
+  width: 100%;
+  background: #111215;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  box-sizing: border-box;
+}
+
+.sh-sp-listening-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.sh-sp-listening-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #f2f3f5;
+}
+
+.sh-sp-listening-logo {
+  flex-shrink: 0;
+}
+
+.sh-sp-listening-body {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.sh-sp-album-art-wrap {
+  width: 58px;
+  height: 58px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #2b2d31;
+  flex-shrink: 0;
+}
+
+.sh-sp-album-art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.sh-sp-info-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sh-sp-track-name {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+
+.sh-sp-artist-name {
+  font-size: 12.5px;
+  color: #949ba4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 8px;
+}
+
+.sh-sp-player-bar-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sh-sp-progress-track {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.sh-sp-progress-fill {
+  height: 100%;
+  background: #ffffff; /* Requested: white music fill bar */
+  border-radius: 2px;
+  transition: width 0.5s linear;
+}
+
+.sh-sp-timestamps {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #949ba4;
+  font-family: monospace;
+}
+
+/* Chat Header Listening Subtitle (IMG-20261123-WA0004) */
+.shc-chat-status-listening {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #23a55a !important; /* Discord green */
+  font-size: 11.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
