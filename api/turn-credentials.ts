@@ -21,12 +21,34 @@ export default {
       }
     }
 
-    // Default fallback STUN servers
+    // Default fallback configured STUN and TURN servers
     const fallback = [
-      { urls: "stun:stun.l.google.com:19302" },
-      { urls: "stun:stun1.l.google.com:19302" },
-      { urls: "stun:stun2.l.google.com:19302" },
-      { urls: "stun:stun.cloudflare.com:3478" },
+      {
+        urls: [
+          "stun:stun.l.google.com:19302",
+          "stun:stun1.l.google.com:19302",
+          "stun:stun.cloudflare.com:3478",
+          "stun:stun.relay.metered.ca:80",
+        ],
+      },
+      {
+        urls: [
+          "turn:global.relay.metered.ca:80",
+          "turn:global.relay.metered.ca:80?transport=tcp",
+          "turn:global.relay.metered.ca:443",
+          "turn:global.relay.metered.ca:443?transport=tcp",
+          "turns:global.relay.metered.ca:443",
+          "turns:global.relay.metered.ca:443?transport=tcp",
+          "turn:in.relay.metered.ca:80",
+          "turn:in.relay.metered.ca:80?transport=tcp",
+          "turn:in.relay.metered.ca:443",
+          "turn:in.relay.metered.ca:443?transport=tcp",
+          "turns:in.relay.metered.ca:443",
+          "turns:in.relay.metered.ca:443?transport=tcp",
+        ],
+        username: "3ec1f3c4e5e23310a5b3ff5c",
+        credential: "GU++lCeiZwMovCB8",
+      },
     ];
 
     return Response.json({ ok: true, iceServers: fallback }, {
