@@ -8,11 +8,12 @@ import {
   updatePlatformToggles,
   disconnectPlatform,
   savePlatformConnection,
-  getSpotifyAuthUrl,
+  SPOTIFY_CLIENT_ID,
   fetchSpotifyProfile,
   fetchSpotifyCurrentlyPlaying,
   updateSpotifyPresence,
 } from './spotifyService';
+import { redirectToSpotifyAuthorize, exchangeCodeForToken } from './spotifyPkce';
 import SpotifyConfirmationModal from './SpotifyConfirmationModal';
 
 interface OtherPlatformsProps {
@@ -28,18 +29,53 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
 
   const currentUser = auth.currentUser;
 
-  // Listen for hash token after Spotify OAuth redirect (e.g. #access_token=...)
+  // Handle Spotify redirect: response_type=code (?code=...) or legacy hash token (#access_token=...)
   useEffect(() => {
     if (!currentUser) return;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+
+    if (code) {
+      // Clean query params from url so refreshing doesn't fail
+      window.history.replaceState(null, '', window.location.pathname);
+
+      (async () => {
+        try {
+          const redirectUri = window.location.origin;
+          const { accessToken } = await exchangeCodeForToken(SPOTIFY_CLIENT_ID, code, redirectUri);
+          if (accessToken) {
+            const profile = await fetchSpotifyProfile(accessToken);
+            const currentPlaying = await fetchSpotifyCurrentlyPlaying(accessToken);
+
+            const newConn: PlatformConnection = {
+              platformId: 'spotify',
+              username: profile.displayName,
+              displayName: profile.displayName,
+              profileUrl: profile.profileUrl,
+              accessToken,
+              displayOnProfile: true,
+              displayAsStatus: true,
+              connectedAt: Date.now(),
+              presence: currentPlaying,
+            };
+
+            await savePlatformConnection(currentUser.uid, newConn);
+            setShowAuthConfirm(true);
+          }
+        } catch (err) {
+          console.error('[OtherPlatforms] PKCE Token exchange error:', err);
+        }
+      })();
+      return;
+    }
 
     if (window.location.hash && window.location.hash.includes('access_token')) {
       const hashParams = new URLSearchParams(window.location.hash.substring(1));
       const accessToken = hashParams.get('access_token');
       if (accessToken) {
-        // Clear hash from url
         window.history.replaceState(null, '', window.location.pathname);
 
-        // Fetch user profile and save connection
         (async () => {
           try {
             const profile = await fetchSpotifyProfile(accessToken);
@@ -73,7 +109,7 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
     const spotifyConn = connections.spotify;
     if (!spotifyConn || !spotifyConn.accessToken) return;
 
-    const pollInterval = setInterval(async () => {
+    const pollPresence = async () => {
       try {
         const presence = await fetchSpotifyCurrentlyPlaying(spotifyConn.accessToken!);
         if (presence) {
@@ -82,7 +118,10 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
       } catch (err) {
         console.warn('[OtherPlatforms] Polling Spotify presence error:', err);
       }
-    }, 15000); // every 15s
+    };
+
+    pollPresence();
+    const pollInterval = setInterval(pollPresence, 10000); // every 10 seconds
 
     return () => clearInterval(pollInterval);
   }, [currentUser, connections.spotify]);
@@ -130,9 +169,8 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
     setAuthConnecting(true);
 
     try {
-      // Direct real OAuth redirect to Spotify
-      const authUrl = getSpotifyAuthUrl();
-      window.location.href = authUrl;
+      const redirectUri = window.location.origin;
+      await redirectToSpotifyAuthorize(SPOTIFY_CLIENT_ID, redirectUri);
     } catch (err) {
       console.error('Failed to redirect to Spotify:', err);
       setAuthConnecting(false);
