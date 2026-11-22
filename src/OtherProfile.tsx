@@ -981,14 +981,6 @@ export default function OtherProfile({
               <UserX size={19} />
               <span>Block</span>
             </button>
-
-            <button
-              type="button"
-              className="sh-block-modal-cancel-btn"
-              onClick={() => setShowBlockModal(false)}
-            >
-              Cancel
-            </button>
           </div>
         </div>
       )}

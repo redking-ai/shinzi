@@ -498,65 +498,19 @@
   background: rgba(255, 75, 75, 0.12);
 }
 
-/* ===== Restricted / Blocked Accounts Page (matching 20261122_211837) ===== */
+/* ===== Restricted / Blocked Accounts Page ===== */
 .sh-restricted-page {
   position: fixed;
   inset: 0;
   width: 100%;
   height: 100%;
   height: 100dvh;
-  background: #0b0e14;
+  background: #000000;
   z-index: 1000;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-}
-
-.sh-restricted-header {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 16px 18px;
-  background: #11141c;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  flex-shrink: 0;
-}
-
-.sh-restricted-back-btn {
-  background: transparent;
-  border: 0;
-  padding: 6px;
-  border-radius: 8px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #f2f3f5;
-  transition: background 0.15s ease;
-}
-
-.sh-restricted-back-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.sh-restricted-header-title h2 {
-  font-size: 17.5px;
-  font-weight: 700;
-  color: #f2f3f5;
-  margin: 0;
-}
-
-.sh-restricted-header-sub {
-  font-size: 12px;
-  color: #949ba4;
-  display: block;
-  margin-top: 2px;
-}
-
-.sh-restricted-content {
-  flex: 1;
   overflow-y: auto;
-  padding: 16px;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 .sh-restricted-empty {
@@ -564,7 +518,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 70%;
+  height: 60vh;
   text-align: center;
   gap: 12px;
 }
@@ -586,30 +540,29 @@
   margin: 0;
 }
 
-.sh-restricted-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.sh-restricted-card {
+.sh-restricted-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  padding: 12px 14px;
-  background: #171a22;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  transition: background 0.15s ease;
+  padding: 13px 16px;
+  background: transparent;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  box-sizing: border-box;
+  transition: background 0.12s ease;
 }
 
-.sh-restricted-card:hover {
-  background: #1b1e27;
+.sh-restricted-row:last-child {
+  border-bottom: none;
+}
+
+.sh-restricted-row:hover {
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .sh-restricted-avatar-wrap {
-  width: 44px;
-  height: 44px;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
   overflow: hidden;
   background: #2b2d31;
@@ -630,7 +583,7 @@
 .sh-restricted-name {
   font-size: 14.5px;
   font-weight: 600;
-  color: #f2f3f5;
+  color: #ffffff;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -665,7 +618,7 @@
   color: #f23f43;
   border: 1px solid rgba(242, 63, 67, 0.25);
   border-radius: 8px;
-  padding: 7px 14px;
+  padding: 6px 12px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;

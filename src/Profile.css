@@ -551,6 +551,9 @@
 }
 
 .sh-profile-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   border: 0;
   background: transparent;
   color: #eeeef8;
@@ -558,6 +561,13 @@
   padding: 11px 12px;
   border-radius: 8px;
   cursor: pointer;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.sh-profile-menu button svg {
+  flex-shrink: 0;
+  display: block;
 }
 
 .sh-profile-menu button:hover {
