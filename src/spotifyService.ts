@@ -12,7 +12,7 @@ export interface SpotifyPresenceData {
   updatedAt: number;
 }
 
-export type SupportedPlatformId = 'spotify' | 'instagram' | 'x' | 'telegram';
+export type SupportedPlatformId = 'spotify' | 'telegram';
 
 export interface PlatformConnection {
   platformId: SupportedPlatformId | string;
@@ -42,20 +42,6 @@ export const PLATFORM_REGISTRY: Record<SupportedPlatformId, PlatformMeta> = {
     icon: 'logos:spotify-icon',
     placeholder: 'Spotify User',
     profileUrlPrefix: 'https://open.spotify.com/user/',
-  },
-  instagram: {
-    id: 'instagram',
-    name: 'Instagram',
-    icon: 'skill-icons:instagram',
-    placeholder: 'username',
-    profileUrlPrefix: 'https://instagram.com/',
-  },
-  x: {
-    id: 'x',
-    name: 'X',
-    icon: 'ri:twitter-x-fill',
-    placeholder: 'username',
-    profileUrlPrefix: 'https://x.com/',
   },
   telegram: {
     id: 'telegram',
