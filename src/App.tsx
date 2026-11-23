@@ -67,7 +67,6 @@ export default function App() {
     if (typeof window === 'undefined') return;
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
-    const stateUid = urlParams.get('state');
 
     if (code) {
       // Clean query params from URL so refreshing doesn't re-trigger
@@ -89,30 +88,6 @@ export default function App() {
           let displayName = 'Sab Official';
           let profileUrl = 'https://open.spotify.com';
           let currentPlaying = null;
-
-          let verifier = '';
-          try {
-            verifier = localStorage.getItem('spotify_code_verifier') || sessionStorage.getItem('spotify_code_verifier') || '';
-          } catch {}
-
-          // Call server-side API to guarantee Firestore save with Admin privileges
-          const targetUid = auth.currentUser?.uid || stateUid;
-          if (targetUid) {
-            try {
-              await fetch('/api/spotify-connect', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  uid: targetUid,
-                  code,
-                  redirectUri,
-                  codeVerifier: verifier,
-                }),
-              });
-            } catch (apiErr) {
-              console.warn('[App] Server spotify-connect notice:', apiErr);
-            }
-          }
 
           try {
             const tokenRes = await exchangeCodeForToken(SPOTIFY_CLIENT_ID, code, redirectUri);
