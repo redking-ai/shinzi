@@ -66,6 +66,140 @@ export default function App() {
   );
   const [showSpotifySuccessModal, setShowSpotifySuccessModal] = useState(false);
 
+  // Global OAuth callback handler (Spotify ?code=, YouTube & Facebook #access_token=)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // A. Check for #access_token= (YouTube & Facebook OAuth)
+    if (window.location.hash && window.location.hash.includes('access_token')) {
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const accessToken = hashParams.get('access_token');
+      const state = hashParams.get('state');
+
+      if (accessToken) {
+        window.history.replaceState(null, '', window.location.pathname);
+
+        const handleOAuthToken = async (u: any) => {
+          // 1. YouTube OAuth Callback
+          if (state && state.startsWith('youtube_')) {
+            try {
+              let channelName = 'YouTube Channel';
+              let channelUrl = 'https://youtube.com';
+              let subscriberCount = '0';
+
+              try {
+                const res = await fetch(
+                  'https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&mine=true',
+                  {
+                    headers: {
+                      Authorization: `Bearer ${accessToken}`,
+                    },
+                  }
+                );
+                if (res.ok) {
+                  const data = await res.json();
+                  const item = data.items?.[0];
+                  if (item) {
+                    channelName = item.snippet?.title || channelName;
+                    const customUrl = item.snippet?.customUrl;
+                    channelUrl = customUrl
+                      ? `https://youtube.com/${customUrl}`
+                      : `https://youtube.com/channel/${item.id}`;
+                    subscriberCount = item.statistics?.hiddenSubscriberCount
+                      ? 'Hidden'
+                      : Number(item.statistics?.subscriberCount || 0).toLocaleString();
+                  }
+                }
+              } catch (ytErr) {
+                console.warn('[App] Failed fetching YouTube info:', ytErr);
+              }
+
+              const newConn: PlatformConnection = {
+                platformId: 'youtube',
+                username: channelName,
+                displayName: channelName,
+                profileUrl: channelUrl,
+                accessToken,
+                displayOnProfile: true,
+                showSubscribers: true,
+                subscribersCount: subscriberCount,
+                connectedAt: Date.now(),
+              };
+
+              await savePlatformConnection(u.uid, newConn);
+              sessionStorage.setItem('spotify_open_platforms', 'true');
+              window.dispatchEvent(new CustomEvent('shinzi-open-other-platforms'));
+              navigateTo('/settings');
+            } catch (err) {
+              console.error('[App] Error saving YouTube connection:', err);
+            }
+            return;
+          }
+
+          // 2. Facebook OAuth Callback
+          if (state && state.startsWith('facebook_')) {
+            try {
+              let fbName = 'Facebook User';
+              let fbUrl = 'https://facebook.com';
+              let friendsCount: string | number | undefined;
+              let followersCount: string | number | undefined;
+
+              try {
+                const res = await fetch(
+                  `https://graph.facebook.com/v20.0/me?fields=id,name,link,friends&access_token=${accessToken}`
+                );
+                if (res.ok) {
+                  const data = await res.json();
+                  if (data.name) fbName = data.name;
+                  if (data.link) fbUrl = data.link;
+                  else if (data.id) fbUrl = `https://facebook.com/${data.id}`;
+                  if (data.friends?.summary?.total_count !== undefined) {
+                    friendsCount = Number(data.friends.summary.total_count).toLocaleString();
+                  }
+                }
+              } catch (fbErr) {
+                console.warn('[App] Failed fetching Facebook info:', fbErr);
+              }
+
+              const newConn: PlatformConnection = {
+                platformId: 'facebook',
+                username: fbName,
+                displayName: fbName,
+                profileUrl: fbUrl,
+                accessToken,
+                displayOnProfile: true,
+                showFollowers: true,
+                showFriends: true,
+                followersCount: followersCount || '0',
+                friendsCount: friendsCount || '0',
+                connectedAt: Date.now(),
+              };
+
+              await savePlatformConnection(u.uid, newConn);
+              sessionStorage.setItem('spotify_open_platforms', 'true');
+              window.dispatchEvent(new CustomEvent('shinzi-open-other-platforms'));
+              navigateTo('/settings');
+            } catch (err) {
+              console.error('[App] Error saving Facebook connection:', err);
+            }
+            return;
+          }
+        };
+
+        if (auth.currentUser) {
+          handleOAuthToken(auth.currentUser);
+        } else {
+          const unsub = onAuthStateChanged(auth, (u) => {
+            if (u) {
+              unsub();
+              handleOAuthToken(u);
+            }
+          });
+        }
+      }
+    }
+  }, []);
+
   // Global Spotify OAuth callback handler (checks for ?code= on any route)
   useEffect(() => {
     if (typeof window === 'undefined') return;
