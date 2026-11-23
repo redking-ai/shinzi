@@ -203,7 +203,7 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
         sessionStorage.setItem('spotify_open_platforms', 'true');
       } catch {}
       const redirectUri = getCleanRedirectUri();
-      await redirectToSpotifyAuthorize(SPOTIFY_CLIENT_ID, redirectUri);
+      await redirectToSpotifyAuthorize(SPOTIFY_CLIENT_ID, redirectUri, currentUser.uid);
     } catch (err) {
       console.error('Failed to redirect to Spotify:', err);
       setAuthConnecting(false);

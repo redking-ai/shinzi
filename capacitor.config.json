@@ -4,7 +4,12 @@
   "webDir": "dist",
   "server": {
     "url": "https://shinzi.vercel.app",
-    "cleartext": false
+    "cleartext": false,
+    "allowNavigation": [
+      "accounts.spotify.com",
+      "*.spotify.com",
+      "*.spotifycdn.com"
+    ]
   },
   "android": {
     "allowMixedContent": true,

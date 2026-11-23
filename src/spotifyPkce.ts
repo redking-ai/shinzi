@@ -23,7 +23,7 @@ async function generateCodeChallenge(codeVerifier: string): Promise<string> {
     .replace(/=+$/, '');
 }
 
-export async function redirectToSpotifyAuthorize(clientId: string, redirectUri: string) {
+export async function redirectToSpotifyAuthorize(clientId: string, redirectUri: string, state?: string) {
   const verifier = generateRandomString(64);
   const challenge = await generateCodeChallenge(verifier);
 
@@ -45,7 +45,7 @@ export async function redirectToSpotifyAuthorize(clientId: string, redirectUri: 
     'user-read-email',
   ].join(' ');
 
-  const params = new URLSearchParams({
+  const paramsObj: Record<string, string> = {
     client_id: clientId,
     response_type: 'code',
     redirect_uri: redirectUri,
@@ -53,7 +53,12 @@ export async function redirectToSpotifyAuthorize(clientId: string, redirectUri: 
     code_challenge: challenge,
     scope: scopes,
     show_dialog: 'true',
-  });
+  };
+  if (state) {
+    paramsObj.state = state;
+  }
+
+  const params = new URLSearchParams(paramsObj);
 
   window.location.href = `https://accounts.spotify.com/authorize?${params.toString()}`;
 }

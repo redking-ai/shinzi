@@ -74,6 +74,35 @@ public class MainActivity extends BridgeActivity {
                 // Custom BridgeWebViewClient to catch offline cold start and inject restored auth sessions
                 webView.setWebViewClient(new BridgeWebViewClient(getBridge()) {
                     @Override
+                    public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                        if (request != null && request.getUrl() != null) {
+                            String url = request.getUrl().toString();
+                            if (url.startsWith("https://accounts.spotify.com") ||
+                                url.contains("spotify.com") ||
+                                url.startsWith("https://shinzi.vercel.app") ||
+                                url.startsWith("capacitor://") ||
+                                url.startsWith("shinzi://")) {
+                                return false;
+                            }
+                        }
+                        return super.shouldOverrideUrlLoading(view, request);
+                    }
+
+                    @Override
+                    public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                        if (url != null) {
+                            if (url.startsWith("https://accounts.spotify.com") ||
+                                url.contains("spotify.com") ||
+                                url.startsWith("https://shinzi.vercel.app") ||
+                                url.startsWith("capacitor://") ||
+                                url.startsWith("shinzi://")) {
+                                return false;
+                            }
+                        }
+                        return super.shouldOverrideUrlLoading(view, url);
+                    }
+
+                    @Override
                     public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                         if (request != null && request.isForMainFrame()) {
                             showOfflineError(view);
@@ -246,6 +275,18 @@ public class MainActivity extends BridgeActivity {
             String callId = uri.getQueryParameter("id");
             String convId = uri.getQueryParameter("conv");
             String userUid = uri.getQueryParameter("user");
+            String spotifyCode = uri.getQueryParameter("code");
+
+            if (spotifyCode != null && !spotifyCode.isEmpty()) {
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    try {
+                        WebView webView = getBridge().getWebView();
+                        if (webView != null) {
+                            webView.loadUrl("https://shinzi.vercel.app/?code=" + Uri.encode(spotifyCode));
+                        }
+                    } catch (Exception ignored) {}
+                }, 300);
+            }
 
             if (callId != null && !callId.isEmpty()) {
                 String caller = uri.getQueryParameter("caller");

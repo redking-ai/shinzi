@@ -67,10 +67,14 @@ export default function App() {
     if (typeof window === 'undefined') return;
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
+    const stateUid = urlParams.get('state');
 
     if (code) {
       // Clean query params from URL so refreshing doesn't re-trigger
       window.history.replaceState(null, '', window.location.pathname);
+
+      const isNative = Boolean((window as any).Capacitor?.isNativePlatform?.());
+      const isAndroid = typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent);
 
       // Exchange code for token and save connection
       const processCode = async () => {
@@ -139,12 +143,22 @@ export default function App() {
           if (auth.currentUser) {
             await saveConn(auth.currentUser);
           } else {
+            let handled = false;
             const unsub = onAuthStateChanged(auth, async (u) => {
               if (u) {
+                handled = true;
                 unsub();
                 await saveConn(u);
               }
             });
+
+            // If not logged in in external mobile browser (Chrome), automatically return to Shinzi app!
+            setTimeout(() => {
+              if (!handled && !auth.currentUser && !isNative && isAndroid) {
+                const targetUid = stateUid ? `&user=${encodeURIComponent(stateUid)}` : '';
+                window.location.href = `intent://shinzi.vercel.app/?code=${encodeURIComponent(code)}${targetUid}#Intent;scheme=https;package=com.shinzi.app;end`;
+              }
+            }, 1200);
           }
         } catch (err) {
           console.error('[App] Global Spotify OAuth exchange error:', err);
