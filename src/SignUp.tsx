@@ -262,14 +262,10 @@ const [draftRestored, setDraftRestored] = useState(false);
       return;
     }
 
-    const supportedImageTypes = [
-      'image/jpeg',
-      'image/png',
-      'image/webp',
-      'image/gif',
-    ];
+    const isImageMime = file.type && file.type.startsWith('image/');
+    const hasImageExtension = /\.(jpe?g|png|webp|gif|jfif|bmp|heic|svg)$/i.test(file.name);
 
-    if (!supportedImageTypes.includes(file.type)) {
+    if (!isImageMime && !hasImageExtension) {
       setFormError({
         message:
           'This image format is not supported. Please choose a JPG, PNG, WebP, or GIF image.',
@@ -293,10 +289,18 @@ const [draftRestored, setDraftRestored] = useState(false);
 
     setFormError(null);
 
+    let resolvedMime = file.type || 'image/jpeg';
+    if (!resolvedMime.startsWith('image/')) {
+      if (/\.png$/i.test(file.name)) resolvedMime = 'image/png';
+      else if (/\.webp$/i.test(file.name)) resolvedMime = 'image/webp';
+      else if (/\.gif$/i.test(file.name)) resolvedMime = 'image/gif';
+      else resolvedMime = 'image/jpeg';
+    }
+
     setProfileImage({
       file,
       uri: URL.createObjectURL(file),
-      mimeType: file.type || 'image/jpeg',
+      mimeType: resolvedMime,
       name: file.name,
       size: file.size,
     });
@@ -1058,7 +1062,7 @@ useEffect(() => {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
+              accept="image/*"
               onChange={handleImageChange}
               style={{
                 display: 'none',
@@ -1102,6 +1106,12 @@ useEffect(() => {
                   ? 'Tap to change photo'
                   : 'Profile photo required'}
               </div>
+
+              {formError && (
+                <div style={{ color: '#ff3366', fontSize: '13px', marginTop: '6px', textAlign: 'center' }}>
+                  {formError.message}
+                </div>
+              )}
 
             </div>
 
