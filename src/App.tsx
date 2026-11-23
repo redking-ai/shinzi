@@ -29,6 +29,10 @@ import {
   savePlatformConnection,
   fetchSpotifyProfile,
   fetchSpotifyCurrentlyPlaying,
+  updateSpotifyPresence,
+  subscribeUserConnections,
+  refreshSpotifyAccessToken,
+  updateSpotifyTokens,
   PlatformConnection,
 } from './spotifyService';
 import { exchangeCodeForToken } from './spotifyPkce';
@@ -85,6 +89,7 @@ export default function App() {
             : `${origin}/`;
 
           let accessToken = '';
+          let refreshToken = '';
           let displayName = 'Sab Official';
           let profileUrl = 'https://open.spotify.com';
           let currentPlaying = null;
@@ -93,6 +98,7 @@ export default function App() {
             const tokenRes = await exchangeCodeForToken(SPOTIFY_CLIENT_ID, code, redirectUri);
             if (tokenRes?.accessToken) {
               accessToken = tokenRes.accessToken;
+              if (tokenRes.refreshToken) refreshToken = tokenRes.refreshToken;
               const profile = await fetchSpotifyProfile(accessToken);
               if (profile?.displayName && profile.displayName !== 'Spotify User') {
                 displayName = profile.displayName;
@@ -114,6 +120,7 @@ export default function App() {
               displayName: displayName,
               profileUrl: profileUrl,
               accessToken: accessToken || undefined,
+              refreshToken: refreshToken || undefined,
               displayOnProfile: true,
               displayAsStatus: true,
               connectedAt: Date.now(),
@@ -160,6 +167,74 @@ export default function App() {
       processCode();
     }
   }, []);
+
+  // Global Spotify live song poller (catches playing instantly like Discord)
+  useEffect(() => {
+    if (!user) return;
+
+    let cancel = false;
+    let cachedToken: string | null = null;
+    let cachedRefreshToken: string | null = null;
+    let hasSpotify = false;
+
+    const unsub = subscribeUserConnections(user.uid, (conns) => {
+      const sp = conns.spotify;
+      if (sp && sp.accessToken) {
+        cachedToken = sp.accessToken;
+        cachedRefreshToken = sp.refreshToken || null;
+        hasSpotify = true;
+      } else {
+        cachedToken = null;
+        cachedRefreshToken = null;
+        hasSpotify = false;
+      }
+    });
+
+    const poll = async () => {
+      if (cancel || !hasSpotify || !cachedToken) return;
+      try {
+        const presence = await fetchSpotifyCurrentlyPlaying(cachedToken);
+        if (!cancel && presence !== undefined) {
+          await updateSpotifyPresence(user.uid, presence);
+        }
+      } catch (err: any) {
+        if (err?.message === '401' && cachedRefreshToken) {
+          try {
+            const res = await refreshSpotifyAccessToken(SPOTIFY_CLIENT_ID, cachedRefreshToken);
+            if (res?.accessToken) {
+              cachedToken = res.accessToken;
+              if (res.refreshToken) cachedRefreshToken = res.refreshToken;
+              await updateSpotifyTokens(user.uid, res.accessToken, res.refreshToken);
+              const fresh = await fetchSpotifyCurrentlyPlaying(res.accessToken);
+              if (!cancel && fresh !== undefined) {
+                await updateSpotifyPresence(user.uid, fresh);
+              }
+            }
+          } catch {}
+        }
+      }
+    };
+
+    poll();
+    // Poll every 4 seconds for lively instant track detection like Discord
+    const interval = setInterval(poll, 4000);
+
+    const onVis = () => {
+      if (document.visibilityState === 'visible') {
+        poll();
+      }
+    };
+    window.addEventListener('focus', poll);
+    document.addEventListener('visibilitychange', onVis);
+
+    return () => {
+      cancel = true;
+      unsub();
+      clearInterval(interval);
+      window.removeEventListener('focus', poll);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, [user]);
 
   useEffect(() => {
     const handleLocationChange = () => {

@@ -44,6 +44,7 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
         try {
           const redirectUri = getCleanRedirectUri();
           let accessToken = '';
+          let refreshToken = '';
           let displayName = 'Sab Official';
           let profileUrl = 'https://open.spotify.com';
           let currentPlaying = null;
@@ -52,6 +53,7 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
             const tokenRes = await exchangeCodeForToken(SPOTIFY_CLIENT_ID, code, redirectUri);
             if (tokenRes?.accessToken) {
               accessToken = tokenRes.accessToken;
+              if (tokenRes.refreshToken) refreshToken = tokenRes.refreshToken;
               const profile = await fetchSpotifyProfile(accessToken);
               if (profile?.displayName && profile.displayName !== 'Spotify User') {
                 displayName = profile.displayName;
@@ -71,6 +73,7 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
             displayName: displayName,
             profileUrl: profileUrl,
             accessToken: accessToken || undefined,
+            refreshToken: refreshToken || undefined,
             displayOnProfile: true,
             displayAsStatus: true,
             connectedAt: Date.now(),

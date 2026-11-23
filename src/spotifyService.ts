@@ -18,6 +18,7 @@ export interface PlatformConnection {
   displayName: string;
   profileUrl: string;
   accessToken?: string;
+  refreshToken?: string;
   displayOnProfile: boolean;
   displayAsStatus: boolean;
   connectedAt: number;
@@ -64,6 +65,9 @@ export async function fetchSpotifyCurrentlyPlaying(accessToken: string): Promise
     const res = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
+    if (res.status === 401) {
+      throw new Error('401');
+    }
     if (res.status === 204 || res.status === 200) {
       if (res.status === 204) {
         return {
@@ -78,7 +82,18 @@ export async function fetchSpotifyCurrentlyPlaying(accessToken: string): Promise
         };
       }
       const data = await res.json();
-      if (!data || !data.item) return null;
+      if (!data || !data.item) {
+        return {
+          isPlaying: false,
+          trackName: '',
+          artistName: '',
+          albumArtUrl: '',
+          durationMs: 0,
+          progressMs: 0,
+          trackUrl: '',
+          updatedAt: Date.now(),
+        };
+      }
       return {
         isPlaying: Boolean(data.is_playing),
         trackName: data.item.name || '',
@@ -90,10 +105,54 @@ export async function fetchSpotifyCurrentlyPlaying(accessToken: string): Promise
         updatedAt: Date.now(),
       };
     }
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.message === '401') throw err;
     console.warn('[spotifyService] Error fetching currently playing:', err);
   }
   return null;
+}
+
+export async function refreshSpotifyAccessToken(
+  clientId: string,
+  refreshToken: string
+): Promise<{ accessToken: string; refreshToken?: string } | null> {
+  try {
+    const params = new URLSearchParams({
+      client_id: clientId,
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+    });
+    const res = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params,
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token || refreshToken,
+      };
+    }
+  } catch (e) {
+    console.warn('[spotifyService] Failed to refresh Spotify token:', e);
+  }
+  return null;
+}
+
+export async function updateSpotifyTokens(
+  uid: string,
+  accessToken: string,
+  refreshToken?: string
+): Promise<void> {
+  const ref = doc(db, 'users', uid, 'platforms', 'connections');
+  const updates: Record<string, any> = {
+    'spotify.accessToken': accessToken,
+  };
+  if (refreshToken) {
+    updates['spotify.refreshToken'] = refreshToken;
+  }
+  await updateDoc(ref, updates);
 }
 
 export async function getUserConnections(uid: string): Promise<Record<string, PlatformConnection>> {
