@@ -932,6 +932,70 @@
   border-radius: 10px;
   padding: 10px 14px;
   gap: 8px;
+  transition: border-color 0.15s ease;
+}
+
+.sh-op-modal-input-wrap.has-error {
+  border-color: #f23f43 !important;
+}
+
+.sh-op-modal-error {
+  font-size: 13px;
+  color: #f23f43;
+  margin: 0;
+  line-height: 1.4;
+  font-weight: 500;
+}
+
+.sh-op-direct-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 18px;
+  border-radius: 10px;
+  border: none;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.1s ease, opacity 0.15s ease;
+}
+
+.sh-op-direct-btn:active {
+  transform: scale(0.98);
+}
+
+.sh-op-direct-btn-instagram {
+  background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+  color: #ffffff;
+}
+
+.sh-op-direct-btn-telegram {
+  background: #229ed9;
+  color: #ffffff;
+}
+
+.sh-op-divider-or {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 4px 0;
+  color: #949ba4;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.sh-op-divider-or::before,
+.sh-op-divider-or::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sh-op-divider-or span {
+  padding: 0 10px;
 }
 
 .sh-op-modal-input-prefix {

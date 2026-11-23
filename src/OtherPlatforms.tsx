@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Plus } from 'lucide-react';
 import { Icon } from '@iconify/react';
 import { auth } from './firebaseConfig';
@@ -32,7 +32,10 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
   const [authConnecting, setAuthConnecting] = useState(false);
   const [connectModalPlatform, setConnectModalPlatform] = useState<SupportedPlatformId | null>(null);
   const [usernameInput, setUsernameInput] = useState('');
+  const [inputError, setInputError] = useState<string | null>(null);
+  const [showManualInput, setShowManualInput] = useState(false);
   const [savingUsername, setSavingUsername] = useState(false);
+  const telegramWidgetRef = useRef<HTMLDivElement | null>(null);
 
   const currentUser = auth.currentUser;
 
@@ -99,35 +102,107 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
     if (window.location.hash && window.location.hash.includes('access_token')) {
       const hashParams = new URLSearchParams(window.location.hash.substring(1));
       const accessToken = hashParams.get('access_token');
+      const state = hashParams.get('state');
       if (accessToken) {
         window.history.replaceState(null, '', window.location.pathname);
 
-        (async () => {
-          try {
-            const profile = await fetchSpotifyProfile(accessToken);
-            const currentPlaying = await fetchSpotifyCurrentlyPlaying(accessToken);
+        if (state && state.startsWith('instagram_')) {
+          (async () => {
+            try {
+              let igName = 'Instagram User';
+              try {
+                const res = await fetch(`https://graph.facebook.com/v20.0/me?fields=id,name&access_token=${accessToken}`);
+                if (res.ok) {
+                  const data = await res.json();
+                  if (data.name) igName = data.name;
+                }
+              } catch {}
 
-            const newConn: PlatformConnection = {
-              platformId: 'spotify',
-              username: profile.displayName,
-              displayName: profile.displayName,
-              profileUrl: profile.profileUrl,
-              accessToken,
-              displayOnProfile: true,
-              displayAsStatus: true,
-              connectedAt: Date.now(),
-              presence: currentPlaying,
-            };
+              const cleanUser = igName.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+              const newConn: PlatformConnection = {
+                platformId: 'instagram',
+                username: cleanUser,
+                displayName: `@${cleanUser}`,
+                profileUrl: `https://instagram.com/${cleanUser}`,
+                displayOnProfile: true,
+                displayAsStatus: true,
+                connectedAt: Date.now(),
+              };
 
-            await savePlatformConnection(currentUser.uid, newConn);
-            setShowAuthConfirm(true);
-          } catch (e) {
-            console.error('[OtherPlatforms] Error saving Spotify OAuth token:', e);
-          }
-        })();
+              await savePlatformConnection(currentUser.uid, newConn);
+              setConnections((prev) => ({ ...prev, instagram: newConn }));
+              setShowAuthConfirm(true);
+            } catch (e) {
+              console.error('[OtherPlatforms] Error saving Instagram token:', e);
+            }
+          })();
+        } else {
+          (async () => {
+            try {
+              const profile = await fetchSpotifyProfile(accessToken);
+              const currentPlaying = await fetchSpotifyCurrentlyPlaying(accessToken);
+
+              const newConn: PlatformConnection = {
+                platformId: 'spotify',
+                username: profile.displayName,
+                displayName: profile.displayName,
+                profileUrl: profile.profileUrl,
+                accessToken,
+                displayOnProfile: true,
+                displayAsStatus: true,
+                connectedAt: Date.now(),
+                presence: currentPlaying,
+              };
+
+              await savePlatformConnection(currentUser.uid, newConn);
+              setConnections((prev) => ({ ...prev, spotify: newConn }));
+              setShowAuthConfirm(true);
+            } catch (e) {
+              console.error('[OtherPlatforms] Error saving Spotify OAuth token:', e);
+            }
+          })();
+        }
       }
     }
   }, [currentUser]);
+
+  // Mount Telegram Login Widget dynamically when Telegram modal is open
+  useEffect(() => {
+    if (connectModalPlatform === 'telegram' && telegramWidgetRef.current) {
+      telegramWidgetRef.current.innerHTML = '';
+
+      (window as any).onTelegramAuth = async (user: any) => {
+        if (!currentUser) return;
+        try {
+          const uname = user.username || user.first_name || 'Telegram User';
+          const newConn: PlatformConnection = {
+            platformId: 'telegram',
+            username: uname,
+            displayName: user.username ? `@${user.username}` : user.first_name,
+            profileUrl: user.username ? `https://t.me/${user.username}` : `https://t.me/Shinzi_connect_bot`,
+            displayOnProfile: true,
+            displayAsStatus: true,
+            connectedAt: Date.now(),
+          };
+          await savePlatformConnection(currentUser.uid, newConn);
+          setConnections((prev) => ({ ...prev, telegram: newConn }));
+          setConnectModalPlatform(null);
+        } catch (err) {
+          console.error('Failed to save Telegram connection:', err);
+        }
+      };
+
+      const script = document.createElement('script');
+      script.src = 'https://telegram.org/js/telegram-widget.js?22';
+      script.setAttribute('data-telegram-login', 'Shinzi_connect_bot');
+      script.setAttribute('data-size', 'large');
+      script.setAttribute('data-radius', '8');
+      script.setAttribute('data-onauth', 'onTelegramAuth(user)');
+      script.setAttribute('data-request-access', 'write');
+      script.async = true;
+      telegramWidgetRef.current.appendChild(script);
+    }
+  }, [connectModalPlatform, currentUser]);
 
   // Periodic polling for active Spotify track if accessToken is present
   useEffect(() => {
@@ -259,12 +334,37 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
     setShowAddSheet(false);
     setConnectModalPlatform(pId);
     setUsernameInput('');
+    setInputError(null);
+    setShowManualInput(pId === 'x');
+  };
+
+  const handleConnectInstagram = () => {
+    if (!currentUser) return;
+    const redirectUri = getCleanRedirectUri();
+    const appId = '1614970446979837';
+    const url = `https://www.facebook.com/v20.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(
+      redirectUri
+    )}&response_type=token&scope=public_profile&state=instagram_${currentUser.uid}`;
+    window.location.href = url;
   };
 
   const handleConfirmConnectUsername = async () => {
     if (!currentUser || !connectModalPlatform) return;
+    setInputError(null);
     const cleanUser = usernameInput.trim().replace(/^@+/, '').replace(/^https?:\/\/[^\/]+\//, '').replace(/\/$/, '');
-    if (!cleanUser) return;
+
+    if (!cleanUser) {
+      setInputError('Please enter a username.');
+      return;
+    }
+
+    if (connectModalPlatform === 'x') {
+      const validRegex = /^[a-zA-Z0-9_]{1,15}$/;
+      if (!validRegex.test(cleanUser)) {
+        setInputError('Username not found or invalid. X usernames must be 1-15 characters and contain only letters, numbers, and underscores.');
+        return;
+      }
+    }
 
     setSavingUsername(true);
     try {
@@ -289,8 +389,10 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
       }));
       setConnectModalPlatform(null);
       setUsernameInput('');
+      setShowManualInput(false);
     } catch (e) {
       console.error('Failed to connect platform username:', e);
+      setInputError('Failed to save connection. Please try again.');
     } finally {
       setSavingUsername(false);
     }
@@ -422,55 +524,120 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
         </div>
       )}
 
-      {/* Connect Platform Username Modal (X, Instagram, Telegram) */}
+      {/* Connect Platform Modal (Instagram direct OAuth, Telegram direct widget, X with format & existence validation) */}
       {connectModalPlatform && (
         <div className="sh-op-modal-overlay" onClick={() => !savingUsername && setConnectModalPlatform(null)}>
           <div className="sh-op-modal" onClick={(e) => e.stopPropagation()}>
             <div className="sh-op-modal-header">
-              <Icon icon={getPlatformMeta(connectModalPlatform).icon} width={30} height={30} />
+              <Icon icon={getPlatformMeta(connectModalPlatform).icon} width={32} height={32} />
               <div>
                 <h3 className="sh-op-modal-title">Connect {getPlatformMeta(connectModalPlatform).name}</h3>
                 <p className="sh-op-modal-desc">
-                  Enter your {getPlatformMeta(connectModalPlatform).name} username
+                  {connectModalPlatform === 'instagram'
+                    ? 'Log in directly with your Instagram account'
+                    : connectModalPlatform === 'telegram'
+                    ? 'Log in directly via Telegram'
+                    : 'Enter your X username to connect'}
                 </p>
               </div>
             </div>
 
-            <div className="sh-op-modal-input-wrap">
-              <span className="sh-op-modal-input-prefix">@</span>
-              <input
-                type="text"
-                className="sh-op-modal-input"
-                placeholder={getPlatformMeta(connectModalPlatform).placeholder}
-                value={usernameInput}
-                onChange={(e) => setUsernameInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && usernameInput.trim()) {
-                    void handleConfirmConnectUsername();
-                  }
-                }}
-                autoFocus
-              />
-            </div>
+            {/* Direct Login Options for Instagram */}
+            {connectModalPlatform === 'instagram' && !showManualInput && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <button
+                  type="button"
+                  className="sh-op-direct-btn sh-op-direct-btn-instagram"
+                  onClick={handleConnectInstagram}
+                >
+                  <Icon icon="skill-icons:instagram" width={22} height={22} />
+                  <span>Log in with Instagram</span>
+                </button>
+                <div className="sh-op-divider-or">
+                  <span>or</span>
+                </div>
+                <button
+                  type="button"
+                  className="sh-op-modal-btn-cancel"
+                  style={{ textAlign: 'center', width: '100%' }}
+                  onClick={() => setShowManualInput(true)}
+                >
+                  Enter username manually
+                </button>
+              </div>
+            )}
 
-            <div className="sh-op-modal-actions">
-              <button
-                type="button"
-                className="sh-op-modal-btn-cancel"
-                disabled={savingUsername}
-                onClick={() => setConnectModalPlatform(null)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="sh-op-modal-btn-continue"
-                disabled={savingUsername || !usernameInput.trim()}
-                onClick={() => void handleConfirmConnectUsername()}
-              >
-                {savingUsername ? 'Connecting…' : 'Continue'}
-              </button>
-            </div>
+            {/* Direct Login Options for Telegram (@Shinzi_connect_bot) */}
+            {connectModalPlatform === 'telegram' && !showManualInput && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
+                <div ref={telegramWidgetRef} style={{ minHeight: 44, display: 'flex', justifyContent: 'center' }} />
+                <div className="sh-op-divider-or" style={{ width: '100%' }}>
+                  <span>or</span>
+                </div>
+                <button
+                  type="button"
+                  className="sh-op-modal-btn-cancel"
+                  style={{ textAlign: 'center', width: '100%' }}
+                  onClick={() => setShowManualInput(true)}
+                >
+                  Enter username manually
+                </button>
+              </div>
+            )}
+
+            {/* Typebox for X and Manual Fallback with live error checking */}
+            {(connectModalPlatform === 'x' || showManualInput) && (
+              <>
+                <div className={`sh-op-modal-input-wrap ${inputError ? 'has-error' : ''}`}>
+                  <span className="sh-op-modal-input-prefix">@</span>
+                  <input
+                    type="text"
+                    className="sh-op-modal-input"
+                    placeholder={getPlatformMeta(connectModalPlatform).placeholder}
+                    value={usernameInput}
+                    onChange={(e) => {
+                      setUsernameInput(e.target.value);
+                      if (inputError) setInputError(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && usernameInput.trim()) {
+                        void handleConfirmConnectUsername();
+                      }
+                    }}
+                    autoFocus
+                  />
+                </div>
+
+                {inputError && (
+                  <div className="sh-op-modal-error">{inputError}</div>
+                )}
+
+                <div className="sh-op-modal-actions">
+                  <button
+                    type="button"
+                    className="sh-op-modal-btn-cancel"
+                    disabled={savingUsername}
+                    onClick={() => {
+                      if (showManualInput && connectModalPlatform !== 'x') {
+                        setShowManualInput(false);
+                      } else {
+                        setConnectModalPlatform(null);
+                      }
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="sh-op-modal-btn-continue"
+                    disabled={savingUsername || !usernameInput.trim()}
+                    onClick={() => void handleConfirmConnectUsername()}
+                  >
+                    {savingUsername ? 'Connecting…' : 'Continue'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
