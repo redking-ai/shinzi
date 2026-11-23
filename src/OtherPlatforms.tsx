@@ -23,7 +23,7 @@ interface OtherPlatformsProps {
   onBack: () => void;
 }
 
-const ALL_SUPPORTED_PLATFORMS: SupportedPlatformId[] = ['spotify', 'telegram', 'youtube', 'facebook'];
+const ALL_SUPPORTED_PLATFORMS: SupportedPlatformId[] = ['spotify', 'youtube', 'facebook'];
 const YOUTUBE_CLIENT_ID = '1063333455169-7psq1nsn3855b631n212kceh6u3ef3ei.apps.googleusercontent.com';
 const FACEBOOK_APP_ID = '1614970446979837';
 
@@ -418,41 +418,6 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
     }
   };
 
-  const handleConnectTelegram = () => {
-    setShowAddSheet(false);
-    if ((window as any).Telegram?.Login?.auth) {
-      (window as any).Telegram.Login.auth(
-        { bot_id: '9290212203', request_access: true },
-        async (user: any) => {
-          if (!user || !currentUser) return;
-          try {
-            const uname = user.username || user.first_name || 'Telegram User';
-            const newConn: PlatformConnection = {
-              platformId: 'telegram',
-              username: uname,
-              displayName: user.username ? `@${user.username}` : user.first_name,
-              profileUrl: user.username ? `https://t.me/${user.username}` : `https://t.me/Shinzi_connect_bot`,
-              displayOnProfile: true,
-              displayAsStatus: true,
-              connectedAt: Date.now(),
-            };
-            await savePlatformConnection(currentUser.uid, newConn);
-            setConnections((prev) => ({ ...prev, telegram: newConn }));
-            setShowAuthConfirm(true);
-          } catch (err) {
-            console.error('Failed to save Telegram connection:', err);
-          }
-        }
-      );
-    } else {
-      window.open(
-        `https://oauth.telegram.org/auth?bot_id=9290212203&origin=${encodeURIComponent(window.location.origin)}`,
-        'telegram_oauth',
-        'width=550,height=470'
-      );
-    }
-  };
-
   const hasConnections = Object.keys(connections).length > 0;
   const availablePlatforms = ALL_SUPPORTED_PLATFORMS.filter((pId) => !connections[pId]);
 
@@ -604,8 +569,6 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
                       onClick={() => {
                         if (pId === 'spotify') {
                           void handleConnectSpotify();
-                        } else if (pId === 'telegram') {
-                          handleConnectTelegram();
                         } else if (pId === 'youtube') {
                           handleConnectYouTube();
                         } else if (pId === 'facebook') {
