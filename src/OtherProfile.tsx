@@ -934,9 +934,24 @@ export default function OtherProfile({
                         >
                           <div className="sh-profile-platform-left">
                             <Icon icon={meta.icon} width={22} height={22} />
-                            <span className="sh-profile-platform-name">
-                              {conn.displayName || conn.username || meta.name}
-                            </span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                              <span className="sh-profile-platform-name">
+                                {conn.displayName || conn.username || meta.name}
+                              </span>
+                              {conn.platformId === 'youtube' && conn.showSubscribers !== false && conn.subscribersCount && (
+                                <span style={{ fontSize: 11, color: '#949ba4', lineHeight: 1 }}>
+                                  {conn.subscribersCount} subscribers
+                                </span>
+                              )}
+                              {conn.platformId === 'facebook' && (
+                                <span style={{ fontSize: 11, color: '#949ba4', lineHeight: 1 }}>
+                                  {[
+                                    conn.showFollowers !== false && conn.followersCount ? `${conn.followersCount} followers` : null,
+                                    conn.showFriends !== false && conn.friendsCount ? `${conn.friendsCount} friends` : null,
+                                  ].filter(Boolean).join(' • ')}
+                                </span>
+                              )}
+                            </div>
                           </div>
                           <Icon icon="lucide:arrow-up-right" width={18} height={18} color="#949ba4" />
                         </a>

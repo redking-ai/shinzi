@@ -9,6 +9,7 @@ import {
   subscribeUserConnections,
   getUserConnections,
   updatePlatformToggles,
+  updatePlatformCustomToggle,
   savePlatformConnection,
   SPOTIFY_CLIENT_ID,
   fetchSpotifyProfile,
@@ -22,7 +23,9 @@ interface OtherPlatformsProps {
   onBack: () => void;
 }
 
-const ALL_SUPPORTED_PLATFORMS: SupportedPlatformId[] = ['spotify', 'telegram'];
+const ALL_SUPPORTED_PLATFORMS: SupportedPlatformId[] = ['spotify', 'telegram', 'youtube', 'facebook'];
+const YOUTUBE_CLIENT_ID = '1063333455169-7psq1nsn3855b631n212kceh6u3ef3ei.apps.googleusercontent.com';
+const FACEBOOK_APP_ID = '1614970446979837';
 
 export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
   const [connections, setConnections] = useState<Record<string, PlatformConnection>>({});
@@ -96,9 +99,119 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
     if (window.location.hash && window.location.hash.includes('access_token')) {
       const hashParams = new URLSearchParams(window.location.hash.substring(1));
       const accessToken = hashParams.get('access_token');
+      const state = hashParams.get('state');
+
       if (accessToken) {
         window.history.replaceState(null, '', window.location.pathname);
 
+        // 1. YouTube OAuth Callback (state === youtube_*)
+        if (state && state.startsWith('youtube_')) {
+          (async () => {
+            try {
+              let channelName = 'YouTube Channel';
+              let channelUrl = 'https://youtube.com';
+              let subscriberCount = '0';
+
+              try {
+                const res = await fetch(
+                  'https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&mine=true',
+                  {
+                    headers: {
+                      Authorization: `Bearer ${accessToken}`,
+                    },
+                  }
+                );
+                if (res.ok) {
+                  const data = await res.json();
+                  const item = data.items?.[0];
+                  if (item) {
+                    channelName = item.snippet?.title || channelName;
+                    const customUrl = item.snippet?.customUrl;
+                    channelUrl = customUrl
+                      ? `https://youtube.com/${customUrl}`
+                      : `https://youtube.com/channel/${item.id}`;
+                    subscriberCount = item.statistics?.hiddenSubscriberCount
+                      ? 'Hidden'
+                      : Number(item.statistics?.subscriberCount || 0).toLocaleString();
+                  }
+                }
+              } catch (ytErr) {
+                console.warn('[OtherPlatforms] Failed fetching YouTube channel info:', ytErr);
+              }
+
+              const newConn: PlatformConnection = {
+                platformId: 'youtube',
+                username: channelName,
+                displayName: channelName,
+                profileUrl: channelUrl,
+                accessToken,
+                displayOnProfile: true,
+                showSubscribers: true,
+                subscribersCount: subscriberCount,
+                connectedAt: Date.now(),
+              };
+
+              await savePlatformConnection(currentUser.uid, newConn);
+              setConnections((prev) => ({ ...prev, youtube: newConn }));
+              setShowAuthConfirm(true);
+            } catch (err) {
+              console.error('[OtherPlatforms] Error saving YouTube connection:', err);
+            }
+          })();
+          return;
+        }
+
+        // 2. Facebook OAuth Callback (state === facebook_*)
+        if (state && state.startsWith('facebook_')) {
+          (async () => {
+            try {
+              let fbName = 'Facebook User';
+              let fbUrl = 'https://facebook.com';
+              let friendsCount: string | number | undefined;
+              let followersCount: string | number | undefined;
+
+              try {
+                const res = await fetch(
+                  `https://graph.facebook.com/v20.0/me?fields=id,name,link,friends&access_token=${accessToken}`
+                );
+                if (res.ok) {
+                  const data = await res.json();
+                  if (data.name) fbName = data.name;
+                  if (data.link) fbUrl = data.link;
+                  else if (data.id) fbUrl = `https://facebook.com/${data.id}`;
+                  if (data.friends?.summary?.total_count !== undefined) {
+                    friendsCount = Number(data.friends.summary.total_count).toLocaleString();
+                  }
+                }
+              } catch (fbErr) {
+                console.warn('[OtherPlatforms] Failed fetching Facebook info:', fbErr);
+              }
+
+              const newConn: PlatformConnection = {
+                platformId: 'facebook',
+                username: fbName,
+                displayName: fbName,
+                profileUrl: fbUrl,
+                accessToken,
+                displayOnProfile: true,
+                showFollowers: true,
+                showFriends: true,
+                followersCount: followersCount || '0',
+                friendsCount: friendsCount || '0',
+                connectedAt: Date.now(),
+              };
+
+              await savePlatformConnection(currentUser.uid, newConn);
+              setConnections((prev) => ({ ...prev, facebook: newConn }));
+              setShowAuthConfirm(true);
+            } catch (err) {
+              console.error('[OtherPlatforms] Error saving Facebook connection:', err);
+            }
+          })();
+          return;
+        }
+
+        // 3. Spotify OAuth Token Callback
         (async () => {
           try {
             const profile = await fetchSpotifyProfile(accessToken);
@@ -221,6 +334,58 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
         },
       }));
     }
+  };
+
+  const handleCustomToggle = async (platformId: string, field: string, currentVal: boolean) => {
+    if (!currentUser) return;
+    const conn = connections[platformId];
+    if (!conn) return;
+
+    const newVal = !currentVal;
+
+    // Optimistically update local state
+    setConnections((prev) => ({
+      ...prev,
+      [platformId]: {
+        ...prev[platformId],
+        [field]: newVal,
+      },
+    }));
+
+    try {
+      await updatePlatformCustomToggle(currentUser.uid, platformId, field, newVal);
+    } catch (e) {
+      console.warn('Failed to update custom toggle:', e);
+      // Revert on error
+      setConnections((prev) => ({
+        ...prev,
+        [platformId]: {
+          ...prev[platformId],
+          [field]: currentVal,
+        },
+      }));
+    }
+  };
+
+  const handleConnectYouTube = () => {
+    if (!currentUser) return;
+    setShowAddSheet(false);
+    const redirectUri = 'https://shinzi.vercel.app/';
+    const scope = encodeURIComponent('https://www.googleapis.com/auth/youtube.readonly');
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${YOUTUBE_CLIENT_ID}&redirect_uri=${encodeURIComponent(
+      redirectUri
+    )}&response_type=token&scope=${scope}&state=youtube_${currentUser.uid}&include_granted_scopes=true&prompt=consent`;
+    window.location.href = authUrl;
+  };
+
+  const handleConnectFacebook = () => {
+    if (!currentUser) return;
+    setShowAddSheet(false);
+    const redirectUri = 'https://shinzi.vercel.app/';
+    const authUrl = `https://www.facebook.com/v20.0/dialog/oauth?client_id=${FACEBOOK_APP_ID}&redirect_uri=${encodeURIComponent(
+      redirectUri
+    )}&response_type=token&scope=public_profile,user_friends&state=facebook_${currentUser.uid}`;
+    window.location.href = authUrl;
   };
 
   const getCleanRedirectUri = () => {
@@ -363,6 +528,50 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
                       <span className="sh-op-slider" />
                     </label>
                   </div>
+
+                  {/* YouTube extra toggle: Show subscribers */}
+                  {conn.platformId === 'youtube' && (
+                    <div className="sh-op-toggle-row" style={{ marginTop: 8 }}>
+                      <span className="sh-op-toggle-label">Show subscribers</span>
+                      <label className="sh-op-switch">
+                        <input
+                          type="checkbox"
+                          checked={conn.showSubscribers !== false}
+                          onChange={() => handleCustomToggle('youtube', 'showSubscribers', conn.showSubscribers !== false)}
+                        />
+                        <span className="sh-op-slider" />
+                      </label>
+                    </div>
+                  )}
+
+                  {/* Facebook extra toggles: Show followers & Show friends */}
+                  {conn.platformId === 'facebook' && (
+                    <>
+                      <div className="sh-op-toggle-row" style={{ marginTop: 8 }}>
+                        <span className="sh-op-toggle-label">Show followers</span>
+                        <label className="sh-op-switch">
+                          <input
+                            type="checkbox"
+                            checked={conn.showFollowers !== false}
+                            onChange={() => handleCustomToggle('facebook', 'showFollowers', conn.showFollowers !== false)}
+                          />
+                          <span className="sh-op-slider" />
+                        </label>
+                      </div>
+
+                      <div className="sh-op-toggle-row" style={{ marginTop: 8 }}>
+                        <span className="sh-op-toggle-label">Show friends</span>
+                        <label className="sh-op-switch">
+                          <input
+                            type="checkbox"
+                            checked={conn.showFriends !== false}
+                            onChange={() => handleCustomToggle('facebook', 'showFriends', conn.showFriends !== false)}
+                          />
+                          <span className="sh-op-slider" />
+                        </label>
+                      </div>
+                    </>
+                  )}
                 </div>
               );
             })}
@@ -397,6 +606,10 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
                           void handleConnectSpotify();
                         } else if (pId === 'telegram') {
                           handleConnectTelegram();
+                        } else if (pId === 'youtube') {
+                          handleConnectYouTube();
+                        } else if (pId === 'facebook') {
+                          handleConnectFacebook();
                         }
                       }}
                     >

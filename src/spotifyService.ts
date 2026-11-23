@@ -12,7 +12,7 @@ export interface SpotifyPresenceData {
   updatedAt: number;
 }
 
-export type SupportedPlatformId = 'spotify' | 'telegram';
+export type SupportedPlatformId = 'spotify' | 'telegram' | 'youtube' | 'facebook';
 
 export interface PlatformConnection {
   platformId: SupportedPlatformId | string;
@@ -22,7 +22,15 @@ export interface PlatformConnection {
   accessToken?: string;
   refreshToken?: string;
   displayOnProfile: boolean;
-  displayAsStatus: boolean;
+  displayAsStatus?: boolean;
+  // YouTube extra fields & toggles
+  subscribersCount?: string | number;
+  showSubscribers?: boolean;
+  // Facebook extra fields & toggles
+  followersCount?: string | number;
+  friendsCount?: string | number;
+  showFollowers?: boolean;
+  showFriends?: boolean;
   connectedAt: number;
   presence?: SpotifyPresenceData | null;
 }
@@ -49,6 +57,20 @@ export const PLATFORM_REGISTRY: Record<SupportedPlatformId, PlatformMeta> = {
     icon: 'logos:telegram',
     placeholder: 'username',
     profileUrlPrefix: 'https://t.me/',
+  },
+  youtube: {
+    id: 'youtube',
+    name: 'YouTube',
+    icon: 'logos:youtube-icon',
+    placeholder: 'Channel Name',
+    profileUrlPrefix: 'https://youtube.com/',
+  },
+  facebook: {
+    id: 'facebook',
+    name: 'Facebook',
+    icon: 'logos:facebook',
+    placeholder: 'Facebook User',
+    profileUrlPrefix: 'https://facebook.com/',
   },
 };
 
@@ -245,12 +267,27 @@ export async function updatePlatformToggles(
   uid: string,
   platformId: string,
   displayOnProfile: boolean,
-  displayAsStatus: boolean
+  displayAsStatus?: boolean
+): Promise<void> {
+  const ref = doc(db, 'users', uid, 'platforms', 'connections');
+  const updateData: Record<string, any> = {
+    [`${platformId}.displayOnProfile`]: displayOnProfile,
+  };
+  if (typeof displayAsStatus === 'boolean') {
+    updateData[`${platformId}.displayAsStatus`] = displayAsStatus;
+  }
+  await updateDoc(ref, updateData);
+}
+
+export async function updatePlatformCustomToggle(
+  uid: string,
+  platformId: string,
+  toggleField: string,
+  toggleValue: boolean
 ): Promise<void> {
   const ref = doc(db, 'users', uid, 'platforms', 'connections');
   await updateDoc(ref, {
-    [`${platformId}.displayOnProfile`]: displayOnProfile,
-    [`${platformId}.displayAsStatus`]: displayAsStatus,
+    [`${platformId}.${toggleField}`]: toggleValue,
   });
 }
 
