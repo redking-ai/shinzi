@@ -33,7 +33,6 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
   const [connectModalPlatform, setConnectModalPlatform] = useState<SupportedPlatformId | null>(null);
   const [usernameInput, setUsernameInput] = useState('');
   const [inputError, setInputError] = useState<string | null>(null);
-  const [showManualInput, setShowManualInput] = useState(false);
   const [savingUsername, setSavingUsername] = useState(false);
   const telegramWidgetRef = useRef<HTMLDivElement | null>(null);
 
@@ -335,7 +334,6 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
     setConnectModalPlatform(pId);
     setUsernameInput('');
     setInputError(null);
-    setShowManualInput(pId === 'x');
   };
 
   const handleConnectInstagram = () => {
@@ -389,7 +387,6 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
       }));
       setConnectModalPlatform(null);
       setUsernameInput('');
-      setShowManualInput(false);
     } catch (e) {
       console.error('Failed to connect platform username:', e);
       setInputError('Failed to save connection. Please try again.');
@@ -505,6 +502,9 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
                       onClick={() => {
                         if (pId === 'spotify') {
                           void handleConnectSpotify();
+                        } else if (pId === 'instagram') {
+                          setShowAddSheet(false);
+                          handleConnectInstagram();
                         } else {
                           handleOpenConnectModal(pId);
                         }
@@ -524,120 +524,93 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
         </div>
       )}
 
-      {/* Connect Platform Modal (Instagram direct OAuth, Telegram direct widget, X with format & existence validation) */}
-      {connectModalPlatform && (
-        <div className="sh-op-modal-overlay" onClick={() => !savingUsername && setConnectModalPlatform(null)}>
+      {/* Official Telegram Login Modal */}
+      {connectModalPlatform === 'telegram' && (
+        <div className="sh-op-modal-overlay" onClick={() => setConnectModalPlatform(null)}>
           <div className="sh-op-modal" onClick={(e) => e.stopPropagation()}>
             <div className="sh-op-modal-header">
-              <Icon icon={getPlatformMeta(connectModalPlatform).icon} width={32} height={32} />
+              <Icon icon="logos:telegram" width={32} height={32} />
               <div>
-                <h3 className="sh-op-modal-title">Connect {getPlatformMeta(connectModalPlatform).name}</h3>
+                <h3 className="sh-op-modal-title">Connect Telegram</h3>
                 <p className="sh-op-modal-desc">
-                  {connectModalPlatform === 'instagram'
-                    ? 'Log in directly with your Instagram account'
-                    : connectModalPlatform === 'telegram'
-                    ? 'Log in directly via Telegram'
-                    : 'Enter your X username to connect'}
+                  Log in with @Shinzi_connect_bot
                 </p>
               </div>
             </div>
 
-            {/* Direct Login Options for Instagram */}
-            {connectModalPlatform === 'instagram' && !showManualInput && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <button
-                  type="button"
-                  className="sh-op-direct-btn sh-op-direct-btn-instagram"
-                  onClick={handleConnectInstagram}
-                >
-                  <Icon icon="skill-icons:instagram" width={22} height={22} />
-                  <span>Log in with Instagram</span>
-                </button>
-                <div className="sh-op-divider-or">
-                  <span>or</span>
-                </div>
-                <button
-                  type="button"
-                  className="sh-op-modal-btn-cancel"
-                  style={{ textAlign: 'center', width: '100%' }}
-                  onClick={() => setShowManualInput(true)}
-                >
-                  Enter username manually
-                </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center', padding: '16px 0' }}>
+              <div ref={telegramWidgetRef} style={{ minHeight: 44, display: 'flex', justifyContent: 'center' }} />
+            </div>
+
+            <div className="sh-op-modal-actions">
+              <button
+                type="button"
+                className="sh-op-modal-btn-cancel"
+                onClick={() => setConnectModalPlatform(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Connect X Modal with format & validation */}
+      {connectModalPlatform === 'x' && (
+        <div className="sh-op-modal-overlay" onClick={() => !savingUsername && setConnectModalPlatform(null)}>
+          <div className="sh-op-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="sh-op-modal-header">
+              <Icon icon="ri:twitter-x-fill" width={32} height={32} />
+              <div>
+                <h3 className="sh-op-modal-title">Connect X</h3>
+                <p className="sh-op-modal-desc">
+                  Enter your X username to connect
+                </p>
               </div>
+            </div>
+
+            <div className={`sh-op-modal-input-wrap ${inputError ? 'has-error' : ''}`}>
+              <span className="sh-op-modal-input-prefix">@</span>
+              <input
+                type="text"
+                className="sh-op-modal-input"
+                placeholder="username"
+                value={usernameInput}
+                onChange={(e) => {
+                  setUsernameInput(e.target.value);
+                  if (inputError) setInputError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && usernameInput.trim()) {
+                    void handleConfirmConnectUsername();
+                  }
+                }}
+                autoFocus
+              />
+            </div>
+
+            {inputError && (
+              <div className="sh-op-modal-error">{inputError}</div>
             )}
 
-            {/* Direct Login Options for Telegram (@Shinzi_connect_bot) */}
-            {connectModalPlatform === 'telegram' && !showManualInput && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
-                <div ref={telegramWidgetRef} style={{ minHeight: 44, display: 'flex', justifyContent: 'center' }} />
-                <div className="sh-op-divider-or" style={{ width: '100%' }}>
-                  <span>or</span>
-                </div>
-                <button
-                  type="button"
-                  className="sh-op-modal-btn-cancel"
-                  style={{ textAlign: 'center', width: '100%' }}
-                  onClick={() => setShowManualInput(true)}
-                >
-                  Enter username manually
-                </button>
-              </div>
-            )}
-
-            {/* Typebox for X and Manual Fallback with live error checking */}
-            {(connectModalPlatform === 'x' || showManualInput) && (
-              <>
-                <div className={`sh-op-modal-input-wrap ${inputError ? 'has-error' : ''}`}>
-                  <span className="sh-op-modal-input-prefix">@</span>
-                  <input
-                    type="text"
-                    className="sh-op-modal-input"
-                    placeholder={getPlatformMeta(connectModalPlatform).placeholder}
-                    value={usernameInput}
-                    onChange={(e) => {
-                      setUsernameInput(e.target.value);
-                      if (inputError) setInputError(null);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && usernameInput.trim()) {
-                        void handleConfirmConnectUsername();
-                      }
-                    }}
-                    autoFocus
-                  />
-                </div>
-
-                {inputError && (
-                  <div className="sh-op-modal-error">{inputError}</div>
-                )}
-
-                <div className="sh-op-modal-actions">
-                  <button
-                    type="button"
-                    className="sh-op-modal-btn-cancel"
-                    disabled={savingUsername}
-                    onClick={() => {
-                      if (showManualInput && connectModalPlatform !== 'x') {
-                        setShowManualInput(false);
-                      } else {
-                        setConnectModalPlatform(null);
-                      }
-                    }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="sh-op-modal-btn-continue"
-                    disabled={savingUsername || !usernameInput.trim()}
-                    onClick={() => void handleConfirmConnectUsername()}
-                  >
-                    {savingUsername ? 'Connecting…' : 'Continue'}
-                  </button>
-                </div>
-              </>
-            )}
+            <div className="sh-op-modal-actions">
+              <button
+                type="button"
+                className="sh-op-modal-btn-cancel"
+                disabled={savingUsername}
+                onClick={() => setConnectModalPlatform(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="sh-op-modal-btn-continue"
+                disabled={savingUsername || !usernameInput.trim()}
+                onClick={() => void handleConfirmConnectUsername()}
+              >
+                {savingUsername ? 'Connecting…' : 'Continue'}
+              </button>
+            </div>
           </div>
         </div>
       )}
