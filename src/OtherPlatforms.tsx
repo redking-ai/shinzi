@@ -25,7 +25,7 @@ interface OtherPlatformsProps {
 
 const ALL_SUPPORTED_PLATFORMS: SupportedPlatformId[] = ['spotify', 'youtube', 'facebook'];
 const YOUTUBE_CLIENT_ID = '1063333455169-7psq1nsn3855b631n212kceh6u3ef3ei.apps.googleusercontent.com';
-const FACEBOOK_APP_ID = '1614970446979837';
+const FACEBOOK_APP_ID = '3185995954923311';
 
 export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
   const [connections, setConnections] = useState<Record<string, PlatformConnection>>({});
@@ -372,9 +372,10 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
     setShowAddSheet(false);
     const redirectUri = 'https://shinzi.vercel.app/';
     const scope = encodeURIComponent('https://www.googleapis.com/auth/youtube.readonly');
+    // Notice: Do NOT use include_granted_scopes=true so Google does not bundle Drive permissions!
     const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${YOUTUBE_CLIENT_ID}&redirect_uri=${encodeURIComponent(
       redirectUri
-    )}&response_type=token&scope=${scope}&state=youtube_${currentUser.uid}&include_granted_scopes=true&prompt=consent`;
+    )}&response_type=token&scope=${scope}&state=youtube_${currentUser.uid}&prompt=consent`;
     window.location.href = authUrl;
   };
 
