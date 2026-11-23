@@ -64,7 +64,7 @@ export default function App() {
   const [currentSearch, setCurrentSearch] = useState(() =>
     typeof window !== 'undefined' ? window.location.search : ''
   );
-  const [showSpotifySuccessModal, setShowSpotifySuccessModal] = useState(false);
+  const [platformSuccessModal, setPlatformSuccessModal] = useState<string | null>(null);
 
   // Global OAuth callback handler (Spotify ?code=, YouTube & Facebook #access_token=)
   useEffect(() => {
@@ -127,6 +127,7 @@ export default function App() {
               };
 
               await savePlatformConnection(u.uid, newConn);
+              setPlatformSuccessModal('youtube');
               sessionStorage.setItem('spotify_open_platforms', 'true');
               window.dispatchEvent(new CustomEvent('shinzi-open-other-platforms'));
               navigateTo('/settings');
@@ -176,6 +177,7 @@ export default function App() {
               };
 
               await savePlatformConnection(u.uid, newConn);
+              setPlatformSuccessModal('facebook');
               sessionStorage.setItem('spotify_open_platforms', 'true');
               window.dispatchEvent(new CustomEvent('shinzi-open-other-platforms'));
               navigateTo('/settings');
@@ -268,7 +270,7 @@ export default function App() {
             try {
               sessionStorage.setItem('spotify_just_connected', 'true');
             } catch {}
-            setShowSpotifySuccessModal(true);
+            setPlatformSuccessModal('spotify');
 
             // Trigger Settings -> OtherPlatforms navigation
             try {
@@ -289,7 +291,7 @@ export default function App() {
                 await saveConn(u);
               } else {
                 // Showing success screen on web
-                setShowSpotifySuccessModal(true);
+                setPlatformSuccessModal('spotify');
               }
             });
           }
@@ -857,8 +859,11 @@ useEffect(() => {
     <AppErrorManager currentUid={user?.uid || null}>
       <NotificationManager currentUid={user?.uid || null} />
       {renderContent()}
-      {showSpotifySuccessModal && (
-        <SpotifyConfirmationModal onClose={() => setShowSpotifySuccessModal(false)} />
+      {platformSuccessModal && (
+        <SpotifyConfirmationModal
+          platformId={platformSuccessModal}
+          onClose={() => setPlatformSuccessModal(null)}
+        />
       )}
     </AppErrorManager>
   );

@@ -31,7 +31,7 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
   const [connections, setConnections] = useState<Record<string, PlatformConnection>>({});
   const [loading, setLoading] = useState(true);
   const [showAddSheet, setShowAddSheet] = useState(false);
-  const [showAuthConfirm, setShowAuthConfirm] = useState(false);
+  const [confirmPlatform, setConfirmPlatform] = useState<string | null>(null);
   const [authConnecting, setAuthConnecting] = useState(false);
 
   const currentUser = auth.currentUser;
@@ -88,7 +88,7 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
           };
 
           await savePlatformConnection(currentUser.uid, newConn);
-          setShowAuthConfirm(true);
+          setConfirmPlatform('spotify');
         } catch (err) {
           console.error('[OtherPlatforms] PKCE Token exchange error:', err);
         }
@@ -153,7 +153,7 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
 
               await savePlatformConnection(currentUser.uid, newConn);
               setConnections((prev) => ({ ...prev, youtube: newConn }));
-              setShowAuthConfirm(true);
+              setConfirmPlatform('youtube');
             } catch (err) {
               console.error('[OtherPlatforms] Error saving YouTube connection:', err);
             }
@@ -203,7 +203,7 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
 
               await savePlatformConnection(currentUser.uid, newConn);
               setConnections((prev) => ({ ...prev, facebook: newConn }));
-              setShowAuthConfirm(true);
+              setConfirmPlatform('facebook');
             } catch (err) {
               console.error('[OtherPlatforms] Error saving Facebook connection:', err);
             }
@@ -231,7 +231,7 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
 
             await savePlatformConnection(currentUser.uid, newConn);
             setConnections((prev) => ({ ...prev, spotify: newConn }));
-            setShowAuthConfirm(true);
+            setConfirmPlatform('spotify');
           } catch (e) {
             console.error('[OtherPlatforms] Error saving Spotify OAuth token:', e);
           }
@@ -594,9 +594,10 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
 
 
       {/* Auth Confirmation Dialog (IMG-20261123-WA0003) */}
-      {showAuthConfirm && (
+      {confirmPlatform && (
         <SpotifyConfirmationModal
-          onClose={() => setShowAuthConfirm(false)}
+          platformId={confirmPlatform}
+          onClose={() => setConfirmPlatform(null)}
         />
       )}
     </div>
