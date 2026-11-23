@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Plus, X } from 'lucide-react';
+import { ArrowLeft, Plus } from 'lucide-react';
 import { Icon } from '@iconify/react';
 import { auth } from './firebaseConfig';
 import {
@@ -7,7 +7,6 @@ import {
   subscribeUserConnections,
   getUserConnections,
   updatePlatformToggles,
-  disconnectPlatform,
   savePlatformConnection,
   SPOTIFY_CLIENT_ID,
   fetchSpotifyProfile,
@@ -197,15 +196,6 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
     }
   };
 
-  const handleDisconnect = async (platformId: string) => {
-    if (!currentUser) return;
-    try {
-      await disconnectPlatform(currentUser.uid, platformId);
-    } catch (e) {
-      console.warn('Failed to disconnect platform:', e);
-    }
-  };
-
   const getCleanRedirectUri = () => {
     // If running in Capacitor or on vercel, ensure it matches Spotify configuration
     const origin = window.location.origin;
@@ -285,20 +275,12 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
               if (conn.platformId === 'spotify') {
                 return (
                   <div key={conn.platformId} className="sh-op-card">
-                    {/* Top Row: Spotify Icon + Display Name + X button */}
+                    {/* Top Row: Spotify Icon + Display Name */}
                     <div className="sh-op-card-top">
                       <div className="sh-op-card-user-info">
                         <Icon icon="logos:spotify-icon" width={24} height={24} />
                         <span className="sh-op-card-display-name">{conn.displayName || 'Spotify'}</span>
                       </div>
-                      <button
-                        type="button"
-                        className="sh-op-card-remove-btn"
-                        onClick={() => void handleDisconnect(conn.platformId)}
-                        aria-label="Disconnect Spotify"
-                      >
-                        <X size={18} color="#949ba4" />
-                      </button>
                     </div>
 
                     {/* Divider */}
