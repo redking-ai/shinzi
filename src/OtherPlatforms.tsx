@@ -4,6 +4,8 @@ import { Icon } from '@iconify/react';
 import { auth } from './firebaseConfig';
 import {
   PlatformConnection,
+  SupportedPlatformId,
+  getPlatformMeta,
   subscribeUserConnections,
   getUserConnections,
   updatePlatformToggles,
@@ -20,12 +22,17 @@ interface OtherPlatformsProps {
   onBack: () => void;
 }
 
+const ALL_SUPPORTED_PLATFORMS: SupportedPlatformId[] = ['spotify', 'instagram', 'x', 'telegram'];
+
 export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
   const [connections, setConnections] = useState<Record<string, PlatformConnection>>({});
   const [loading, setLoading] = useState(true);
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [showAuthConfirm, setShowAuthConfirm] = useState(false);
   const [authConnecting, setAuthConnecting] = useState(false);
+  const [connectModalPlatform, setConnectModalPlatform] = useState<SupportedPlatformId | null>(null);
+  const [usernameInput, setUsernameInput] = useState('');
+  const [savingUsername, setSavingUsername] = useState(false);
 
   const currentUser = auth.currentUser;
 
@@ -248,7 +255,49 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
     }
   };
 
+  const handleOpenConnectModal = (pId: SupportedPlatformId) => {
+    setShowAddSheet(false);
+    setConnectModalPlatform(pId);
+    setUsernameInput('');
+  };
+
+  const handleConfirmConnectUsername = async () => {
+    if (!currentUser || !connectModalPlatform) return;
+    const cleanUser = usernameInput.trim().replace(/^@+/, '').replace(/^https?:\/\/[^\/]+\//, '').replace(/\/$/, '');
+    if (!cleanUser) return;
+
+    setSavingUsername(true);
+    try {
+      const meta = getPlatformMeta(connectModalPlatform);
+      const profileUrl = `${meta.profileUrlPrefix}${cleanUser}`;
+      const displayName = `@${cleanUser}`;
+
+      const newConn: PlatformConnection = {
+        platformId: connectModalPlatform,
+        username: cleanUser,
+        displayName: displayName,
+        profileUrl: profileUrl,
+        displayOnProfile: true,
+        displayAsStatus: true,
+        connectedAt: Date.now(),
+      };
+
+      await savePlatformConnection(currentUser.uid, newConn);
+      setConnections((prev) => ({
+        ...prev,
+        [connectModalPlatform]: newConn,
+      }));
+      setConnectModalPlatform(null);
+      setUsernameInput('');
+    } catch (e) {
+      console.error('Failed to connect platform username:', e);
+    } finally {
+      setSavingUsername(false);
+    }
+  };
+
   const hasConnections = Object.keys(connections).length > 0;
+  const availablePlatforms = ALL_SUPPORTED_PLATFORMS.filter((pId) => !connections[pId]);
 
   return (
     <div className="sh-settings-page sh-other-platforms-page">
@@ -294,36 +343,36 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
         ) : (
           <div className="sh-op-cards-list">
             {Object.values(connections).map((conn) => {
-              if (conn.platformId === 'spotify') {
-                return (
-                  <div key={conn.platformId} className="sh-op-card">
-                    {/* Top Row: Spotify Icon + Display Name */}
-                    <div className="sh-op-card-top">
-                      <div className="sh-op-card-user-info">
-                        <Icon icon="logos:spotify-icon" width={24} height={24} />
-                        <span className="sh-op-card-display-name">{conn.displayName || 'Spotify'}</span>
-                      </div>
-                    </div>
-
-                    {/* Divider */}
-                    <div className="sh-op-card-divider" />
-
-                    {/* Toggle: Display on profile */}
-                    <div className="sh-op-toggle-row">
-                      <span className="sh-op-toggle-label">Display on profile</span>
-                      <label className="sh-op-switch">
-                        <input
-                          type="checkbox"
-                          checked={conn.displayOnProfile}
-                          onChange={() => handleToggle(conn.platformId, 'displayOnProfile', conn.displayOnProfile)}
-                        />
-                        <span className="sh-op-slider" />
-                      </label>
+              const meta = getPlatformMeta(conn.platformId);
+              return (
+                <div key={conn.platformId} className="sh-op-card">
+                  {/* Top Row: Platform Icon + Display Name */}
+                  <div className="sh-op-card-top">
+                    <div className="sh-op-card-user-info">
+                      <Icon icon={meta.icon} width={24} height={24} />
+                      <span className="sh-op-card-display-name">
+                        {conn.displayName || conn.username || meta.name}
+                      </span>
                     </div>
                   </div>
-                );
-              }
-              return null;
+
+                  {/* Divider */}
+                  <div className="sh-op-card-divider" />
+
+                  {/* Toggle: Display on profile */}
+                  <div className="sh-op-toggle-row">
+                    <span className="sh-op-toggle-label">Display on profile</span>
+                    <label className="sh-op-switch">
+                      <input
+                        type="checkbox"
+                        checked={conn.displayOnProfile}
+                        onChange={() => handleToggle(conn.platformId, 'displayOnProfile', conn.displayOnProfile)}
+                      />
+                      <span className="sh-op-slider" />
+                    </label>
+                  </div>
+                </div>
+              );
             })}
           </div>
         )}
@@ -337,26 +386,90 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
             <h3 className="sh-op-sheet-title">Add New Platform</h3>
 
             <div className="sh-op-sheet-list">
-              {!connections.spotify ? (
-                /* Spotify Item if not connected */
-                <button
-                  type="button"
-                  className="sh-op-sheet-item"
-                  disabled={authConnecting}
-                  onClick={() => void handleConnectSpotify()}
-                >
-                  <div className="sh-op-sheet-item-left">
-                    <Icon icon="logos:spotify-icon" width={26} height={26} />
-                    <span className="sh-op-sheet-item-name">Spotify</span>
-                  </div>
-                  <Icon icon="lucide:chevron-right" width={18} height={18} color="#949ba4" />
-                </button>
-              ) : (
+              {availablePlatforms.length === 0 ? (
                 /* All platforms already connected */
                 <div className="sh-op-empty" style={{ padding: '24px 16px', textAlign: 'center' }}>
                   <p className="sh-op-empty-text">All platforms connected. There is no platform left.</p>
                 </div>
+              ) : (
+                availablePlatforms.map((pId) => {
+                  const meta = getPlatformMeta(pId);
+                  return (
+                    <button
+                      key={pId}
+                      type="button"
+                      className="sh-op-sheet-item"
+                      disabled={authConnecting || savingUsername}
+                      onClick={() => {
+                        if (pId === 'spotify') {
+                          void handleConnectSpotify();
+                        } else {
+                          handleOpenConnectModal(pId);
+                        }
+                      }}
+                    >
+                      <div className="sh-op-sheet-item-left">
+                        <Icon icon={meta.icon} width={26} height={26} />
+                        <span className="sh-op-sheet-item-name">{meta.name}</span>
+                      </div>
+                      <Icon icon="lucide:chevron-right" width={18} height={18} color="#949ba4" />
+                    </button>
+                  );
+                })
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Connect Platform Username Modal (X, Instagram, Telegram) */}
+      {connectModalPlatform && (
+        <div className="sh-op-modal-overlay" onClick={() => !savingUsername && setConnectModalPlatform(null)}>
+          <div className="sh-op-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="sh-op-modal-header">
+              <Icon icon={getPlatformMeta(connectModalPlatform).icon} width={30} height={30} />
+              <div>
+                <h3 className="sh-op-modal-title">Connect {getPlatformMeta(connectModalPlatform).name}</h3>
+                <p className="sh-op-modal-desc">
+                  Enter your {getPlatformMeta(connectModalPlatform).name} username
+                </p>
+              </div>
+            </div>
+
+            <div className="sh-op-modal-input-wrap">
+              <span className="sh-op-modal-input-prefix">@</span>
+              <input
+                type="text"
+                className="sh-op-modal-input"
+                placeholder={getPlatformMeta(connectModalPlatform).placeholder}
+                value={usernameInput}
+                onChange={(e) => setUsernameInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && usernameInput.trim()) {
+                    void handleConfirmConnectUsername();
+                  }
+                }}
+                autoFocus
+              />
+            </div>
+
+            <div className="sh-op-modal-actions">
+              <button
+                type="button"
+                className="sh-op-modal-btn-cancel"
+                disabled={savingUsername}
+                onClick={() => setConnectModalPlatform(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="sh-op-modal-btn-continue"
+                disabled={savingUsername || !usernameInput.trim()}
+                onClick={() => void handleConfirmConnectUsername()}
+              >
+                {savingUsername ? 'Connecting…' : 'Continue'}
+              </button>
             </div>
           </div>
         </div>

@@ -12,8 +12,10 @@ export interface SpotifyPresenceData {
   updatedAt: number;
 }
 
+export type SupportedPlatformId = 'spotify' | 'instagram' | 'x' | 'telegram';
+
 export interface PlatformConnection {
-  platformId: 'spotify';
+  platformId: SupportedPlatformId | string;
   username: string;
   displayName: string;
   profileUrl: string;
@@ -23,6 +25,58 @@ export interface PlatformConnection {
   displayAsStatus: boolean;
   connectedAt: number;
   presence?: SpotifyPresenceData | null;
+}
+
+export interface PlatformMeta {
+  id: SupportedPlatformId;
+  name: string;
+  icon: string;
+  placeholder: string;
+  profileUrlPrefix: string;
+}
+
+export const PLATFORM_REGISTRY: Record<SupportedPlatformId, PlatformMeta> = {
+  spotify: {
+    id: 'spotify',
+    name: 'Spotify',
+    icon: 'logos:spotify-icon',
+    placeholder: 'Spotify User',
+    profileUrlPrefix: 'https://open.spotify.com/user/',
+  },
+  instagram: {
+    id: 'instagram',
+    name: 'Instagram',
+    icon: 'skill-icons:instagram',
+    placeholder: 'username',
+    profileUrlPrefix: 'https://instagram.com/',
+  },
+  x: {
+    id: 'x',
+    name: 'X',
+    icon: 'ri:twitter-x-fill',
+    placeholder: 'username',
+    profileUrlPrefix: 'https://x.com/',
+  },
+  telegram: {
+    id: 'telegram',
+    name: 'Telegram',
+    icon: 'logos:telegram',
+    placeholder: 'username',
+    profileUrlPrefix: 'https://t.me/',
+  },
+};
+
+export function getPlatformMeta(platformId: string): PlatformMeta {
+  if (platformId in PLATFORM_REGISTRY) {
+    return PLATFORM_REGISTRY[platformId as SupportedPlatformId];
+  }
+  return {
+    id: platformId as SupportedPlatformId,
+    name: platformId.charAt(0).toUpperCase() + platformId.slice(1),
+    icon: 'lucide:globe',
+    placeholder: 'username',
+    profileUrlPrefix: '#',
+  };
 }
 
 export const SPOTIFY_CLIENT_ID = 'fa5ce3a5bd7c4926863809cf6dab28d8';

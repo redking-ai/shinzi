@@ -13,7 +13,7 @@ import {
 } from 'firebase/firestore';
 import { Icon } from '@iconify/react';
 import SpotifyListeningCard from './SpotifyListeningCard';
-import { subscribeUserConnections, PlatformConnection } from './spotifyService';
+import { subscribeUserConnections, PlatformConnection, getPlatformMeta } from './spotifyService';
 import { ArrowLeft, Ban, Clock3, Ellipsis, Info, MessageCircle, MessageSquare, Phone, UserPlus, UserRound, UserX, VolumeX } from 'lucide-react';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { auth, db } from './firebaseConfig';
@@ -922,23 +922,26 @@ export default function OtherProfile({
                 <div className="sh-profile-platforms-section">
                   {Object.values(platformConnections)
                     .filter((c) => c.displayOnProfile)
-                    .map((conn) => (
-                      <a
-                        key={conn.platformId}
-                        href={conn.profileUrl || '#'}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="sh-profile-platform-item"
-                      >
-                        <div className="sh-profile-platform-left">
-                          <Icon icon="logos:spotify-icon" width={22} height={22} />
-                          <span className="sh-profile-platform-name">
-                            {conn.displayName || conn.username || 'Spotify User'}
-                          </span>
-                        </div>
-                        <Icon icon="lucide:arrow-up-right" width={18} height={18} color="#949ba4" />
-                      </a>
-                    ))}
+                    .map((conn) => {
+                      const meta = getPlatformMeta(conn.platformId);
+                      return (
+                        <a
+                          key={conn.platformId}
+                          href={conn.profileUrl || '#'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="sh-profile-platform-item"
+                        >
+                          <div className="sh-profile-platform-left">
+                            <Icon icon={meta.icon} width={22} height={22} />
+                            <span className="sh-profile-platform-name">
+                              {conn.displayName || conn.username || meta.name}
+                            </span>
+                          </div>
+                          <Icon icon="lucide:arrow-up-right" width={18} height={18} color="#949ba4" />
+                        </a>
+                      );
+                    })}
                 </div>
               </div>
             )}
