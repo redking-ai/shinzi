@@ -329,6 +329,41 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
     }
   };
 
+  const handleConnectTelegram = () => {
+    setShowAddSheet(false);
+    if ((window as any).Telegram?.Login?.auth) {
+      (window as any).Telegram.Login.auth(
+        { bot_id: '9290212203', request_access: true },
+        async (user: any) => {
+          if (!user || !currentUser) return;
+          try {
+            const uname = user.username || user.first_name || 'Telegram User';
+            const newConn: PlatformConnection = {
+              platformId: 'telegram',
+              username: uname,
+              displayName: user.username ? `@${user.username}` : user.first_name,
+              profileUrl: user.username ? `https://t.me/${user.username}` : `https://t.me/Shinzi_connect_bot`,
+              displayOnProfile: true,
+              displayAsStatus: true,
+              connectedAt: Date.now(),
+            };
+            await savePlatformConnection(currentUser.uid, newConn);
+            setConnections((prev) => ({ ...prev, telegram: newConn }));
+            setShowAuthConfirm(true);
+          } catch (err) {
+            console.error('Failed to save Telegram connection:', err);
+          }
+        }
+      );
+    } else {
+      window.open(
+        `https://oauth.telegram.org/auth?bot_id=9290212203&origin=${encodeURIComponent(window.location.origin)}`,
+        'telegram_oauth',
+        'width=550,height=470'
+      );
+    }
+  };
+
   const handleOpenConnectModal = (pId: SupportedPlatformId) => {
     setShowAddSheet(false);
     setConnectModalPlatform(pId);
@@ -505,6 +540,8 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
                         } else if (pId === 'instagram') {
                           setShowAddSheet(false);
                           handleConnectInstagram();
+                        } else if (pId === 'telegram') {
+                          handleConnectTelegram();
                         } else {
                           handleOpenConnectModal(pId);
                         }
@@ -524,36 +561,7 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
         </div>
       )}
 
-      {/* Official Telegram Login Modal */}
-      {connectModalPlatform === 'telegram' && (
-        <div className="sh-op-modal-overlay" onClick={() => setConnectModalPlatform(null)}>
-          <div className="sh-op-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="sh-op-modal-header">
-              <Icon icon="logos:telegram" width={32} height={32} />
-              <div>
-                <h3 className="sh-op-modal-title">Connect Telegram</h3>
-                <p className="sh-op-modal-desc">
-                  Log in with @Shinzi_connect_bot
-                </p>
-              </div>
-            </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center', padding: '16px 0' }}>
-              <div ref={telegramWidgetRef} style={{ minHeight: 44, display: 'flex', justifyContent: 'center' }} />
-            </div>
-
-            <div className="sh-op-modal-actions">
-              <button
-                type="button"
-                className="sh-op-modal-btn-cancel"
-                onClick={() => setConnectModalPlatform(null)}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Connect X Modal with format & validation */}
       {connectModalPlatform === 'x' && (
