@@ -5,6 +5,7 @@ import { auth } from './firebaseConfig';
 import {
   PlatformConnection,
   subscribeUserConnections,
+  getUserConnections,
   updatePlatformToggles,
   disconnectPlatform,
   savePlatformConnection,
@@ -148,12 +149,37 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
       return;
     }
 
+    const reloadConnections = async () => {
+      try {
+        const fresh = await getUserConnections(currentUser.uid);
+        if (fresh && Object.keys(fresh).length > 0) {
+          setConnections(fresh);
+        }
+      } catch {}
+    };
+
     const unsub = subscribeUserConnections(currentUser.uid, (data) => {
       setConnections(data);
       setLoading(false);
     });
 
-    return () => unsub();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        reloadConnections();
+      }
+    };
+    const onFocus = () => {
+      reloadConnections();
+    };
+
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      unsub();
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, [currentUser]);
 
   const handleToggle = async (platformId: string, field: 'displayOnProfile' | 'displayAsStatus', currentVal: boolean) => {

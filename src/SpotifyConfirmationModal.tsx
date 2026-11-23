@@ -8,8 +8,20 @@ interface SpotifyConfirmationModalProps {
 export default function SpotifyConfirmationModal({
   onClose,
 }: SpotifyConfirmationModalProps) {
+  const handleClose = () => {
+    if (typeof window !== 'undefined') {
+      try {
+        window.close();
+      } catch {}
+      try {
+        window.location.href = 'shinzi://platforms';
+      } catch {}
+    }
+    onClose();
+  };
+
   return (
-    <div className="sh-sp-confirm-overlay" onClick={onClose}>
+    <div className="sh-sp-confirm-overlay" onClick={handleClose}>
       <div className="sh-sp-confirm-card" onClick={(e) => e.stopPropagation()}>
         {/* Three items in center row: Shinzi White Hero Logo + Link Chain + Spotify Icon */}
         <div className="sh-sp-confirm-icons-row">
@@ -39,7 +51,7 @@ export default function SpotifyConfirmationModal({
         <button
           type="button"
           className="sh-sp-confirm-close-btn"
-          onClick={onClose}
+          onClick={handleClose}
         >
           Close
         </button>
