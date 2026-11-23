@@ -373,7 +373,7 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
 
   const handleConnectInstagram = () => {
     if (!currentUser) return;
-    const redirectUri = getCleanRedirectUri();
+    const redirectUri = 'https://shinzi.vercel.app/';
     const appId = '1614970446979837';
     const url = `https://www.facebook.com/v20.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(
       redirectUri
