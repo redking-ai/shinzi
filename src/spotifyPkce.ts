@@ -2,7 +2,7 @@
 
 function generateRandomString(length: number): string {
   let text = '';
-  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
   for (let i = 0; i < length; i++) {
     text += possible.charAt(Math.floor(Math.random() * possible.length));
   }
@@ -12,17 +12,30 @@ function generateRandomString(length: number): string {
 async function generateCodeChallenge(codeVerifier: string): Promise<string> {
   const data = new TextEncoder().encode(codeVerifier);
   const digest = await window.crypto.subtle.digest('SHA-256', data);
-  return btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(digest))))
+  const bytes = new Uint8Array(digest);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary)
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=+$/, '');
 }
 
 export async function redirectToSpotifyAuthorize(clientId: string, redirectUri: string) {
-  const verifier = generateRandomString(128);
+  const verifier = generateRandomString(64);
   const challenge = await generateCodeChallenge(verifier);
 
-  localStorage.setItem('spotify_code_verifier', verifier);
+  try {
+    localStorage.setItem('spotify_code_verifier', verifier);
+  } catch {}
+  try {
+    sessionStorage.setItem('spotify_code_verifier', verifier);
+  } catch {}
+  try {
+    document.cookie = `spotify_code_verifier=${encodeURIComponent(verifier)}; path=/; max-age=1800; SameSite=Lax`;
+  } catch {}
 
   const scopes = [
     'user-read-currently-playing',
@@ -50,7 +63,14 @@ export async function exchangeCodeForToken(
   code: string,
   redirectUri: string
 ): Promise<{ accessToken: string; refreshToken?: string }> {
-  const verifier = localStorage.getItem('spotify_code_verifier') || '';
+  let verifier = '';
+  try {
+    verifier = localStorage.getItem('spotify_code_verifier') || sessionStorage.getItem('spotify_code_verifier') || '';
+    if (!verifier && typeof document !== 'undefined') {
+      const match = document.cookie.match(/spotify_code_verifier=([^;]+)/);
+      if (match) verifier = decodeURIComponent(match[1]);
+    }
+  } catch {}
 
   const params = new URLSearchParams({
     client_id: clientId,
@@ -70,11 +90,15 @@ export async function exchangeCodeForToken(
 
   if (!response.ok) {
     const errorText = await response.text();
+    console.error('[spotifyPkce] Token exchange failed response:', errorText);
     throw new Error(`Failed to exchange code for token: ${errorText}`);
   }
 
   const data = await response.json();
-  localStorage.removeItem('spotify_code_verifier');
+  try {
+    localStorage.removeItem('spotify_code_verifier');
+  } catch {}
+
   return {
     accessToken: data.access_token,
     refreshToken: data.refresh_token,

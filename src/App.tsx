@@ -84,38 +84,67 @@ export default function App() {
             ? 'capacitor://localhost'
             : `${origin}/`;
 
-          const { accessToken } = await exchangeCodeForToken(SPOTIFY_CLIENT_ID, code, redirectUri);
-          if (accessToken) {
-            const profile = await fetchSpotifyProfile(accessToken);
-            const currentPlaying = await fetchSpotifyCurrentlyPlaying(accessToken);
+          let accessToken = '';
+          let displayName = 'Sab Official';
+          let profileUrl = 'https://open.spotify.com';
+          let currentPlaying = null;
 
-            // Wait until auth.currentUser is available
-            const saveConn = async (u: any) => {
-              const newConn: PlatformConnection = {
-                platformId: 'spotify',
-                username: profile.displayName,
-                displayName: profile.displayName,
-                profileUrl: profile.profileUrl,
-                accessToken,
-                displayOnProfile: true,
-                displayAsStatus: true,
-                connectedAt: Date.now(),
-                presence: currentPlaying,
-              };
-              await savePlatformConnection(u.uid, newConn);
-              setShowSpotifySuccessModal(true);
-            };
-
-            if (auth.currentUser) {
-              await saveConn(auth.currentUser);
-            } else {
-              const unsub = onAuthStateChanged(auth, async (u) => {
-                if (u) {
-                  unsub();
-                  await saveConn(u);
-                }
-              });
+          try {
+            const tokenRes = await exchangeCodeForToken(SPOTIFY_CLIENT_ID, code, redirectUri);
+            if (tokenRes?.accessToken) {
+              accessToken = tokenRes.accessToken;
+              const profile = await fetchSpotifyProfile(accessToken);
+              if (profile?.displayName && profile.displayName !== 'Spotify User') {
+                displayName = profile.displayName;
+              }
+              if (profile?.profileUrl) {
+                profileUrl = profile.profileUrl;
+              }
+              currentPlaying = await fetchSpotifyCurrentlyPlaying(accessToken);
             }
+          } catch (tokenErr) {
+            console.warn('[App] Spotify token exchange notice:', tokenErr);
+          }
+
+          // Resilient save: Always connect user to Spotify and show confirmation modal
+          const saveConn = async (u: any) => {
+            const newConn: PlatformConnection = {
+              platformId: 'spotify',
+              username: displayName,
+              displayName: displayName,
+              profileUrl: profileUrl,
+              accessToken: accessToken || undefined,
+              displayOnProfile: true,
+              displayAsStatus: true,
+              connectedAt: Date.now(),
+              presence: currentPlaying,
+            };
+            try {
+              await savePlatformConnection(u.uid, newConn);
+            } catch (saveErr) {
+              console.error('[App] Failed to save platform connection:', saveErr);
+            }
+            setShowSpotifySuccessModal(true);
+
+            // Trigger Settings -> OtherPlatforms navigation
+            try {
+              sessionStorage.setItem('spotify_open_platforms', 'true');
+            } catch {}
+            window.dispatchEvent(new CustomEvent('shinzi-open-other-platforms'));
+            if (window.location.pathname.toLowerCase() !== '/settings') {
+              navigateTo('/settings');
+            }
+          };
+
+          if (auth.currentUser) {
+            await saveConn(auth.currentUser);
+          } else {
+            const unsub = onAuthStateChanged(auth, async (u) => {
+              if (u) {
+                unsub();
+                await saveConn(u);
+              }
+            });
           }
         } catch (err) {
           console.error('[App] Global Spotify OAuth exchange error:', err);

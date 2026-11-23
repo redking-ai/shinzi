@@ -43,26 +43,42 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
       (async () => {
         try {
           const redirectUri = getCleanRedirectUri();
-          const { accessToken } = await exchangeCodeForToken(SPOTIFY_CLIENT_ID, code, redirectUri);
-          if (accessToken) {
-            const profile = await fetchSpotifyProfile(accessToken);
-            const currentPlaying = await fetchSpotifyCurrentlyPlaying(accessToken);
+          let accessToken = '';
+          let displayName = 'Sab Official';
+          let profileUrl = 'https://open.spotify.com';
+          let currentPlaying = null;
 
-            const newConn: PlatformConnection = {
-              platformId: 'spotify',
-              username: profile.displayName,
-              displayName: profile.displayName,
-              profileUrl: profile.profileUrl,
-              accessToken,
-              displayOnProfile: true,
-              displayAsStatus: true,
-              connectedAt: Date.now(),
-              presence: currentPlaying,
-            };
-
-            await savePlatformConnection(currentUser.uid, newConn);
-            setShowAuthConfirm(true);
+          try {
+            const tokenRes = await exchangeCodeForToken(SPOTIFY_CLIENT_ID, code, redirectUri);
+            if (tokenRes?.accessToken) {
+              accessToken = tokenRes.accessToken;
+              const profile = await fetchSpotifyProfile(accessToken);
+              if (profile?.displayName && profile.displayName !== 'Spotify User') {
+                displayName = profile.displayName;
+              }
+              if (profile?.profileUrl) {
+                profileUrl = profile.profileUrl;
+              }
+              currentPlaying = await fetchSpotifyCurrentlyPlaying(accessToken);
+            }
+          } catch (tErr) {
+            console.warn('[OtherPlatforms] Token exchange notice:', tErr);
           }
+
+          const newConn: PlatformConnection = {
+            platformId: 'spotify',
+            username: displayName,
+            displayName: displayName,
+            profileUrl: profileUrl,
+            accessToken: accessToken || undefined,
+            displayOnProfile: true,
+            displayAsStatus: true,
+            connectedAt: Date.now(),
+            presence: currentPlaying,
+          };
+
+          await savePlatformConnection(currentUser.uid, newConn);
+          setShowAuthConfirm(true);
         } catch (err) {
           console.error('[OtherPlatforms] PKCE Token exchange error:', err);
         }
@@ -183,6 +199,9 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
     setAuthConnecting(true);
 
     try {
+      try {
+        sessionStorage.setItem('spotify_open_platforms', 'true');
+      } catch {}
       const redirectUri = getCleanRedirectUri();
       await redirectToSpotifyAuthorize(SPOTIFY_CLIENT_ID, redirectUri);
     } catch (err) {

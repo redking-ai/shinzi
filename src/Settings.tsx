@@ -85,7 +85,23 @@ export default function Settings({ onBack }: SettingsProps) {
   });
   const [showTextStyles, setShowTextStyles] = useState(false);
   const [showRestrictedAccounts, setShowRestrictedAccounts] = useState(false);
-  const [showOtherPlatforms, setShowOtherPlatforms] = useState(false);
+  const [showOtherPlatforms, setShowOtherPlatforms] = useState(() => {
+    try {
+      if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('spotify_open_platforms') === 'true') {
+        sessionStorage.removeItem('spotify_open_platforms');
+        return true;
+      }
+    } catch {}
+    return false;
+  });
+
+  useEffect(() => {
+    const handleOpenPlatforms = () => {
+      setShowOtherPlatforms(true);
+    };
+    window.addEventListener('shinzi-open-other-platforms', handleOpenPlatforms);
+    return () => window.removeEventListener('shinzi-open-other-platforms', handleOpenPlatforms);
+  }, []);
   const [toastText, setToastText] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
   const [deviceName, setDeviceName] = useState('Samsung A20');
