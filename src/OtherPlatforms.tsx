@@ -192,10 +192,29 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
     const newProfile = field === 'displayOnProfile' ? !currentVal : conn.displayOnProfile;
     const newStatus = field === 'displayAsStatus' ? !currentVal : conn.displayAsStatus;
 
+    // Optimistically update local state so toggle flips instantly
+    setConnections((prev) => ({
+      ...prev,
+      [platformId]: {
+        ...prev[platformId],
+        displayOnProfile: newProfile,
+        displayAsStatus: newStatus,
+      },
+    }));
+
     try {
       await updatePlatformToggles(currentUser.uid, platformId, newProfile, newStatus);
     } catch (e) {
       console.warn('Failed to update toggle:', e);
+      // Revert on error
+      setConnections((prev) => ({
+        ...prev,
+        [platformId]: {
+          ...prev[platformId],
+          displayOnProfile: conn.displayOnProfile,
+          displayAsStatus: conn.displayAsStatus,
+        },
+      }));
     }
   };
 
@@ -250,9 +269,9 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
       </div>
 
       <div className="sh-settings-content">
-        {/* Connections Header with + icon matching IMG-20261123-WA0006 */}
+        {/* Platforms Header with + icon */}
         <div className="sh-op-subhead-row">
-          <span className="sh-op-subhead-title">Connections</span>
+          <span className="sh-op-subhead-title">Platforms</span>
           <button
             type="button"
             className="sh-op-add-btn"
@@ -289,7 +308,7 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
                     {/* Divider */}
                     <div className="sh-op-card-divider" />
 
-                    {/* Toggle 1: Display on profile */}
+                    {/* Toggle: Display on profile */}
                     <div className="sh-op-toggle-row">
                       <span className="sh-op-toggle-label">Display on profile</span>
                       <label className="sh-op-switch">
@@ -297,19 +316,6 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
                           type="checkbox"
                           checked={conn.displayOnProfile}
                           onChange={() => handleToggle(conn.platformId, 'displayOnProfile', conn.displayOnProfile)}
-                        />
-                        <span className="sh-op-slider" />
-                      </label>
-                    </div>
-
-                    {/* Toggle 2: Display Spotify as your status */}
-                    <div className="sh-op-toggle-row">
-                      <span className="sh-op-toggle-label">Display Spotify as your status</span>
-                      <label className="sh-op-switch">
-                        <input
-                          type="checkbox"
-                          checked={conn.displayAsStatus}
-                          onChange={() => handleToggle(conn.platformId, 'displayAsStatus', conn.displayAsStatus)}
                         />
                         <span className="sh-op-slider" />
                       </label>
@@ -323,7 +329,7 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
         )}
       </div>
 
-      {/* Add New Platform Bottom Sheet Modal (IMG-20261123-WA0005) */}
+      {/* Add New Platform Bottom Sheet Modal */}
       {showAddSheet && (
         <div className="sh-op-sheet-overlay" onClick={() => setShowAddSheet(false)}>
           <div className="sh-op-sheet" onClick={(e) => e.stopPropagation()}>
@@ -331,19 +337,26 @@ export default function OtherPlatforms({ onBack }: OtherPlatformsProps) {
             <h3 className="sh-op-sheet-title">Add New Platform</h3>
 
             <div className="sh-op-sheet-list">
-              {/* Spotify Item */}
-              <button
-                type="button"
-                className="sh-op-sheet-item"
-                disabled={authConnecting}
-                onClick={() => void handleConnectSpotify()}
-              >
-                <div className="sh-op-sheet-item-left">
-                  <Icon icon="logos:spotify-icon" width={26} height={26} />
-                  <span className="sh-op-sheet-item-name">Spotify</span>
+              {!connections.spotify ? (
+                /* Spotify Item if not connected */
+                <button
+                  type="button"
+                  className="sh-op-sheet-item"
+                  disabled={authConnecting}
+                  onClick={() => void handleConnectSpotify()}
+                >
+                  <div className="sh-op-sheet-item-left">
+                    <Icon icon="logos:spotify-icon" width={26} height={26} />
+                    <span className="sh-op-sheet-item-name">Spotify</span>
+                  </div>
+                  <Icon icon="lucide:chevron-right" width={18} height={18} color="#949ba4" />
+                </button>
+              ) : (
+                /* All platforms already connected */
+                <div className="sh-op-empty" style={{ padding: '24px 16px', textAlign: 'center' }}>
+                  <p className="sh-op-empty-text">All platforms connected. There is no platform left.</p>
                 </div>
-                <Icon icon="lucide:chevron-right" width={18} height={18} color="#949ba4" />
-              </button>
+              )}
             </div>
           </div>
         </div>
