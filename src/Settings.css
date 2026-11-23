@@ -1324,3 +1324,16 @@
   white-space: nowrap;
 }
 
+/* Chat Header Custom Status Subtitle (Discord style) (IMG-20261124-WA0001) */
+.shc-chat-head-status-text {
+  color: #949ba4 !important;
+  font-size: 11.5px !important;
+  font-weight: 400 !important;
+  line-height: 1.25 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  max-width: 240px !important;
+  display: block !important;
+}
+

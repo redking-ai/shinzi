@@ -6379,11 +6379,27 @@ const handleSearchMessage = async (target: Rec) => {
               {/* If listening to Spotify and displayAsStatus is on: show (headphone icon) listening to Spotify in green (IMG-20261123-WA0004) */}
               {!isGroup &&
                 activeDmConnections.spotify?.displayAsStatus &&
-                activeDmConnections.spotify.presence?.isPlaying && (
+                activeDmConnections.spotify.presence?.isPlaying ? (
                   <span className="shc-chat-status-listening">
                     <Headphones size={13} strokeWidth={2.2} />
                     <span>Listening to Spotify</span>
                   </span>
+                ) : (
+                  (() => {
+                    const statusText = (
+                      targetProfile?.bubleText ||
+                      userLiveProfiles[targetUid]?.bubleText ||
+                      targetProfile?.statusText ||
+                      userLiveProfiles[targetUid]?.statusText ||
+                      ''
+                    ).trim();
+
+                    return statusText ? (
+                      <span className="shc-chat-head-status-text" title={statusText}>
+                        {statusText}
+                      </span>
+                    ) : null;
+                  })()
                 )}
             </button>
           ) : (
