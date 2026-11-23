@@ -23,6 +23,15 @@ import Terms from './Terms';
 import SignUp from './SignUp';
 import Login from './Login';
 import Chat from './Chat';
+import SpotifyConfirmationModal from './SpotifyConfirmationModal';
+import {
+  SPOTIFY_CLIENT_ID,
+  savePlatformConnection,
+  fetchSpotifyProfile,
+  fetchSpotifyCurrentlyPlaying,
+  PlatformConnection,
+} from './spotifyService';
+import { exchangeCodeForToken } from './spotifyPkce';
 import Servers from './Servers';
 import NotificationManager from './NotificationManager';
 import ErrorBoundary from './ErrorBoundary';
@@ -51,6 +60,71 @@ export default function App() {
   const [currentSearch, setCurrentSearch] = useState(() =>
     typeof window !== 'undefined' ? window.location.search : ''
   );
+  const [showSpotifySuccessModal, setShowSpotifySuccessModal] = useState(false);
+
+  // Global Spotify OAuth callback handler (checks for ?code= on any route)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+
+    if (code) {
+      // Clean query params from URL so refreshing doesn't re-trigger
+      window.history.replaceState(null, '', window.location.pathname);
+
+      // Exchange code for token and save connection
+      const processCode = async () => {
+        try {
+          const origin = window.location.origin;
+          const redirectUri = origin.includes('vercel.app')
+            ? 'https://shinzi.vercel.app/'
+            : origin.includes('web.app')
+            ? 'https://shinzi-fba29.web.app'
+            : origin.startsWith('capacitor://')
+            ? 'capacitor://localhost'
+            : `${origin}/`;
+
+          const { accessToken } = await exchangeCodeForToken(SPOTIFY_CLIENT_ID, code, redirectUri);
+          if (accessToken) {
+            const profile = await fetchSpotifyProfile(accessToken);
+            const currentPlaying = await fetchSpotifyCurrentlyPlaying(accessToken);
+
+            // Wait until auth.currentUser is available
+            const saveConn = async (u: any) => {
+              const newConn: PlatformConnection = {
+                platformId: 'spotify',
+                username: profile.displayName,
+                displayName: profile.displayName,
+                profileUrl: profile.profileUrl,
+                accessToken,
+                displayOnProfile: true,
+                displayAsStatus: true,
+                connectedAt: Date.now(),
+                presence: currentPlaying,
+              };
+              await savePlatformConnection(u.uid, newConn);
+              setShowSpotifySuccessModal(true);
+            };
+
+            if (auth.currentUser) {
+              await saveConn(auth.currentUser);
+            } else {
+              const unsub = onAuthStateChanged(auth, async (u) => {
+                if (u) {
+                  unsub();
+                  await saveConn(u);
+                }
+              });
+            }
+          }
+        } catch (err) {
+          console.error('[App] Global Spotify OAuth exchange error:', err);
+        }
+      };
+
+      processCode();
+    }
+  }, []);
 
   useEffect(() => {
     const handleLocationChange = () => {
@@ -539,6 +613,9 @@ useEffect(() => {
     <AppErrorManager currentUid={user?.uid || null}>
       <NotificationManager currentUid={user?.uid || null} />
       {renderContent()}
+      {showSpotifySuccessModal && (
+        <SpotifyConfirmationModal onClose={() => setShowSpotifySuccessModal(false)} />
+      )}
     </AppErrorManager>
   );
 }
