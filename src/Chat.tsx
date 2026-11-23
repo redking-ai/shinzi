@@ -6214,7 +6214,19 @@ const handleSearchMessage = async (target: Rec) => {
                       : (searchResult.displayNameStyle || userLiveProfiles[searchResult.id]?.displayNameStyle)
                   )}
                 </strong>
-                <span>@{searchResult.username || 'user'}</span>
+                {(() => {
+                  const statusText = (
+                    (searchResult.id === uid ? profile?.bubleText : searchResult.bubleText) ||
+                    (searchResult.id === uid ? profile?.statusText : searchResult.statusText) ||
+                    ''
+                  ).trim();
+
+                  return statusText ? (
+                    <span className="shc-person-status-bubble" title={statusText}>
+                      {statusText}
+                    </span>
+                  ) : null;
+                })()}
               </span>
             </button>
 
