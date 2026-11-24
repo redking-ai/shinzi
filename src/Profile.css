@@ -2272,35 +2272,57 @@
 }
 
 /* ==========================================================
-   DESKTOP VIEW (PC ONLY)
+   DESKTOP VIEW (PC FULL-WIDTH)
    ========================================================== */
 @media (min-width: 768px) {
   .sh-profile-page {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+    width: 100% !important;
+    max-width: 100% !important;
+    display: block !important;
+    padding: 0 0 80px 0 !important;
     background: #000000 !important;
   }
 
   .sh-profile-card {
-    max-width: 760px;
-    margin: 0 auto;
-    border-left: 1px solid #1a1a1a;
-    border-right: 1px solid #1a1a1a;
-    box-sizing: border-box;
-    min-height: 100dvh;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    border-left: none !important;
+    border-right: none !important;
+    min-height: 100dvh !important;
+    box-sizing: border-box !important;
   }
 
   .sh-profile-card.sh-profile-custom-theme {
     background: var(--sh-custom-bg, transparent) !important;
   }
 
+  .sh-profile-banner {
+    width: 100% !important;
+    height: 260px !important;
+  }
+
+  .sh-profile-identity {
+    padding: 0 32px !important;
+    box-sizing: border-box !important;
+  }
+
+  .sh-profile-card .sh-profile-section,
+  .sh-profile-card > div:not(.sh-profile-banner):not(.sh-profile-identity) {
+    padding-left: 32px !important;
+    padding-right: 32px !important;
+    box-sizing: border-box !important;
+  }
+
   .sh-profile-bottom-nav {
-    max-width: 760px;
-    left: 50%;
-    transform: translateX(-50%);
-    border-left: 1px solid #1a1a1a;
-    border-right: 1px solid #1a1a1a;
-    box-sizing: border-box;
+    width: 100% !important;
+    max-width: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
+    transform: none !important;
+    border-left: none !important;
+    border-right: none !important;
+    justify-content: space-around !important;
+    box-sizing: border-box !important;
   }
 }

@@ -3475,14 +3475,105 @@ button.shc-segment.shc-segment-on,
   min-height: 0;
 }
 
+/* ==========================================================
+   DESKTOP VIEW (PC FULL-WIDTH)
+   ========================================================== */
 @media (min-width: 761px) {
   .shc-page {
-    left: 0;
-    right: 0;
-    margin: 0 auto;
-    transform: none;
-    border-left: 1px solid var(--line);
-    border-right: 1px solid var(--line);
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    transform: none !important;
+    border-left: none !important;
+    border-right: none !important;
+  }
+
+  /* Header: Chats on far left, + and Search on far right */
+  .shc-header {
+    width: 100% !important;
+    padding: 16px 28px !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+  }
+
+  .shc-header h1 {
+    font-size: 28px !important;
+  }
+
+  .shc-header-actions {
+    display: flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+  }
+
+  /* Chat items: Avatar, Name, and Preview on left; Time on the far right */
+  .shc-list {
+    width: 100% !important;
+    padding: 8px 16px 80px 16px !important;
+    box-sizing: border-box !important;
+  }
+
+  .shc-conv {
+    width: 100% !important;
+    margin: 3px 0 !important;
+    padding: 12px 16px !important;
+    border-radius: 12px !important;
+    box-sizing: border-box !important;
+  }
+
+  .shc-conv-top {
+    width: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+  }
+
+  .shc-conv-bottom {
+    width: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+  }
+
+  .shc-conv-time {
+    margin-left: auto !important;
+    font-size: 12px !important;
+  }
+
+  /* Notifications header: on far left */
+  .shc-padded {
+    padding-left: 28px !important;
+    padding-right: 28px !important;
+  }
+
+  /* Search screen: full width search bar from left to right */
+  .shc-searchbox-big {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 52px !important;
+    margin-bottom: 16px !important;
+    box-sizing: border-box !important;
+  }
+
+  .shc-searchbox-big input {
+    font-size: 16px !important;
+  }
+
+  /* Full-width bottom navigation */
+  .shc-bottom {
+    width: 100% !important;
+    max-width: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
+    transform: none !important;
+    border-top: 1px solid var(--line) !important;
+    justify-content: space-around !important;
   }
 }
 

@@ -2369,37 +2369,51 @@
 }
 
 /* ==========================================================
-   DESKTOP VIEW (PC ONLY)
+   DESKTOP VIEW (PC FULL-WIDTH)
    ========================================================== */
 @media (min-width: 768px) {
   .sh-servers-page {
-    align-items: center;
-    background: #000000;
+    width: 100% !important;
+    max-width: 100% !important;
+    align-items: stretch !important;
+    background: #000000 !important;
   }
 
   .sh-servers-topbar {
-    max-width: 760px;
-    margin: 0 auto;
-    border-left: 1px solid rgba(255, 255, 255, 0.08);
-    border-right: 1px solid rgba(255, 255, 255, 0.08);
-    box-sizing: border-box;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 28px !important;
+    border-left: none !important;
+    border-right: none !important;
+    box-sizing: border-box !important;
   }
 
   .sh-servers-content {
-    max-width: 760px;
-    border-left: 1px solid rgba(255, 255, 255, 0.08);
-    border-right: 1px solid rgba(255, 255, 255, 0.08);
-    box-sizing: border-box;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 20px 28px 90px !important;
+    border-left: none !important;
+    border-right: none !important;
+    box-sizing: border-box !important;
+  }
+
+  .sh-servers-grid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)) !important;
+    gap: 16px !important;
   }
 
   .sh-servers-bottom-nav {
-    max-width: 760px;
-    left: 50% !important;
-    right: auto !important;
-    transform: translateX(-50%);
-    border-left: 1px solid rgba(255, 255, 255, 0.08);
-    border-right: 1px solid rgba(255, 255, 255, 0.08);
-    box-sizing: border-box;
+    width: 100% !important;
+    max-width: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
+    transform: none !important;
+    border-left: none !important;
+    border-right: none !important;
+    justify-content: space-around !important;
+    box-sizing: border-box !important;
   }
 }
 

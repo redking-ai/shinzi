@@ -1338,28 +1338,51 @@
 }
 
 /* ==========================================================
-   DESKTOP VIEW (PC ONLY)
+   DESKTOP VIEW (PC FULL-WIDTH)
    ========================================================== */
 @media (min-width: 768px) {
   .sh-settings-page {
-    align-items: center;
-    background: #000000;
+    width: 100% !important;
+    max-width: 100% !important;
+    align-items: stretch !important;
+    background: #000000 !important;
   }
 
   .sh-settings-header {
-    width: 100%;
-    max-width: 680px;
-    margin: 0 auto;
-    border-left: 1px solid rgba(255, 255, 255, 0.08);
-    border-right: 1px solid rgba(255, 255, 255, 0.08);
-    box-sizing: border-box;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 28px !important;
+    border-left: none !important;
+    border-right: none !important;
+    box-sizing: border-box !important;
+  }
+
+  .sh-settings-header-left {
+    display: flex !important;
+    align-items: center !important;
+    gap: 16px !important;
   }
 
   .sh-settings-content {
-    border-left: 1px solid rgba(255, 255, 255, 0.08);
-    border-right: 1px solid rgba(255, 255, 255, 0.08);
-    min-height: calc(100dvh - 56px);
-    box-sizing: border-box;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 20px 28px 90px !important;
+    border-left: none !important;
+    border-right: none !important;
+    min-height: calc(100dvh - 56px) !important;
+    box-sizing: border-box !important;
+  }
+
+  .sh-settings-section {
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .sh-settings-list {
+    width: 100% !important;
+    box-sizing: border-box !important;
   }
 }
 
