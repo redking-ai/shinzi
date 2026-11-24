@@ -69,26 +69,74 @@ function openSignupImageDB(): Promise<IDBDatabase> {
   });
 }
 
-async function clearSignupImage(): Promise<void> {
-  const db = await openSignupImageDB();
+interface StoredSignupImage {
+  dataUri: string;
+  mimeType: string;
+  name: string;
+  size: number;
+}
 
+async function saveSignupImageDraft(img: { dataUri: string; mimeType: string; name: string; size: number }): Promise<void> {
   try {
-    await new Promise<void>((resolve, reject) => {
-      const transaction = db.transaction(
-        SIGNUP_IMAGE_STORE,
-        'readwrite'
-      );
+    const db = await openSignupImageDB();
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction(SIGNUP_IMAGE_STORE, 'readwrite');
+        transaction.objectStore(SIGNUP_IMAGE_STORE).put(img, SIGNUP_IMAGE_KEY);
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+        transaction.onabort = () => reject(transaction.error);
+      });
+    } finally {
+      db.close();
+    }
+  } catch (err) {
+    console.warn('[SIGNUP] Failed to save image to IndexedDB:', err);
+  }
+}
 
-      transaction.objectStore(SIGNUP_IMAGE_STORE).delete(
-        SIGNUP_IMAGE_KEY
-      );
+async function restoreSignupImageDraft(): Promise<StoredSignupImage | null> {
+  try {
+    const db = await openSignupImageDB();
+    try {
+      return await new Promise((resolve, reject) => {
+        const transaction = db.transaction(SIGNUP_IMAGE_STORE, 'readonly');
+        const req = transaction.objectStore(SIGNUP_IMAGE_STORE).get(SIGNUP_IMAGE_KEY);
+        req.onsuccess = () => resolve((req.result as StoredSignupImage) || null);
+        req.onerror = () => reject(req.error);
+      });
+    } finally {
+      db.close();
+    }
+  } catch (err) {
+    console.warn('[SIGNUP] Failed to restore image from IndexedDB:', err);
+    return null;
+  }
+}
 
-      transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error);
-      transaction.onabort = () => reject(transaction.error);
-    });
-  } finally {
-    db.close();
+async function clearSignupImage(): Promise<void> {
+  try {
+    const db = await openSignupImageDB();
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction(
+          SIGNUP_IMAGE_STORE,
+          'readwrite'
+        );
+
+        transaction.objectStore(SIGNUP_IMAGE_STORE).delete(
+          SIGNUP_IMAGE_KEY
+        );
+
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+        transaction.onabort = () => reject(transaction.error);
+      });
+    } finally {
+      db.close();
+    }
+  } catch (err) {
+    console.warn('[SIGNUP] Failed to clear image from IndexedDB:', err);
   }
 }
 
@@ -342,6 +390,12 @@ const [draftRestored, setDraftRestored] = useState(false);
         });
         setFormError(null);
         setPhotoDiagnosticError(null);
+        void saveSignupImageDraft({
+          dataUri,
+          mimeType: resolvedMime,
+          name: file.name,
+          size: file.size,
+        });
       }
       // ONLY clear input value after FileReader finishes successfully
       if (fileInputRef.current) {
@@ -522,6 +576,14 @@ sessionStorage.setItem(
   'shinzi_signup_resume',
   'true'
 );
+if (profileImage) {
+  await saveSignupImageDraft({
+    dataUri: profileImage.uri,
+    mimeType: profileImage.mimeType,
+    name: profileImage.name,
+    size: profileImage.size,
+  });
+}
 
 // ----------------------------------------------------
 // 3. GOOGLE DRIVE PERMISSION
@@ -717,9 +779,12 @@ const uploadResult =
 
         stage = 'done';
 
- await clearSignupImage();
-sessionStorage.removeItem('shinzi_signup_draft');
-sessionStorage.removeItem('shinzi_signup_resume');
+        await clearSignupImage();
+        sessionStorage.removeItem('shinzi_signup_draft');
+        sessionStorage.removeItem('shinzi_signup_resume');
+        if (typeof window !== 'undefined' && window.location.search.includes('drive=')) {
+          window.history.replaceState({}, '', '/');
+        }
 
         void sendVerificationEmailSafe(
   activeUser
@@ -867,9 +932,39 @@ useEffect(() => {
         setYear(d.year ?? '');
       }
 
-      // Do NOT restore profile photo draft from IndexedDB across page reloads/refreshes.
-      // Every time user comes to step 2 or refreshes, start with no photo so user uploads fresh.
-      void clearSignupImage();
+      const isResumingFromDrive =
+        sessionStorage.getItem('shinzi_signup_resume') === 'true' ||
+        (typeof window !== 'undefined' && window.location.search.includes('drive=connected'));
+
+      if (isResumingFromDrive) {
+        sessionStorage.setItem('shinzi_signup_resume', 'true');
+        const savedImg = await restoreSignupImageDraft();
+        if (savedImg && savedImg.dataUri && !cancelled) {
+          let fileObj: File;
+          try {
+            const arr = savedImg.dataUri.split(',');
+            const bstr = atob(arr[1]);
+            let n = bstr.length;
+            const u8arr = new Uint8Array(n);
+            while (n--) {
+              u8arr[n] = bstr.charCodeAt(n);
+            }
+            fileObj = new File([u8arr], savedImg.name, { type: savedImg.mimeType });
+          } catch {
+            fileObj = new File([], savedImg.name, { type: savedImg.mimeType });
+          }
+
+          setProfileImage({
+            file: fileObj,
+            uri: savedImg.dataUri,
+            mimeType: savedImg.mimeType,
+            name: savedImg.name,
+            size: savedImg.size,
+          });
+        }
+      } else {
+        void clearSignupImage();
+      }
       setDraftRestored(true);
 
     
@@ -912,6 +1007,10 @@ useEffect(() => {
     !isValidDate(day, month, year) ||
     !gender
   ) {
+    return;
+  }
+
+  if (!auth.currentUser) {
     return;
   }
 
