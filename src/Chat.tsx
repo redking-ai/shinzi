@@ -1894,12 +1894,20 @@ export default function Chat({ onNavigate }: ChatProps) {
     };
   }, []);
 
-  // Synchronize mobile keyboard visual viewport immediately
+  // Synchronize mobile keyboard visual viewport immediately (Mobile only)
   useEffect(() => {
     const vv = typeof window !== 'undefined' ? window.visualViewport : null;
     if (!vv) return undefined;
 
     const onViewportChange = () => {
+      // Desktop / PC users have physical keyboards: never shrink or displace the chat window!
+      const isDesktopScreen = window.innerWidth >= 768 || (typeof window !== 'undefined' && !('ontouchstart' in window));
+      if (isDesktopScreen) {
+        setVisualHeight(null);
+        setVisualTop(0);
+        return;
+      }
+
       setVisualHeight(vv.height);
       setVisualTop(vv.offsetTop);
 

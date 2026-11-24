@@ -3484,12 +3484,33 @@ button.shc-segment.shc-segment-on,
     inset: 0 !important;
     width: 100% !important;
     max-width: 100% !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    top: 0 !important;
+    bottom: 0 !important;
     margin: 0 !important;
     left: 0 !important;
     right: 0 !important;
     transform: none !important;
     border-left: none !important;
     border-right: none !important;
+  }
+
+  /* Conversation: message list scrolls and composer stays locked at the bottom */
+  .shc-conversation {
+    flex: 1 !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+  }
+
+  .shc-composer-wrap {
+    flex-shrink: 0 !important;
+    width: 100% !important;
+    background: #000000 !important;
+  }
+
+  .shc-composer {
+    padding-bottom: 16px !important;
   }
 
   /* Header: Chats on far left, + and Search on far right */
