@@ -5514,6 +5514,8 @@ const handleSearchMessage = async (target: Rec) => {
           messageId={item.id}
           createdAt={item.createdAt}
           deletedFromDrive={item.deletedFromDrive}
+          isGif={Boolean(item.isGif || item.type === 'gif')}
+          isSticker={Boolean(item.isSticker || item.type === 'sticker')}
           onOpenImage={(mediaItem) => {
             setActiveImageViewer({
               previewUrl: mediaItem.originalUrl || mediaItem.mediaUrl,
@@ -5565,6 +5567,8 @@ const handleSearchMessage = async (target: Rec) => {
           messageId={item.id}
           createdAt={item.createdAt}
           deletedFromDrive={item.deletedFromDrive}
+          isGif={Boolean(item.isGif || item.type === 'gif')}
+          isSticker={Boolean(item.isSticker || item.type === 'sticker')}
           onOpenImage={(mi) => {
             setActiveImageViewer({
               previewUrl: mi.originalUrl || mi.mediaUrl,

@@ -31,21 +31,25 @@ export const FileMessage: React.FC<FileMessageProps> = ({
     isMediaDownloaded(fileKey, own)
   );
   const [isDownloading, setIsDownloading] = useState(false);
-  const [isExpired, setIsExpired] = useState(Boolean(message.deletedFromDrive));
+  const [isExpired, setIsExpired] = useState(false);
 
   // 14-day expiry check
   useEffect(() => {
+    if (own || isDownloaded) {
+      setIsExpired(false);
+      return;
+    }
     if (message.deletedFromDrive) {
       setIsExpired(true);
       return;
     }
     if (message.createdAt?.toMillis) {
       const age = Date.now() - message.createdAt.toMillis();
-      if (age > 14 * 24 * 60 * 60 * 1000) {
+      if (age > 14 * 24 * 60 * 60 * 1000 && message.deletedFromDrive) {
         setIsExpired(true);
       }
     }
-  }, [message.createdAt, message.deletedFromDrive]);
+  }, [message.createdAt, message.deletedFromDrive, own, isDownloaded]);
 
   if (isExpired) {
     return (

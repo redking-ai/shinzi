@@ -24,6 +24,8 @@ interface MediaGridProps {
   messageId: string;
   createdAt?: any;
   deletedFromDrive?: boolean;
+  isGif?: boolean;
+  isSticker?: boolean;
   onOpenImage: (item: MediaItem) => void;
   onOpenVideo: (item: MediaItem) => void;
   onOpenGallery: (items: MediaItem[], startIndex: number) => void;
@@ -37,6 +39,8 @@ export const MediaGrid: React.FC<MediaGridProps> = ({
   messageId,
   createdAt,
   deletedFromDrive,
+  isGif,
+  isSticker,
   onOpenImage,
   onOpenVideo,
   onOpenGallery,
@@ -52,10 +56,30 @@ export const MediaGrid: React.FC<MediaGridProps> = ({
   });
 
   const [downloadingMap, setDownloadingMap] = useState<Record<string, boolean>>({});
-  const [isExpired, setIsExpired] = useState(Boolean(deletedFromDrive));
+  const [isExpired, setIsExpired] = useState(false);
 
-  // Check 14-day expiry rule
+  // Determine if all items in this group are GIFs / Stickers
+  const isAllGifOrSticker =
+    Boolean(isGif || isSticker) ||
+    (items.length > 0 &&
+      items.every(
+        (it) =>
+          it.id?.startsWith('klipy_') ||
+          it.fileName?.toLowerCase().endsWith('.gif') ||
+          it.fileName?.toLowerCase().endsWith('.sticker') ||
+          it.mediaUrl?.toLowerCase().includes('.gif')
+      ));
+
+  // Determine if items are already downloaded/cached
+  const isAnyDownloaded =
+    own || items.some((it, idx) => isMediaDownloaded(it.id || `${messageId}_${idx}`, own));
+
+  // Check 14-day expiry rule - only applies to non-GIF, non-downloaded, drive-deleted files
   useEffect(() => {
+    if (isAllGifOrSticker || isAnyDownloaded) {
+      setIsExpired(false);
+      return;
+    }
     if (deletedFromDrive) {
       setIsExpired(true);
       return;
@@ -63,11 +87,34 @@ export const MediaGrid: React.FC<MediaGridProps> = ({
     if (createdAt?.toMillis) {
       const now = Date.now();
       const age = now - createdAt.toMillis();
-      if (age > 14 * 24 * 60 * 60 * 1000) {
+      if (age > 14 * 24 * 60 * 60 * 1000 && deletedFromDrive) {
         setIsExpired(true);
       }
     }
-  }, [createdAt, deletedFromDrive]);
+  }, [createdAt, deletedFromDrive, isAllGifOrSticker, isAnyDownloaded]);
+
+  // Auto-cache displayed images into CacheStorage so they persist offline/permanently
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('caches' in window)) return;
+    items.forEach((it) => {
+      const url = it.mediaUrl || it.originalUrl;
+      if (!url || url.startsWith('data:') || url.startsWith('blob:')) return;
+      caches
+        .open('shinzi-media-cache')
+        .then((cache) => {
+          cache.match(url).then((matched) => {
+            if (!matched) {
+              fetch(url, { mode: 'no-cors' })
+                .then((res) => {
+                  if (res) cache.put(url, res);
+                })
+                .catch(() => {});
+            }
+          });
+        })
+        .catch(() => {});
+    });
+  }, [items]);
 
   if (!items || items.length === 0) return null;
 

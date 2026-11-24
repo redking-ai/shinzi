@@ -62,6 +62,8 @@ import {
   renderStyledContent,
   getUsedStylesData,
   importIncomingStyleData,
+  cleanRawText,
+  renderStyledDisplayName,
 } from './textStyleService';
 import OtherProfile from './OtherProfile';
 import { navigateTo } from './profileCache';
@@ -455,7 +457,7 @@ export default function Servers({
   const [channelSendBusy, setChannelSendBusy] = useState(false);
   const [showChannelAttachMenu, setShowChannelAttachMenu] = useState(false);
   const [senderProfiles, setSenderProfiles] = useState<
-    Record<string, { displayName: string; avatarUrl?: string }>
+    Record<string, { displayName: string; avatarUrl?: string; displayNameStyle?: any }>
   >({});
   const [assetFileMap, setAssetFileMap] = useState<Record<string, string>>({});
   const [showChannelEmojiPicker, setShowChannelEmojiPicker] = useState(false);
@@ -703,32 +705,50 @@ export default function Servers({
     if (!currentUser?.uid) return;
     const fetchUserServers = async () => {
       try {
-        const qCreated = query(collection(db, 'servers'), where('ownerId', '==', currentUser.uid));
-        const snapCreated = await getDocs(qCreated);
-        if (!snapCreated.empty) {
-          const list: ServerData[] = snapCreated.docs.map((docSnap) => ({
-            id: docSnap.id,
-            ...(docSnap.data() as any),
-            isCreatedByMe: true,
-          }));
-          setCreatedServers(list);
-          localStorage.setItem('shinzi_created_servers', JSON.stringify(list));
-        }
-
-        const qJoined = query(
+        const qMemberServers = query(
           collection(db, 'servers'),
           where('memberIds', 'array-contains', currentUser.uid)
         );
-        const snapJoined = await getDocs(qJoined);
-        if (!snapJoined.empty) {
-          const list: ServerData[] = snapJoined.docs
-            .map((docSnap) => ({
-              id: docSnap.id,
-              ...(docSnap.data() as any),
-            }))
-            .filter((s) => s.ownerId !== currentUser.uid);
-          setJoinedServers(list);
-          localStorage.setItem('shinzi_joined_servers', JSON.stringify(list));
+        const snapMember = await getDocs(qMemberServers);
+        const allUserServers: ServerData[] = snapMember.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as any),
+        }));
+
+        // Also attempt query by ownerId in case server has ownerId but memberIds missed
+        try {
+          const qCreated = query(collection(db, 'servers'), where('ownerId', '==', currentUser.uid));
+          const snapCreated = await getDocs(qCreated);
+          snapCreated.docs.forEach((docSnap) => {
+            if (!allUserServers.some((s) => s.id === docSnap.id)) {
+              allUserServers.push({
+                id: docSnap.id,
+                ...(docSnap.data() as any),
+              });
+            }
+          });
+        } catch {}
+
+        const createdList = allUserServers
+          .filter((s) => s.ownerId === currentUser.uid || s.isCreatedByMe)
+          .map((s) => ({ ...s, isCreatedByMe: true }));
+
+        const joinedList = allUserServers.filter(
+          (s) => s.ownerId !== currentUser.uid && !s.isCreatedByMe
+        );
+
+        if (createdList.length > 0) {
+          setCreatedServers(createdList);
+          try {
+            localStorage.setItem('shinzi_created_servers', JSON.stringify(createdList));
+          } catch {}
+        }
+
+        if (joinedList.length > 0) {
+          setJoinedServers(joinedList);
+          try {
+            localStorage.setItem('shinzi_joined_servers', JSON.stringify(joinedList));
+          } catch {}
         }
       } catch (err) {
         console.warn('Could not load user servers from Firestore:', err);
@@ -841,10 +861,27 @@ export default function Servers({
               return timeA - timeB;
             });
 
-            setChannelMessages(msgs);
-            try {
-              localStorage.setItem(storageKey, JSON.stringify(msgs));
-            } catch {}
+            setChannelMessages((prev) => {
+              const map = new Map<string, ServerChannelMessage>();
+              // Keep prior local messages so old chats never vanish
+              prev.forEach((m) => {
+                if (m.id) map.set(m.id, m);
+              });
+              // Firestore messages override or add to map
+              msgs.forEach((m) => {
+                if (m.id) map.set(m.id, m);
+              });
+              const merged = Array.from(map.values());
+              merged.sort((a, b) => {
+                const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt || 0);
+                const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt || 0);
+                return timeA - timeB;
+              });
+              try {
+                localStorage.setItem(storageKey, JSON.stringify(merged));
+              } catch {}
+              return merged;
+            });
           }
         },
         (err) => {
@@ -938,6 +975,7 @@ export default function Servers({
             return {
               uid,
               displayName: data.displayName || data.username || 'User',
+              displayNameStyle: data.displayNameStyle,
               avatarUrl,
             };
           }
@@ -952,7 +990,11 @@ export default function Servers({
         const next = { ...prev };
         results.forEach((res) => {
           if (res) {
-            next[res.uid] = { displayName: res.displayName, avatarUrl: res.avatarUrl };
+            next[res.uid] = {
+              displayName: res.displayName,
+              displayNameStyle: res.displayNameStyle,
+              avatarUrl: res.avatarUrl,
+            };
           }
         });
         return next;
@@ -2101,7 +2143,7 @@ export default function Servers({
                               }
                             }}
                           >
-                            {renderStyledContent(authorName)}
+                            {renderStyledDisplayName(cleanRawText(authorName), profile?.displayNameStyle)}
                           </span>
                           <span className="sh-channel-msg-time">
                             {formatDiscordTimestamp(msg.createdAt)}

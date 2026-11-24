@@ -817,8 +817,8 @@
 .sh-server-channels-content {
   flex: 1;
   padding: 14px;
-  max-width: 720px;
-  margin: 0 auto;
+  max-width: 480px;
+  margin: 0;
   width: 100%;
   box-sizing: border-box;
 }
@@ -1175,22 +1175,24 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 14px 8px;
+  gap: 8px;
+  padding: 16px 10px;
+  min-height: 68px;
   background: #111215;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+  border-radius: 14px;
   color: #ffffff;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, transform 0.12s ease;
 }
 
 .sh-server-action-card:hover {
   background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-1px);
 }
 
 .sh-server-action-card-label {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -2414,6 +2416,54 @@
     border-right: none !important;
     justify-content: space-around !important;
     box-sizing: border-box !important;
+  }
+
+  /* Server View & Channel List on Desktop - Aligned to left side */
+  .sh-server-channels-content {
+    margin: 0 !important;
+    padding: 16px 28px !important;
+    max-width: 480px !important;
+    width: 100% !important;
+  }
+
+  .sh-server-sticky-header {
+    padding: 12px 28px !important;
+  }
+
+  /* Full Server Details / Overview View on Desktop - Left aligned matching profile */
+  .sh-server-details-banner {
+    width: 100% !important;
+    height: 260px !important;
+  }
+
+  .sh-server-details-body {
+    margin: 0 !important;
+    padding: 0 32px 60px !important;
+    max-width: 620px !important;
+    width: 100% !important;
+  }
+
+  .sh-server-details-avatar-wrap {
+    margin-top: -50px !important;
+  }
+
+  .sh-server-details-avatar,
+  .sh-server-details-avatar-placeholder {
+    width: 96px !important;
+    height: 96px !important;
+    border-radius: 26px !important;
+    border-width: 4px !important;
+  }
+
+  .sh-server-action-cards {
+    gap: 12px !important;
+  }
+
+  .sh-server-action-card {
+    min-height: 74px !important;
+    padding: 18px 12px !important;
+    border-radius: 14px !important;
+    font-size: 13.5px !important;
   }
 }
 

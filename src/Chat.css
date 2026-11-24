@@ -2891,10 +2891,10 @@
 .shc-sheet.shc-sheet-group {
   display: flex !important;
   flex-direction: column !important;
-  height: 85dvh !important;
+  height: auto !important;
   max-height: 85dvh !important;
   overflow: hidden !important;
-  padding: 14px 16px 0 !important;
+  padding: 16px 18px 0 !important;
   gap: 0 !important;
 }
 
@@ -2911,9 +2911,9 @@
 }
 
 .shc-picker.shc-group-picker {
-  flex: 1 1 0% !important;
-  min-height: 140px !important;
-  max-height: none !important;
+  flex: 0 1 auto !important;
+  max-height: 38vh !important;
+  min-height: 0 !important;
   overflow-y: auto !important;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
@@ -2922,17 +2922,15 @@
 
 .shc-group-sticky-footer {
   flex-shrink: 0;
-  position: sticky;
-  bottom: 0;
+  position: relative;
   width: 100%;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: auto;
+  margin-top: 12px;
   padding: 12px 0 calc(20px + env(safe-area-inset-bottom, 0px));
   background: var(--surface);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 -8px 20px rgba(0, 0, 0, 0.35);
   z-index: 10;
 }
 
@@ -3597,6 +3595,35 @@ button.shc-segment.shc-segment-on,
     transform: none !important;
     border-top: 1px solid var(--line) !important;
     justify-content: space-around !important;
+  }
+
+  /* Center modal dialogs on desktop */
+  .shc-backdrop {
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 20px !important;
+  }
+
+  .shc-sheet {
+    border-radius: 20px !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    max-width: 500px !important;
+    height: auto !important;
+    max-height: 85dvh !important;
+    margin: auto !important;
+  }
+
+  .shc-sheet.shc-sheet-group {
+    border-radius: 20px !important;
+    max-width: 500px !important;
+    height: auto !important;
+    max-height: 85dvh !important;
+    margin: auto !important;
+    padding-bottom: 16px !important;
+  }
+
+  .shc-group-sticky-footer {
+    padding-bottom: 0 !important;
   }
 }
 
