@@ -27,7 +27,7 @@ import {
   ASSET_TYPES,
   ASSET_VISIBILITY,
 } from './assetService';
-import { ArrowLeft, Pencil } from 'lucide-react';
+import { ArrowLeft, Pencil, AlertTriangle, Copy, Check, X } from 'lucide-react';
 import { DateTimePickerModal } from './DateTimePickerModal';
 
 interface SignUpProps {
@@ -148,6 +148,17 @@ const [draftRestored, setDraftRestored] = useState(false);
   const [profileImage, setProfileImage] =
     useState<ProfileImage | null>(null);
 
+  const [photoDiagnosticError, setPhotoDiagnosticError] = useState<{
+    title: string;
+    stage: 'selection' | 'reading' | 'upload';
+    fileName?: string;
+    fileSize?: string;
+    fileType?: string;
+    errorMessage: string;
+    technicalDetails?: string;
+  } | null>(null);
+  const [copiedError, setCopiedError] = useState(false);
+
   const fileInputRef =
     useRef<HTMLInputElement | null>(null);
 
@@ -245,10 +256,7 @@ const [draftRestored, setDraftRestored] = useState(false);
     if (isSubmitting) {
       return;
     }
-
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+    setPhotoDiagnosticError(null);
     fileInputRef.current?.click();
   };
 
@@ -259,21 +267,36 @@ const [draftRestored, setDraftRestored] = useState(false);
       return;
     }
 
-    const file = event.target.files?.[0];
+    const fileList = event.target.files;
+    if (!fileList || fileList.length === 0) {
+      return;
+    }
 
+    const file = fileList[0];
     if (!file) {
+      setPhotoDiagnosticError({
+        title: 'No File Selected',
+        stage: 'selection',
+        errorMessage: 'The file selection did not return a valid file. Please try choosing a photo again.',
+      });
       return;
     }
 
     const maxSize = 15 * 1024 * 1024;
+    const formattedSize = `${(file.size / (1024 * 1024)).toFixed(2)} MB`;
 
     if (file.size > maxSize) {
-      setFormError({
-        message:
-          'Your profile photo must be smaller than 15 MB.',
+      setPhotoDiagnosticError({
+        title: 'Photo File Too Large',
+        stage: 'selection',
+        fileName: file.name,
+        fileSize: formattedSize,
+        fileType: file.type || 'unknown',
+        errorMessage: `The selected photo (${formattedSize}) is larger than the 15 MB limit. Please select a photo smaller than 15 MB.`,
       });
-
-      event.target.value = '';
+      setFormError({
+        message: 'Your profile photo must be smaller than 15 MB.',
+      });
       return;
     }
 
@@ -285,12 +308,31 @@ const [draftRestored, setDraftRestored] = useState(false);
       else resolvedMime = 'image/jpeg';
     }
 
-    // Read via FileReader for 100% reliable in-memory Data URL preview across all platforms
+    // 1. Instant fallback preview (URL.createObjectURL) so the preview never stays blank
+    let immediatePreviewUri = '';
+    try {
+      immediatePreviewUri = URL.createObjectURL(file);
+    } catch (urlErr) {
+      console.warn('[SIGNUP_PHOTO] createObjectURL failed:', urlErr);
+    }
+
+    if (immediatePreviewUri) {
+      setProfileImage({
+        file,
+        uri: immediatePreviewUri,
+        mimeType: resolvedMime,
+        name: file.name,
+        size: file.size,
+      });
+      setFormError(null);
+      setPhotoDiagnosticError(null);
+    }
+
+    // 2. Read into Base64 Data URL for persistent memory storage & upload
     const reader = new FileReader();
     reader.onload = () => {
       const dataUri = reader.result as string;
-      const testImg = new Image();
-      testImg.onload = () => {
+      if (dataUri) {
         setProfileImage({
           file,
           uri: dataUri,
@@ -299,35 +341,36 @@ const [draftRestored, setDraftRestored] = useState(false);
           size: file.size,
         });
         setFormError(null);
-      };
-      testImg.onerror = () => {
-        // Fallback for valid image formats
-        if (resolvedMime.startsWith('image/') || /\.(jpe?g|png|webp|gif|jfif|bmp|heic|svg)$/i.test(file.name)) {
-          setProfileImage({
-            file,
-            uri: dataUri,
-            mimeType: resolvedMime,
-            name: file.name,
-            size: file.size,
-          });
-          setFormError(null);
-        } else {
-          setFormError({
-            message:
-              'This image format is not supported. Please choose a JPG, PNG, WebP, or GIF image.',
-          });
-        }
-      };
-      testImg.src = dataUri;
+        setPhotoDiagnosticError(null);
+      }
+      // ONLY clear input value after FileReader finishes successfully
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     };
-    reader.onerror = () => {
-      setFormError({
-        message: 'Could not read the selected file. Please try again.',
-      });
-    };
-    reader.readAsDataURL(file);
 
-    event.target.value = '';
+    reader.onerror = () => {
+      console.error('[SIGNUP_PHOTO] FileReader error:', reader.error);
+      if (!immediatePreviewUri) {
+        setPhotoDiagnosticError({
+          title: 'Photo Read Error',
+          stage: 'reading',
+          fileName: file.name,
+          fileSize: formattedSize,
+          fileType: file.type || resolvedMime,
+          errorMessage: 'The browser could not read this file from your computer disk.',
+          technicalDetails: reader.error?.message || 'Detached file handle or read access error',
+        });
+        setFormError({
+          message: 'Could not read the selected file. Please try another image.',
+        });
+      }
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    };
+
+    reader.readAsDataURL(file);
   };
 
   // ----------------------------------------------------------
@@ -758,6 +801,19 @@ sessionStorage.removeItem('shinzi_signup_resume');
           }
         }
 
+        if (stage === 'upload' || stage === 'assetId' || stage === 'assetRecord') {
+          const errDetail = err instanceof Error ? err.message : String(err);
+          setPhotoDiagnosticError({
+            title: 'Photo Upload Failed',
+            stage: 'upload',
+            fileName: profileImage?.name,
+            fileSize: profileImage ? `${(profileImage.size / (1024 * 1024)).toFixed(2)} MB` : undefined,
+            fileType: profileImage?.mimeType,
+            errorMessage: 'Google Drive photo upload encountered a problem during account creation.',
+            technicalDetails: errDetail,
+          });
+        }
+
         const code =
           getErrorCode(err);
 
@@ -1068,7 +1124,7 @@ useEffect(() => {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,image/bmp,image/*,.png,.jpg,.jpeg,.webp,.gif,.jfif,.bmp,.heic"
               onChange={handleImageChange}
               style={{
                 display: 'none',
@@ -1112,6 +1168,33 @@ useEffect(() => {
                   ? 'Tap to change photo'
                   : 'Profile photo required'}
               </div>
+
+              {photoDiagnosticError && (
+                <button
+                  type="button"
+                  onClick={() => setPhotoDiagnosticError({ ...photoDiagnosticError })}
+                  style={{
+                    marginTop: '8px',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    border: '1px solid rgba(239, 68, 68, 0.4)',
+                    color: '#f87171',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    textAlign: 'left',
+                    width: '100%',
+                    maxWidth: '320px',
+                    margin: '8px auto 0 auto',
+                  }}
+                >
+                  <AlertTriangle size={16} color="#ef4444" style={{ flexShrink: 0 }} />
+                  <span><strong>Photo error:</strong> {photoDiagnosticError.title} (tap for error details)</span>
+                </button>
+              )}
 
               {formError && (
                 <div style={{ color: '#ff3366', fontSize: '13px', marginTop: '6px', textAlign: 'center' }}>
@@ -1407,6 +1490,143 @@ useEffect(() => {
             }}
             onClose={() => setShowDatePicker(false)}
           />
+        )}
+
+        {/* ================================================== */}
+        {/* PHOTO ERROR / DIAGNOSTIC SCREEN */}
+        {/* ================================================== */}
+        {photoDiagnosticError && (
+          <div
+            className="signup-modal-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Profile photo error details"
+            style={{ alignItems: 'center', padding: '16px', zIndex: 1100 }}
+          >
+            <div
+              className="signup-modal-content"
+              style={{
+                borderRadius: '20px',
+                padding: '24px',
+                background: '#18181b',
+                border: '1px solid #ef4444',
+                maxWidth: '520px',
+                width: '100%',
+                boxShadow: '0 20px 50px rgba(0,0,0,0.8)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <AlertTriangle size={20} color="#ef4444" />
+                  </div>
+                  <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: 700 }}>
+                    {photoDiagnosticError.title}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPhotoDiagnosticError(null)}
+                  style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', padding: '4px' }}
+                  aria-label="Close error screen"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <p style={{ color: '#e4e4e7', fontSize: '14px', lineHeight: 1.5, margin: '0 0 16px 0' }}>
+                {photoDiagnosticError.errorMessage}
+              </p>
+
+              {/* Technical breakdown box */}
+              <div
+                style={{
+                  background: '#09090b',
+                  borderRadius: '12px',
+                  padding: '14px',
+                  border: '1px solid #27272a',
+                  fontSize: '12px',
+                  color: '#a1a1aa',
+                  fontFamily: 'monospace',
+                  marginBottom: '20px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px',
+                  wordBreak: 'break-all',
+                }}
+              >
+                <div><strong style={{ color: '#f43f5e' }}>Stage:</strong> {photoDiagnosticError.stage}</div>
+                {photoDiagnosticError.fileName && (
+                  <div><strong style={{ color: '#ffffff' }}>File Name:</strong> {photoDiagnosticError.fileName}</div>
+                )}
+                {photoDiagnosticError.fileSize && (
+                  <div><strong style={{ color: '#ffffff' }}>File Size:</strong> {photoDiagnosticError.fileSize}</div>
+                )}
+                {photoDiagnosticError.fileType && (
+                  <div><strong style={{ color: '#ffffff' }}>MIME Type:</strong> {photoDiagnosticError.fileType}</div>
+                )}
+                {photoDiagnosticError.technicalDetails && (
+                  <div style={{ marginTop: '4px', paddingTop: '6px', borderTop: '1px solid #27272a', color: '#fb7185' }}>
+                    <strong>System Cause:</strong> {photoDiagnosticError.technicalDetails}
+                  </div>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const textToCopy = `[Shinzi Photo Error]\nTitle: ${photoDiagnosticError.title}\nStage: ${photoDiagnosticError.stage}\nFile: ${photoDiagnosticError.fileName || 'N/A'}\nSize: ${photoDiagnosticError.fileSize || 'N/A'}\nType: ${photoDiagnosticError.fileType || 'N/A'}\nReason: ${photoDiagnosticError.errorMessage}\nDetails: ${photoDiagnosticError.technicalDetails || 'None'}`;
+                    void navigator.clipboard.writeText(textToCopy);
+                    setCopiedError(true);
+                    setTimeout(() => setCopiedError(false), 2500);
+                  }}
+                  style={{
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    padding: '12px',
+                    borderRadius: '10px',
+                    background: '#27272a',
+                    color: '#ffffff',
+                    border: '1px solid #3f3f46',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                  }}
+                >
+                  {copiedError ? <Check size={16} color="#22c55e" /> : <Copy size={16} />}
+                  {copiedError ? 'Copied Details!' : 'Copy Error Details'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPhotoDiagnosticError(null);
+                    setTimeout(() => {
+                      fileInputRef.current?.click();
+                    }, 100);
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    borderRadius: '10px',
+                    background: '#ffffff',
+                    color: '#000000',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                  }}
+                >
+                  Choose Another Photo
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* ================================================== */}
