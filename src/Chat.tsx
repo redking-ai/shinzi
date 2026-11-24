@@ -1909,7 +1909,10 @@ export default function Chat({ onNavigate }: ChatProps) {
       }
 
       setVisualHeight(vv.height);
-      setVisualTop(vv.offsetTop);
+      setVisualTop(0);
+      if (typeof window !== 'undefined' && (window.scrollX !== 0 || window.scrollY !== 0)) {
+        window.scrollTo(0, 0);
+      }
 
       // Force lock: only auto-scroll on keyboard/viewport resize if user is already at the bottom
       if (screen === 'conversation' && scrollRef.current && isNearBottomRef.current) {
@@ -6738,6 +6741,9 @@ const handleSearchMessage = async (target: Rec) => {
                   rows={1}
                   className="shc-composer-textarea"
                   onFocus={() => {
+                    if (typeof window !== 'undefined' && (window.scrollX !== 0 || window.scrollY !== 0)) {
+                      window.scrollTo(0, 0);
+                    }
                     // Force lock: only auto-scroll on focus if user is already near bottom
                     if (isNearBottomRef.current) {
                       window.requestAnimationFrame(() => {

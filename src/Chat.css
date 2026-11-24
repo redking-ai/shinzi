@@ -2410,7 +2410,7 @@
   padding: 8px 6px;
   margin: 0;
   font-family: inherit;
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.35;
   white-space: pre-wrap;
   word-break: break-word;
@@ -2448,7 +2448,7 @@
   padding: 8px 6px;
   margin: 0;
   font-family: inherit;
-  font-size: 15px;
+  font-size: 16px !important;
   line-height: 1.35;
   color: #F2F3F5;
   -webkit-text-fill-color: #F2F3F5;
@@ -2459,6 +2459,7 @@
   max-height: 120px;
   vertical-align: middle;
   z-index: 2;
+  touch-action: manipulation;
 }
 
 /* When mentions are typed, make textarea text transparent so backdrop shines through with blue mentions */
@@ -2662,10 +2663,11 @@
   box-shadow: none !important;
   resize: none !important;
   font-family: inherit;
-  font-size: 15px;
+  font-size: 16px !important;
   line-height: 1.4;
   padding: 8px 10px;
   box-sizing: border-box;
+  touch-action: manipulation;
 }
 
 .p-mention-panel,
