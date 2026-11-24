@@ -566,15 +566,22 @@ export default function Login({
 @media (min-width: 768px) {
   .login-page {
     display: flex !important;
+    flex-direction: column !important;
     align-items: center !important;
-    justify-content: center !important;
+    justify-content: flex-start !important;
+    width: 100% !important;
+    height: 100% !important;
     min-height: 100dvh !important;
-    padding: 40px 20px !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    padding: 32px 20px !important;
     background: #000000 !important;
   }
   .login-card {
     width: 100% !important;
     max-width: 520px !important;
+    margin: auto !important;
+    flex-shrink: 0 !important;
     border: 1px solid rgba(255, 255, 255, 0.08) !important;
     border-radius: 16px !important;
     background: #000000 !important;

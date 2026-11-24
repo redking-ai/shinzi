@@ -209,6 +209,14 @@ const [draftRestored, setDraftRestored] = useState(false);
 
   const fileInputRef =
     useRef<HTMLInputElement | null>(null);
+  const pageRef =
+    useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (pageRef.current) {
+      pageRef.current.scrollTop = 0;
+    }
+  }, [step]);
 
   // ----------------------------------------------------------
   // VALIDATION
@@ -1044,7 +1052,7 @@ useEffect(() => {
         : 'signup-continue-button signup-disabled-button';
 
   return (
-    <div className="signup-page">
+    <div ref={pageRef} className="signup-page">
       <div className="signup-shell">
 
         {/* CLEAN HEADER — NO STEP INDICATOR */}
@@ -2582,11 +2590,15 @@ box-shadow: none;
         @media (min-width: 768px) {
           .signup-page {
             display: flex;
+            flex-direction: column;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
             width: 100%;
+            height: 100%;
             min-height: 100dvh;
-            padding: 40px 20px;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch;
+            padding: 32px 20px;
             background: #000000;
           }
 
@@ -2594,7 +2606,8 @@ box-shadow: none;
             width: 100%;
             max-width: 520px;
             min-height: auto;
-            margin: 0 auto;
+            margin: auto;
+            flex-shrink: 0;
             border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 16px;
             background: #000000;
@@ -2609,7 +2622,7 @@ box-shadow: none;
           }
 
           .signup-header {
-            padding: 24px 32px 10px;
+            padding: 20px 32px 10px;
           }
 
           .signup-banner-wrap {
@@ -2617,7 +2630,7 @@ box-shadow: none;
           }
 
           .signup-continue-button {
-            margin-top: 32px;
+            margin-top: 24px;
             margin-bottom: 0;
           }
         }
