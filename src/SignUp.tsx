@@ -1211,13 +1211,13 @@ useEffect(() => {
           <div className="signup-content">
 
             <h1 className="signup-title">
-              Set up your profile
+              {auth.currentUser ? 'Finish your profile' : 'Set up your profile'}
             </h1>
 
             <p className="signup-subtitle">
-              Add a photo and a few
-              details so people can
-              find you.
+              {auth.currentUser
+                ? 'Welcome back! Choose a profile photo below to finish your account.'
+                : 'Add a photo and a few details so people can find you.'}
             </p>
 
             <input
@@ -1502,8 +1502,8 @@ useEffect(() => {
               )}
 
               {isSubmitting
-                ? 'Creating account…'
-                : 'Create account'}
+                ? (auth.currentUser ? 'Saving profile…' : 'Creating account…')
+                : (auth.currentUser ? 'Complete Profile' : 'Create account')}
             </button>
 
           </div>
