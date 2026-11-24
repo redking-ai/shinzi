@@ -246,6 +246,9 @@ const [draftRestored, setDraftRestored] = useState(false);
       return;
     }
 
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
     fileInputRef.current?.click();
   };
 
@@ -262,19 +265,6 @@ const [draftRestored, setDraftRestored] = useState(false);
       return;
     }
 
-    const isImageMime = file.type && file.type.startsWith('image/');
-    const hasImageExtension = /\.(jpe?g|png|webp|gif|jfif|bmp|heic|svg)$/i.test(file.name);
-
-    if (!isImageMime && !hasImageExtension) {
-      setFormError({
-        message:
-          'This image format is not supported. Please choose a JPG, PNG, WebP, or GIF image.',
-      });
-
-      event.target.value = '';
-      return;
-    }
-
     const maxSize = 15 * 1024 * 1024;
 
     if (file.size > maxSize) {
@@ -287,8 +277,6 @@ const [draftRestored, setDraftRestored] = useState(false);
       return;
     }
 
-    setFormError(null);
-
     let resolvedMime = file.type || 'image/jpeg';
     if (!resolvedMime.startsWith('image/')) {
       if (/\.png$/i.test(file.name)) resolvedMime = 'image/png';
@@ -297,15 +285,47 @@ const [draftRestored, setDraftRestored] = useState(false);
       else resolvedMime = 'image/jpeg';
     }
 
-    setProfileImage({
-      file,
-      uri: URL.createObjectURL(file),
-      mimeType: resolvedMime,
-      name: file.name,
-      size: file.size,
-    });
-      
-     
+    // Read via FileReader for 100% reliable in-memory Data URL preview across all platforms
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUri = reader.result as string;
+      const testImg = new Image();
+      testImg.onload = () => {
+        setProfileImage({
+          file,
+          uri: dataUri,
+          mimeType: resolvedMime,
+          name: file.name,
+          size: file.size,
+        });
+        setFormError(null);
+      };
+      testImg.onerror = () => {
+        // Fallback for valid image formats
+        if (resolvedMime.startsWith('image/') || /\.(jpe?g|png|webp|gif|jfif|bmp|heic|svg)$/i.test(file.name)) {
+          setProfileImage({
+            file,
+            uri: dataUri,
+            mimeType: resolvedMime,
+            name: file.name,
+            size: file.size,
+          });
+          setFormError(null);
+        } else {
+          setFormError({
+            message:
+              'This image format is not supported. Please choose a JPG, PNG, WebP, or GIF image.',
+          });
+        }
+      };
+      testImg.src = dataUri;
+    };
+    reader.onerror = () => {
+      setFormError({
+        message: 'Could not read the selected file. Please try again.',
+      });
+    };
+    reader.readAsDataURL(file);
 
     event.target.value = '';
   };
@@ -856,20 +876,6 @@ useEffect(() => {
 
   
  
-
-  // ----------------------------------------------------------
-  // CLEAN OBJECT URL
-  // ----------------------------------------------------------
-
-  useEffect(() => {
-    return () => {
-      if (profileImage?.uri) {
-        URL.revokeObjectURL(
-          profileImage.uri
-        );
-      }
-    };
-  }, [profileImage]);
 
   // ----------------------------------------------------------
   // UI
