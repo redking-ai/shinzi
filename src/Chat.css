@@ -3477,8 +3477,10 @@ button.shc-segment.shc-segment-on,
 
 @media (min-width: 761px) {
   .shc-page {
-    left: 50%;
-    transform: translateX(-50%);
+    left: 0;
+    right: 0;
+    margin: 0 auto;
+    transform: none;
     border-left: 1px solid var(--line);
     border-right: 1px solid var(--line);
   }

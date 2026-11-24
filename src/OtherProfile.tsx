@@ -687,6 +687,7 @@ export default function OtherProfile({
                 background: 'transparent',
                 borderColor: theme.accent ? `${theme.accent}44` : undefined,
                 boxShadow: theme.accent ? `0 16px 48px ${theme.accent}24` : undefined,
+                '--sh-custom-bg': `linear-gradient(180deg, ${theme.primary || '#000000'} 0%, ${theme.secondary || '#000000'} 100%)`,
                 '--sh-theme-accent':
                   theme.accent && theme.accent.toLowerCase() !== '#000000'
                     ? theme.accent

@@ -199,13 +199,14 @@ export default function Login({
   };
 
   return (
-    <div style={styles.container}>
+    <div style={styles.container} className="login-page">
+      <div className="login-card">
 
       {/* ==================================================
           HEADER
       ================================================== */}
 
-      <div style={styles.header}>
+      <div style={styles.header} className="login-header">
 
         <button
           type="button"
@@ -228,7 +229,7 @@ export default function Login({
           CONTENT
       ================================================== */}
 
-      <div style={styles.content}>
+      <div style={styles.content} className="login-content">
 
         {/* ==================================================
             WELCOME
@@ -379,6 +380,7 @@ export default function Login({
             : 'Log In'}
         </button>
 
+      </div>
       </div>
 
       {/* ==================================================
@@ -559,6 +561,33 @@ export default function Login({
   box-shadow:
     0 0 0 3px rgba(32, 217, 255, 0.18),
     0 0 12px rgba(32, 217, 255, 0.22);
+}
+
+@media (min-width: 768px) {
+  .login-page {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-height: 100dvh !important;
+    padding: 40px 20px !important;
+    background: #000000 !important;
+  }
+  .login-card {
+    width: 100% !important;
+    max-width: 520px !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 16px !important;
+    background: #000000 !important;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6) !important;
+    overflow: hidden !important;
+  }
+  .login-header {
+    padding: 24px 32px 10px !important;
+  }
+  .login-content {
+    min-height: auto !important;
+    padding: 10px 32px 32px !important;
+  }
 }
 
       `}</style>

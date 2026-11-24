@@ -1337,3 +1337,29 @@
   display: block !important;
 }
 
+/* ==========================================================
+   DESKTOP VIEW (PC ONLY)
+   ========================================================== */
+@media (min-width: 768px) {
+  .sh-settings-page {
+    align-items: center;
+    background: #000000;
+  }
+
+  .sh-settings-header {
+    width: 100%;
+    max-width: 680px;
+    margin: 0 auto;
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    box-sizing: border-box;
+  }
+
+  .sh-settings-content {
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    min-height: calc(100dvh - 56px);
+    box-sizing: border-box;
+  }
+}
+

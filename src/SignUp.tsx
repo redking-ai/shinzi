@@ -2251,52 +2251,49 @@ box-shadow: none;
         }
 
         /* ==============================================
-           DESKTOP
+           DESKTOP (PC ONLY)
            ============================================== */
 
         @media (min-width: 768px) {
           .signup-page {
-            display: block;
-
+            display: flex;
+            align-items: center;
+            justify-content: center;
             width: 100%;
-
-            min-height:
-              100dvh;
+            min-height: 100dvh;
+            padding: 40px 20px;
+            background: #000000;
           }
 
           .signup-shell {
             width: 100%;
-
-            max-width: none;
-
-            min-height:
-              100dvh;
-
-            margin: 0;
-
-            border: none;
-            border-radius: 0;
-            box-shadow: none;
+            max-width: 520px;
+            min-height: auto;
+            margin: 0 auto;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            background: #000000;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+            overflow: hidden;
           }
 
           .signup-content {
-            max-width: 760px;
-
-            margin-left: auto;
-            margin-right: auto;
-
-            padding-left: 40px;
-            padding-right: 40px;
+            max-width: 100%;
+            margin: 0;
+            padding: 10px 32px 32px;
           }
 
           .signup-header {
-            padding-left: 40px;
-            padding-right: 40px;
+            padding: 24px 32px 10px;
           }
 
           .signup-banner-wrap {
-            padding-left: 40px;
-            padding-right: 40px;
+            padding: 0 32px;
+          }
+
+          .signup-continue-button {
+            margin-top: 32px;
+            margin-bottom: 0;
           }
         }
       `}</style>

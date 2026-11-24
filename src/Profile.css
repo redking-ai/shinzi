@@ -2270,3 +2270,37 @@
 .sh-block-modal-cancel-btn:hover {
   color: #ffffff;
 }
+
+/* ==========================================================
+   DESKTOP VIEW (PC ONLY)
+   ========================================================== */
+@media (min-width: 768px) {
+  .sh-profile-page {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: #000000 !important;
+  }
+
+  .sh-profile-card {
+    max-width: 760px;
+    margin: 0 auto;
+    border-left: 1px solid #1a1a1a;
+    border-right: 1px solid #1a1a1a;
+    box-sizing: border-box;
+    min-height: 100dvh;
+  }
+
+  .sh-profile-card.sh-profile-custom-theme {
+    background: var(--sh-custom-bg, transparent) !important;
+  }
+
+  .sh-profile-bottom-nav {
+    max-width: 760px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 1px solid #1a1a1a;
+    border-right: 1px solid #1a1a1a;
+    box-sizing: border-box;
+  }
+}

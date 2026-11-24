@@ -2368,3 +2368,38 @@
   color: #ffffff !important;
 }
 
+/* ==========================================================
+   DESKTOP VIEW (PC ONLY)
+   ========================================================== */
+@media (min-width: 768px) {
+  .sh-servers-page {
+    align-items: center;
+    background: #000000;
+  }
+
+  .sh-servers-topbar {
+    max-width: 760px;
+    margin: 0 auto;
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    box-sizing: border-box;
+  }
+
+  .sh-servers-content {
+    max-width: 760px;
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    box-sizing: border-box;
+  }
+
+  .sh-servers-bottom-nav {
+    max-width: 760px;
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%);
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    box-sizing: border-box;
+  }
+}
+
