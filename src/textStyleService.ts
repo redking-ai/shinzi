@@ -191,14 +191,15 @@ const KNOWN_FONTS: Record<string, string> = {
 const STORAGE_KEY = 'shinzi_custom_text_styles';
 
 // Auto-cleanup any corrupted, test, or auto-generated fake styles
+const BOGUS_STYLE_KEYS = ['ashetic', 'asetic', 'ashe', 'ofl', 'randpm', 'randpom', 'random'];
+
 if (typeof window !== 'undefined') {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      const bogus = ['ashetic', 'asetic', 'ashe', 'ofl'];
       let changed = false;
-      for (const b of bogus) {
+      for (const b of BOGUS_STYLE_KEYS) {
         if (parsed[b]) {
           delete parsed[b];
           changed = true;
@@ -244,8 +245,21 @@ export async function syncCustomStylesWithFirestore(uid: string): Promise<void> 
     const localStyles = getCustomStyles();
     let localChanged = false;
 
+    // Purge any bogus or test styles from Firestore and local cache
+    for (const b of BOGUS_STYLE_KEYS) {
+      if (remoteStyles[b]) {
+        delete remoteStyles[b];
+        void deleteDoc(doc(db, 'users', uid, 'customStyles', b)).catch(() => {});
+      }
+      if (localStyles[b]) {
+        delete localStyles[b];
+        localChanged = true;
+      }
+    }
+
     // Download remote styles into local cache
     for (const [id, def] of Object.entries(remoteStyles)) {
+      if (BOGUS_STYLE_KEYS.includes(id)) continue;
       if (!localStyles[id]) {
         localStyles[id] = def;
         localChanged = true;
@@ -384,8 +398,9 @@ export function autoResolveAndCacheStyle(styleKey: string, styleData?: TextStyle
   const cleanKey = styleKey.toLowerCase().replace(/[^a-z0-9_-]/g, '');
   if (!cleanKey) return null;
 
-  // 1. If explicit styleData provided from incoming message, register and cache it
-  if (styleData && (styleData.fontFamily || styleData.map)) {
+  // 1. If explicit styleData provided from incoming message, register and cache it only if valid
+  if (BOGUS_STYLE_KEYS.includes(cleanKey)) return null;
+  if (styleData && (styleData.map || (styleData.fontFamily && (styleData.fontDataUrl || KNOWN_FONTS[cleanKey])))) {
     const current = getCustomStyles();
     current[cleanKey] = {
       ...styleData,

@@ -22,7 +22,7 @@ import {
   MessageCircle,
   User,
   Bell,
-  Sliders,
+  Settings,
   LogOut,
   Ban,
   Trash2,
@@ -53,7 +53,9 @@ import {
   onSnapshot,
   serverTimestamp,
   updateDoc,
+  arrayUnion,
 } from 'firebase/firestore';
+import MediaCropModal from './MediaCropModal';
 import { useDriveStore } from './driveStore';
 import { getUserEffectiveStatus } from './presenceService';
 import {
@@ -412,6 +414,26 @@ export default function Servers({
   const [showInviteSheet, setShowInviteSheet] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
 
+  // Desktop Responsive State
+  const [isDesktop, setIsDesktop] = useState(() => (typeof window !== 'undefined' ? window.innerWidth >= 768 : false));
+  useEffect(() => {
+    const handleResize = () => setIsDesktop(window.innerWidth >= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Server creation crop modal state (Banner and Profile, supports GIF)
+  const [cropModalData, setCropModalData] = useState<{
+    imageSrc: string;
+    originalFile?: File;
+    isGif?: boolean;
+    type: 'banner' | 'avatar';
+  } | null>(null);
+
+  // Invite Screen State (IMG-20261110-WA0009)
+  const [inviteModalServer, setInviteModalServer] = useState<ServerData | null>(null);
+  const [isJoiningServer, setIsJoiningServer] = useState(false);
+
   // Real Online Members Count for active server
   const [onlineMembersCount, setOnlineMembersCount] = useState<number>(1);
 
@@ -661,6 +683,19 @@ export default function Servers({
       onBack();
     }
   };
+
+  // On desktop mode, auto-select first channel when entering a server if none selected
+  useEffect(() => {
+    if (isDesktop && activeServer && !selectedChannel) {
+      for (const cat of activeServer.categories || []) {
+        const textCh = cat.channels?.find((ch) => ch.type === 'text');
+        if (textCh) {
+          setSelectedChannel(textCh);
+          break;
+        }
+      }
+    }
+  }, [isDesktop, activeServer, selectedChannel]);
 
   const addRecentSearch = (term: string) => {
     if (!term.trim()) return;
@@ -1362,55 +1397,74 @@ export default function Servers({
     }, 450);
   };
 
-  // Handle avatar upload
-  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle avatar upload with cropping modal
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
 
-    try {
-      const dataUrl = await processServerImage(file, false);
-      setFormAvatarPreview(dataUrl);
+    const isGif = file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
+    const previewUrl = URL.createObjectURL(file);
 
-      if (drive.hasActiveSession && drive.uploadFile) {
-        const res = await drive.uploadFile({
-          file,
-          fileName: `server_avatar_${Date.now()}_${file.name}`,
-          mimeType: file.type || 'image/png',
-          folderType: 'server',
-        });
-        if (res?.fileId) {
-          await drive.makeFilePublic(res.fileId);
-          setFormAvatarPreview(`https://lh3.googleusercontent.com/d/${res.fileId}=s1600`);
-        }
-      }
-    } catch (err) {
-      console.warn('Avatar processing note:', err);
-    }
+    setCropModalData({
+      imageSrc: previewUrl,
+      originalFile: file,
+      isGif,
+      type: 'avatar',
+    });
   };
 
-  // Handle banner upload
-  const handleBannerChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle banner upload with cropping modal
+  const handleBannerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
 
-    try {
-      const dataUrl = await processServerImage(file, true);
-      setFormBannerPreview(dataUrl);
+    const isGif = file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
+    const previewUrl = URL.createObjectURL(file);
 
+    setCropModalData({
+      imageSrc: previewUrl,
+      originalFile: file,
+      isGif,
+      type: 'banner',
+    });
+  };
+
+  const handleCropConfirm = async (result: { file: File; dataUri: string }) => {
+    if (!cropModalData) return;
+    const { type, isGif } = cropModalData;
+    const file = result.file;
+    const dataUrl = result.dataUri;
+    setCropModalData(null);
+
+    if (type === 'banner') {
+      setFormBannerPreview(dataUrl);
+    } else {
+      setFormAvatarPreview(dataUrl);
+    }
+
+    try {
       if (drive.hasActiveSession && drive.uploadFile) {
+        const prefix = type === 'banner' ? 'server_banner' : 'server_avatar';
         const res = await drive.uploadFile({
           file,
-          fileName: `server_banner_${Date.now()}_${file.name}`,
-          mimeType: file.type || 'image/png',
+          fileName: `${prefix}_${Date.now()}_${file.name}`,
+          mimeType: file.type || (isGif ? 'image/gif' : 'image/jpeg'),
           folderType: 'server',
         });
         if (res?.fileId) {
           await drive.makeFilePublic(res.fileId);
-          setFormBannerPreview(`https://lh3.googleusercontent.com/d/${res.fileId}=s1600`);
+          const cdnUrl = `https://lh3.googleusercontent.com/d/${res.fileId}=s1600`;
+          if (type === 'banner') {
+            setFormBannerPreview(cdnUrl);
+          } else {
+            setFormAvatarPreview(cdnUrl);
+          }
         }
       }
     } catch (err) {
-      console.warn('Banner processing note:', err);
+      console.warn(`${type} upload note:`, err);
     }
   };
 
@@ -1697,6 +1751,160 @@ export default function Servers({
       )
     : [];
 
+  // Check URL parameters for server invite (?invite=<serverId>)
+  useEffect(() => {
+    const checkUrlInvite = async () => {
+      try {
+        if (typeof window === 'undefined') return;
+        const params = new URLSearchParams(window.location.search);
+        const inviteId = params.get('invite');
+        if (!inviteId) return;
+
+        const found = allServers.find((s) => s.id === inviteId);
+        if (found) {
+          setInviteModalServer(found);
+          return;
+        }
+
+        const docSnap = await getDoc(doc(db, 'servers', inviteId));
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          const srv: ServerData = {
+            id: docSnap.id,
+            name: data.name || 'Community Server',
+            description: data.description || '',
+            bannerUrl: data.bannerUrl || '',
+            iconUrl: data.iconUrl || '',
+            memberCount: `${data.memberCount || data.memberIds?.length || 1} Members`,
+            onlineCount: `${data.onlineCount || 1} Online`,
+            memberIds: data.memberIds || [],
+            categories: data.categories || [],
+            ownerId: data.ownerId || '',
+            createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
+          };
+          setInviteModalServer(srv);
+        }
+      } catch (e) {
+        console.warn('Invite URL check note:', e);
+      }
+    };
+    void checkUrlInvite();
+  }, [allServers]);
+
+  const handleAcceptInvite = async (srv: ServerData) => {
+    if (!currentUser) {
+      alert('Please sign in to join this server.');
+      return;
+    }
+    setIsJoiningServer(true);
+    try {
+      const srvRef = doc(db, 'servers', srv.id);
+      await updateDoc(srvRef, {
+        memberIds: arrayUnion(currentUser.uid),
+      });
+
+      setJoinedServers((prev) => {
+        if (prev.some((s) => s.id === srv.id)) return prev;
+        return [...prev, { ...srv, isCreatedByMe: false }];
+      });
+
+      if (window.history.replaceState) {
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+
+      setInviteModalServer(null);
+      setActiveServer(srv);
+      setSelectedChannel(null);
+    } catch (err) {
+      console.error('Accept invite error:', err);
+    } finally {
+      setIsJoiningServer(false);
+    }
+  };
+
+  const handleDeclineInvite = () => {
+    if (window.history.replaceState) {
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    setInviteModalServer(null);
+  };
+
+  const renderInviteModal = () => {
+    if (!inviteModalServer) return null;
+    const memberNum = parseInt(inviteModalServer.memberCount || '') || inviteModalServer.memberIds?.length || 1;
+    const onlineNum = parseInt(inviteModalServer.onlineCount || '') || 1;
+
+    return (
+      <div className="sh-invite-screen-overlay" onClick={handleDeclineInvite}>
+        {inviteModalServer.bannerUrl && (
+          <div
+            className="sh-invite-screen-backdrop"
+            style={{ backgroundImage: `url(${inviteModalServer.bannerUrl})` }}
+          />
+        )}
+        <div className="sh-invite-screen-card" onClick={(e) => e.stopPropagation()}>
+          {inviteModalServer.iconUrl ? (
+            <img
+              src={inviteModalServer.iconUrl}
+              alt={inviteModalServer.name}
+              className="sh-invite-screen-avatar"
+            />
+          ) : (
+            <div className="sh-invite-screen-avatar-placeholder">
+              {inviteModalServer.name.charAt(0).toUpperCase()}
+            </div>
+          )}
+
+          <div className="sh-invite-screen-subtitle">You are invited to the server</div>
+          <div className="sh-invite-screen-name">{inviteModalServer.name}</div>
+
+          <div className="sh-invite-screen-counts">
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span className="sh-dot-members" /> {memberNum} {memberNum === 1 ? 'member' : 'members'}
+            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span className="sh-dot-online" /> {onlineNum} online
+            </span>
+          </div>
+
+          <button
+            type="button"
+            className="sh-invite-screen-accept-btn"
+            disabled={isJoiningServer}
+            onClick={() => handleAcceptInvite(inviteModalServer)}
+          >
+            {isJoiningServer ? 'Joining...' : 'Accept'}
+          </button>
+
+          <button
+            type="button"
+            className="sh-invite-screen-decline-btn"
+            disabled={isJoiningServer}
+            onClick={handleDeclineInvite}
+          >
+            Decline
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderCropModal = () => {
+    if (!cropModalData) return null;
+    return (
+      <MediaCropModal
+        imageSrc={cropModalData.imageSrc}
+        originalFile={cropModalData.originalFile}
+        isGif={cropModalData.isGif}
+        aspect={cropModalData.type === 'banner' ? 16 / 9 : 1}
+        cropShape={cropModalData.type === 'banner' ? 'rect' : 'round'}
+        title={cropModalData.type === 'banner' ? 'Crop Banner' : 'Crop Server Profile'}
+        onCancel={() => setCropModalData(null)}
+        onConfirm={handleCropConfirm}
+      />
+    );
+  };
+
   // ==========================================================
   // RENDER: SEARCH SERVERS MODAL
   // ==========================================================
@@ -1740,52 +1948,115 @@ export default function Servers({
               {recentSearches.length > 0 ? (
                 recentSearches.map((rec) => {
                   const match = allServers.find((s) => s.name.toLowerCase() === rec.toLowerCase());
+                  if (match) {
+                    const isJoined =
+                      joinedServers.some((s) => s.id === match.id) ||
+                      createdServers.some((s) => s.id === match.id) ||
+                      match.memberIds?.includes(currentUser?.uid || '') ||
+                      match.ownerId === currentUser?.uid;
+
+                    return (
+                      <div
+                        key={match.id}
+                        className="sh-search-discovery-card"
+                        onClick={() => addRecentSearch(match.name)}
+                      >
+                        <div className="sh-search-discovery-banner">
+                          {match.bannerUrl ? (
+                            <img
+                              src={match.bannerUrl}
+                              alt={match.name}
+                              className="sh-search-discovery-banner-img"
+                            />
+                          ) : (
+                            <div className="sh-server-card-bg-gradient" />
+                          )}
+                        </div>
+
+                        <div className="sh-search-discovery-header">
+                          {match.iconUrl ? (
+                            <img
+                              src={match.iconUrl}
+                              alt={match.name}
+                              className="sh-search-discovery-avatar"
+                            />
+                          ) : (
+                            <div
+                              className="sh-server-card-avatar-placeholder"
+                              style={{ width: 44, height: 44, fontSize: 18, margin: 0, borderRadius: 12 }}
+                            >
+                              {match.name.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          <div className="sh-search-discovery-title-box">
+                            <span className="sh-search-discovery-name">{match.name}</span>
+                            {match.isOfficial && <span className="sh-server-badge-official">✓</span>}
+                          </div>
+                        </div>
+
+                        <div className="sh-search-discovery-counts">
+                          <span className="sh-search-count-item">
+                            <span className="sh-search-dot-grey" />
+                            {match.memberCount || '1 Members'}
+                          </span>
+                          <span className="sh-search-count-item">
+                            <span className="sh-search-dot-green" />
+                            {match.onlineCount || '1 Online'}
+                          </span>
+                        </div>
+
+                        <div className="sh-search-discovery-desc">
+                          {match.description || 'Welcome to our community server.'}
+                        </div>
+
+                        <div className="sh-search-discovery-btn-row">
+                          {isJoined ? (
+                            <button
+                              type="button"
+                              className="sh-search-btn-primary"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                addRecentSearch(match.name);
+                                setShowSearchModal(false);
+                                setActiveServer(match);
+                                setSelectedChannel(null);
+                              }}
+                            >
+                              Go to Server
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="sh-search-btn-primary"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                addRecentSearch(match.name);
+                                setShowSearchModal(false);
+                                setInviteModalServer(match);
+                              }}
+                            >
+                              Join
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+
                   return (
                     <div
                       key={rec}
-                      className="sh-search-result-card"
-                      onClick={() => {
-                        if (!match) {
-                          setSearchQuery(rec);
-                        }
-                      }}
+                      className="sh-search-result-simple"
+                      onClick={() => setSearchQuery(rec)}
                     >
-                      {match?.bannerUrl ? (
-                        <img
-                          src={match.bannerUrl}
-                          alt={match.name}
-                          className="sh-search-card-bg-img"
-                        />
-                      ) : (
-                        <div className="sh-server-card-bg-gradient" />
-                      )}
-                      <div className="sh-search-result-overlay" />
-                      <div className="sh-search-result-body">
-                        {match?.iconUrl ? (
-                          <img
-                            src={match.iconUrl}
-                            alt={match.name}
-                            className="sh-search-result-avatar"
-                          />
-                        ) : (
-                          <div
-                            className="sh-server-card-avatar-placeholder"
-                            style={{ width: 40, height: 40, fontSize: 16, margin: 0 }}
-                          >
-                            {(match?.name || rec).charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                        <div className="sh-search-result-info">
-                          <span className="sh-search-result-name">{match?.name || rec}</span>
-                        </div>
-                      </div>
+                      <Search size={16} color="#636b75" />
+                      <span>{rec}</span>
                     </div>
                   );
                 })
               ) : (
                 <div className="sh-servers-empty">
-                  <div className="sh-servers-empty-title">No Recent</div>
-                  <div className="sh-servers-empty-desc">Try searching!</div>
+                  <div className="sh-servers-empty-title">No recent server searched</div>
                 </div>
               )}
             </div>
@@ -1794,45 +2065,102 @@ export default function Servers({
               <div className="sh-servers-section-title">
                 [{searchResults.length}] {searchResults.length === 1 ? 'Result' : 'Results'}
               </div>
-              {searchResults.map((srv) => (
-                <div
-                  key={srv.id}
-                  className="sh-search-result-card"
-                  onClick={() => {
-                    addRecentSearch(srv.name);
-                  }}
-                >
-                  {srv.bannerUrl ? (
-                    <img
-                      src={srv.bannerUrl}
-                      alt={srv.name}
-                      className="sh-search-card-bg-img"
-                    />
-                  ) : (
-                    <div className="sh-server-card-bg-gradient" />
-                  )}
-                  <div className="sh-search-result-overlay" />
-                  <div className="sh-search-result-body">
-                    {srv.iconUrl ? (
-                      <img
-                        src={srv.iconUrl}
-                        alt={srv.name}
-                        className="sh-search-result-avatar"
-                      />
-                    ) : (
-                      <div
-                        className="sh-server-card-avatar-placeholder"
-                        style={{ width: 40, height: 40, fontSize: 16, margin: 0 }}
-                      >
-                        {srv.name.charAt(0).toUpperCase()}
+              {searchResults.map((srv) => {
+                const isJoined =
+                  joinedServers.some((s) => s.id === srv.id) ||
+                  createdServers.some((s) => s.id === srv.id) ||
+                  srv.memberIds?.includes(currentUser?.uid || '') ||
+                  srv.ownerId === currentUser?.uid;
+
+                return (
+                  <div
+                    key={srv.id}
+                    className="sh-search-discovery-card"
+                    onClick={() => {
+                      addRecentSearch(srv.name);
+                    }}
+                  >
+                    <div className="sh-search-discovery-banner">
+                      {srv.bannerUrl ? (
+                        <img
+                          src={srv.bannerUrl}
+                          alt={srv.name}
+                          className="sh-search-discovery-banner-img"
+                        />
+                      ) : (
+                        <div className="sh-server-card-bg-gradient" />
+                      )}
+                    </div>
+
+                    <div className="sh-search-discovery-header">
+                      {srv.iconUrl ? (
+                        <img
+                          src={srv.iconUrl}
+                          alt={srv.name}
+                          className="sh-search-discovery-avatar"
+                        />
+                      ) : (
+                        <div
+                          className="sh-server-card-avatar-placeholder"
+                          style={{ width: 44, height: 44, fontSize: 18, margin: 0, borderRadius: 12 }}
+                        >
+                          {srv.name.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="sh-search-discovery-title-box">
+                        <span className="sh-search-discovery-name">{srv.name}</span>
+                        {srv.isOfficial && <span className="sh-server-badge-official">✓</span>}
                       </div>
-                    )}
-                    <div className="sh-search-result-info">
-                      <span className="sh-search-result-name">{srv.name}</span>
+                    </div>
+
+                    <div className="sh-search-discovery-counts">
+                      <span className="sh-search-count-item">
+                        <span className="sh-search-dot-grey" />
+                        {srv.memberCount || '1 Members'}
+                      </span>
+                      <span className="sh-search-count-item">
+                        <span className="sh-search-dot-green" />
+                        {srv.onlineCount || '1 Online'}
+                      </span>
+                    </div>
+
+                    <div className="sh-search-discovery-desc">
+                      {srv.description || 'Welcome to our community server.'}
+                    </div>
+
+                    <div className="sh-search-discovery-btn-row">
+                      {isJoined ? (
+                        <button
+                          type="button"
+                          className="sh-search-btn-primary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            addRecentSearch(srv.name);
+                            setShowSearchModal(false);
+                            setActiveServer(srv);
+                            setSelectedChannel(null);
+                          }}
+                        >
+                          Go to Server
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="sh-search-btn-primary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            addRecentSearch(srv.name);
+                            setShowSearchModal(false);
+                            setInviteModalServer(srv);
+                          }}
+                        >
+                          Join
+                        </button>
+                      )}
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="sh-servers-empty">
@@ -1941,8 +2269,8 @@ export default function Servers({
               className="sh-server-action-card"
               onClick={() => alert('Server settings')}
             >
-              <Sliders size={20} />
-              <span className="sh-server-action-card-label">Custom</span>
+              <Settings size={20} />
+              <span className="sh-server-action-card-label">Settings</span>
             </button>
           </div>
 
@@ -2020,23 +2348,27 @@ export default function Servers({
   // ==========================================================
   // RENDER: CHANNEL CHAT VIEW (IMG-20261110-WA0014)
   // ==========================================================
-  if (activeServer && selectedChannel && selectedChannel.type === 'text') {
+  const renderChannelChat = (inDesktopSplit = false) => {
+    if (!activeServer || !selectedChannel || selectedChannel.type !== 'text') return null;
+
     return (
       <div
-        className="sh-channel-chat-page"
+        className={`sh-channel-chat-page ${inDesktopSplit ? 'sh-channel-chat-desktop' : ''}`}
         onTouchStart={handleChannelChatTouchStart}
         onTouchEnd={handleChannelChatTouchEnd}
       >
         {/* Header matching IMG-20261110-WA0014 */}
         <div className="sh-channel-chat-header">
-          <button
-            type="button"
-            className="sh-channel-chat-back-btn"
-            onClick={() => setSelectedChannel(null)}
-            aria-label="Back"
-          >
-            <ArrowLeft size={20} />
-          </button>
+          {!inDesktopSplit && (
+            <button
+              type="button"
+              className="sh-channel-chat-back-btn"
+              onClick={() => setSelectedChannel(null)}
+              aria-label="Back"
+            >
+              <ArrowLeft size={20} />
+            </button>
+          )}
 
           <div
             className="sh-channel-chat-title-group"
@@ -2638,13 +2970,23 @@ export default function Servers({
         )}
       </div>
     );
-  }
+  };
 
   // ==========================================================
   // RENDER: SERVER VIEW (IMG-20261109-WA0007, IMG-20261110-WA0022, VID-20261110-WA0023)
   // ==========================================================
   if (activeServer) {
-    return (
+    if (!isDesktop && selectedChannel && selectedChannel.type === 'text') {
+      return (
+        <>
+          {renderChannelChat(false)}
+          {renderInviteModal()}
+          {renderCropModal()}
+        </>
+      );
+    }
+
+    const serverChannelsContent = (
       <div
         className="sh-server-scroll-container"
         onTouchStart={handleServerViewTouchStart}
@@ -3488,6 +3830,39 @@ export default function Servers({
         )}
       </div>
     );
+
+    if (isDesktop) {
+      return (
+        <div className="sh-server-desktop-split">
+          <div className="sh-server-desktop-channels-col">
+            {serverChannelsContent}
+          </div>
+          <div className="sh-server-desktop-chat-col">
+            {selectedChannel && selectedChannel.type === 'text' ? (
+              renderChannelChat(true)
+            ) : (
+              <div className="sh-desktop-chat-empty">
+                <div className="sh-desktop-chat-empty-content">
+                  <ServerIcon size={48} color="#5865f2" />
+                  <h3>Welcome to {activeServer.name}!</h3>
+                  <p>Select a channel from the left sidebar to start chatting.</p>
+                </div>
+              </div>
+            )}
+          </div>
+          {renderInviteModal()}
+          {renderCropModal()}
+        </div>
+      );
+    }
+
+    return (
+      <>
+        {serverChannelsContent}
+        {renderInviteModal()}
+        {renderCropModal()}
+      </>
+    );
   }
 
   // ==========================================================
@@ -3568,9 +3943,6 @@ export default function Servers({
             <div className="sh-servers-empty">
               <ServerIcon size={32} color="#636b75" />
               <div className="sh-servers-empty-title">No servers created yet</div>
-              <div className="sh-servers-empty-desc">
-                Tap the + button to create your own community server!
-              </div>
             </div>
           )}
         </section>
@@ -3620,9 +3992,6 @@ export default function Servers({
             <div className="sh-servers-empty">
               <ServerIcon size={32} color="#636b75" />
               <div className="sh-servers-empty-title">No servers joined yet</div>
-              <div className="sh-servers-empty-desc">
-                Search and discover exciting community servers to join!
-              </div>
             </div>
           )}
         </section>
@@ -3875,6 +4244,9 @@ export default function Servers({
           }}
         />
       )}
+
+      {renderInviteModal()}
+      {renderCropModal()}
     </div>
   );
 }

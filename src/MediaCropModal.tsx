@@ -7,6 +7,8 @@ import './MediaCropModal.css';
 
 export interface MediaCropModalProps {
   imageSrc: string;
+  originalFile?: File;
+  isGif?: boolean;
   cropShape?: 'round' | 'rect';
   aspect?: number;
   title?: string;
@@ -16,6 +18,8 @@ export interface MediaCropModalProps {
 
 export const MediaCropModal: React.FC<MediaCropModalProps> = ({
   imageSrc,
+  originalFile,
+  isGif = false,
   cropShape = 'rect',
   aspect = 1,
   title = 'Edit Image',
@@ -33,7 +37,12 @@ export const MediaCropModal: React.FC<MediaCropModalProps> = ({
   }, []);
 
   const handleApply = async () => {
-    if (!croppedAreaPixels || processing) return;
+    if (processing) return;
+    if (isGif && originalFile) {
+      onConfirm({ file: originalFile, dataUri: imageSrc });
+      return;
+    }
+    if (!croppedAreaPixels) return;
     setProcessing(true);
     try {
       const result = await getCroppedImg(imageSrc, croppedAreaPixels);

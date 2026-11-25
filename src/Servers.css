@@ -2456,14 +2456,393 @@
   }
 
   .sh-server-action-cards {
-    gap: 12px !important;
+    gap: 16px !important;
   }
 
   .sh-server-action-card {
-    min-height: 74px !important;
-    padding: 18px 12px !important;
+    min-height: 78px !important;
+    padding: 18px 14px !important;
     border-radius: 14px !important;
-    font-size: 13.5px !important;
+    font-size: 14px !important;
+  }
+
+  .sh-server-menu-list {
+    max-width: 100% !important;
+  }
+}
+
+/* ==========================================================
+   DISCORD-STYLE COMMUNITY SEARCH DISCOVERY CARDS
+   (IMG-20261110-WA0011 & Screenshot_20261125-231651_Shinzi)
+   ========================================================== */
+.sh-search-discovery-card {
+  background: #111214;
+  border: 1px solid #1e1f22;
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.sh-search-discovery-card:hover {
+  border-color: #35373c;
+}
+
+.sh-search-discovery-banner {
+  width: 100%;
+  height: 120px;
+  position: relative;
+  background: #1e1f22;
+  overflow: hidden;
+}
+
+.sh-search-discovery-banner-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.sh-search-discovery-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px 6px;
+}
+
+.sh-search-discovery-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 2px solid #111214;
+  margin-top: -24px;
+  background: #1e1f22;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+}
+
+.sh-search-discovery-title-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+
+.sh-search-discovery-name {
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.sh-search-discovery-counts {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 2px 14px 8px;
+  font-size: 12px;
+  color: #949ba4;
+}
+
+.sh-search-count-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sh-search-dot-grey {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #80848e;
+}
+
+.sh-search-dot-green {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #23a55a;
+}
+
+.sh-search-discovery-desc {
+  padding: 0 14px 12px;
+  font-size: 13px;
+  color: #b5bac1;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
+}
+
+.sh-search-discovery-btn-row {
+  padding: 0 14px 14px;
+}
+
+.sh-search-btn-primary {
+  width: 100%;
+  padding: 10px 0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #000000;
+  font-size: 14px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.sh-search-btn-primary:active {
+  opacity: 0.85;
+}
+
+.sh-search-result-simple {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: #111215;
+  border-radius: 10px;
+  margin-bottom: 8px;
+  color: #dbdee1;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.sh-search-result-simple:hover {
+  background: #1a1b1e;
+}
+
+/* ==========================================================
+   DISCORD-STYLE INVITE SCREEN MODAL (IMG-20261110-WA0009)
+   ========================================================== */
+.sh-invite-screen-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+}
+
+.sh-invite-screen-backdrop {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  filter: blur(20px) brightness(0.4);
+  transform: scale(1.1);
+  z-index: 0;
+}
+
+.sh-invite-screen-card {
+  position: relative;
+  z-index: 1;
+  width: 90%;
+  max-width: 340px;
+  background: #1e1f22;
+  border: 1px solid #2b2d31;
+  border-radius: 18px;
+  padding: 28px 22px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+}
+
+.sh-invite-screen-avatar {
+  width: 76px;
+  height: 76px;
+  border-radius: 22px;
+  object-fit: cover;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  background: #2b2d31;
+}
+
+.sh-invite-screen-avatar-placeholder {
+  width: 76px;
+  height: 76px;
+  border-radius: 22px;
+  background: #5865f2;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: 700;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+
+.sh-invite-screen-subtitle {
+  color: #b5bac1;
+  font-size: 14px;
+  margin-top: 16px;
+  font-weight: 500;
+}
+
+.sh-invite-screen-name {
+  color: #ffffff;
+  font-size: 20px;
+  font-weight: 700;
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.sh-invite-screen-counts {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin: 12px 0 22px;
+  font-size: 13px;
+  color: #949ba4;
+}
+
+.sh-invite-screen-accept-btn {
+  width: 100%;
+  padding: 12px 0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #000000;
+  font-size: 15px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  margin-bottom: 10px;
+  transition: opacity 0.15s ease;
+}
+
+.sh-invite-screen-accept-btn:active {
+  opacity: 0.85;
+}
+
+.sh-invite-screen-decline-btn {
+  width: 100%;
+  padding: 10px 0;
+  border-radius: 8px;
+  background: #313338;
+  color: #dbdee1;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.sh-invite-screen-decline-btn:active {
+  background: #3b3e45;
+}
+
+/* ==========================================================
+   DESKTOP SERVER TWO-COLUMN SPLIT (CHANNELS LEFT, CHAT RIGHT)
+   (IMG-20261125-WA0007 & IMG-20261125-WA0003)
+   ========================================================== */
+@media (min-width: 768px) {
+  .sh-server-desktop-split {
+    display: flex !important;
+    flex-direction: row !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    overflow: hidden !important;
+    background: #000000 !important;
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 50 !important;
+  }
+
+  .sh-server-desktop-channels-col {
+    width: 320px !important;
+    min-width: 280px !important;
+    max-width: 360px !important;
+    height: 100% !important;
+    overflow-y: auto !important;
+    border-right: 1px solid #1f2023 !important;
+    background: #0d0e10 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex-shrink: 0 !important;
+  }
+
+  .sh-server-desktop-channels-col .sh-server-scroll-container {
+    height: 100% !important;
+    overflow-y: auto !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    padding-bottom: 20px !important;
+  }
+
+  .sh-server-desktop-chat-col {
+    flex: 1 !important;
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    background: #000000 !important;
+    overflow: hidden !important;
+    position: relative !important;
+  }
+
+  .sh-channel-chat-desktop {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 100% !important;
+    border-left: none !important;
+    border-right: none !important;
+    position: relative !important;
+    inset: auto !important;
+  }
+
+  .sh-channel-chat-desktop .sh-channel-chat-header {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-left: none !important;
+    border-right: none !important;
+    box-sizing: border-box !important;
+  }
+
+  .sh-channel-chat-desktop .sh-channel-chat-footer {
+    width: 100% !important;
+    max-width: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .sh-desktop-chat-empty {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000000;
+  }
+
+  .sh-desktop-chat-empty-content {
+    text-align: center;
+    color: #949ba4;
+    padding: 24px;
+    max-width: 360px;
+  }
+
+  .sh-desktop-chat-empty-content h3 {
+    color: #ffffff;
+    font-size: 20px;
+    font-weight: 700;
+    margin: 14px 0 6px;
+  }
+
+  .sh-desktop-chat-empty-content p {
+    color: #949ba4;
+    font-size: 14px;
+    line-height: 1.5;
+    margin: 0;
   }
 }
 

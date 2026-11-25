@@ -306,6 +306,8 @@ useEffect(() => {
   const [mediaUploadStatus, setMediaUploadStatus] = useState('');
   const [cropModalData, setCropModalData] = useState<{
     imageSrc: string;
+    originalFile?: File;
+    isGif?: boolean;
     type: 'avatar' | 'banner';
   } | null>(null);
 
@@ -788,7 +790,7 @@ useEffect(() => {
       return;
     }
 
-    // GIF selected: upload directly to keep all animated frames and timing intact!
+    // GIF selected: open crop modal to preview and frame animated GIF
     if (isGif) {
       if (file.size > 10 * 1024 * 1024) {
         setError('GIFs must be under 10MB.');
@@ -796,7 +798,12 @@ useEffect(() => {
       }
 
       const previewUrl = URL.createObjectURL(file);
-      await uploadMediaFile(file, type, previewUrl);
+      setCropModalData({
+        imageSrc: previewUrl,
+        originalFile: file,
+        isGif: true,
+        type,
+      });
       return;
     }
 
@@ -1650,6 +1657,8 @@ useEffect(() => {
       {cropModalData && (
         <MediaCropModal
           imageSrc={cropModalData.imageSrc}
+          originalFile={cropModalData.originalFile}
+          isGif={cropModalData.isGif}
           cropShape="rect"
           aspect={cropModalData.type === 'avatar' ? 1 : 16 / 9}
           title={cropModalData.type === 'avatar' ? 'Edit Image' : 'Edit Banner'}
