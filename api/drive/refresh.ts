@@ -78,14 +78,27 @@ export default {
 
       const tokens = await tokenResponse.json();
 
+      const grantedScopes =
+        typeof tokens.scope === "string" ? tokens.scope.split(" ") : [];
+      const hasFullDriveScope = grantedScopes.includes(
+        "https://www.googleapis.com/auth/drive"
+      );
+
       if (
         !tokenResponse.ok ||
-        typeof tokens.access_token !== "string"
+        typeof tokens.access_token !== "string" ||
+        (tokens.scope && !hasFullDriveScope)
       ) {
-        console.error("Google token refresh failed:", tokens.error);
+        console.warn(
+          "Google token refresh failed or has outdated scopes:",
+          tokens.error || "Missing full drive scope"
+        );
 
         return Response.json(
-          { error: "Google authorization expired; reconnect Drive" },
+          {
+            error:
+              "Google authorization expired or requires updated permissions; reconnect Drive",
+          },
           { status: 401, headers: CORS_HEADERS }
         );
       }

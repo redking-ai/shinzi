@@ -207,6 +207,24 @@ const getAuthHeader = (
   Authorization: `Bearer ${token}`,
 });
 
+const fetchWithTimeout = async (
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  timeoutMs = 20000
+): Promise<Response> => {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(input, {
+      ...init,
+      signal: init?.signal ?? controller.signal,
+    });
+    return res;
+  } finally {
+    clearTimeout(id);
+  }
+};
+
 const throwDriveError = async (
   response: Response,
   fallbackMessage: string
@@ -353,7 +371,7 @@ const uploadResumableDrive = async (
   const totalBytes = buffer.byteLength;
 
   // 1. Session initiation
-  const initRes = await fetch(
+  const initRes = await fetchWithTimeout(
     `${DRIVE_UPLOAD_API}/files?uploadType=resumable`,
     {
       method: 'POST',
@@ -368,7 +386,8 @@ const uploadResumableDrive = async (
         mimeType,
         parents: [folderId],
       }),
-    }
+    },
+    20000
   );
 
   await throwDriveError(
@@ -398,13 +417,17 @@ const uploadResumableDrive = async (
     while (!chunkAccepted && retries < 4) {
       retries++;
       try {
-        const chunkRes = await fetch(uploadUrl, {
-          method: 'PUT',
-          headers: {
-            'Content-Range': contentRange,
+        const chunkRes = await fetchWithTimeout(
+          uploadUrl,
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Range': contentRange,
+            },
+            body: chunkData,
           },
-          body: chunkData,
-        });
+          30000
+        );
 
         if (chunkRes.status === 308) {
           const rangeHeader = chunkRes.headers.get('Range');
@@ -438,12 +461,16 @@ const uploadResumableDrive = async (
 
         // Query status from Drive to see what bytes were received
         try {
-          const statusRes = await fetch(uploadUrl, {
-            method: 'PUT',
-            headers: {
-              'Content-Range': `bytes */${totalBytes}`,
+          const statusRes = await fetchWithTimeout(
+            uploadUrl,
+            {
+              method: 'PUT',
+              headers: {
+                'Content-Range': `bytes */${totalBytes}`,
+              },
             },
-          });
+            15000
+          );
 
           if (statusRes.status === 308) {
             const rangeHeader = statusRes.headers.get('Range');
@@ -474,7 +501,7 @@ const uploadResumableDrive = async (
 
   // Grant public read permission
   try {
-    await fetch(
+    await fetchWithTimeout(
       `${DRIVE_API}/files/${encodeURIComponent(finalUploaded.id)}/permissions`,
       {
         method: 'POST',
@@ -486,7 +513,8 @@ const uploadResumableDrive = async (
           role: 'reader',
           type: 'anyone',
         }),
-      }
+      },
+      15000
     );
   } catch {}
 
@@ -783,15 +811,24 @@ export const useDriveStore = (): DriveStore => {
       try {
         return await run(token);
       } catch (error) {
-        if (
-          error instanceof DriveError &&
-          error.status === 401
-        ) {
-          await clearAuth();
+        if (error instanceof DriveError) {
+          const isInsufficientScope =
+            error.status === 403 &&
+            error.message.toLowerCase().includes('insufficient');
 
-          throw new Error(
-            'Your Google Drive authorization expired. Please reconnect Drive and retry.',
-          );
+          if (error.status === 401 || isInsufficientScope) {
+            await clearAuth();
+
+            if (isInsufficientScope) {
+              throw new Error(
+                'Google Drive permission is missing required scopes. Please reconnect Google Drive to grant full access.',
+              );
+            }
+
+            throw new Error(
+              'Your Google Drive authorization expired. Please reconnect Drive and retry.',
+            );
+          }
         }
 
         throw error;
@@ -829,22 +866,32 @@ export const useDriveStore = (): DriveStore => {
           const url =
             `${DRIVE_API}/files` +
             `?q=${encodeURIComponent(query)}` +
-            `&spaces=drive` +
             `&pageSize=1` +
             `&fields=files(id,name,mimeType,parents)`;
 
-          const response = await fetch(url, {
-            headers: getAuthHeader(token),
-          });
+          try {
+            const response = await fetchWithTimeout(url, {
+              headers: getAuthHeader(token),
+            }, 15000);
 
-          await throwDriveError(
-            response,
-            'Unable to search Google Drive folders.'
-          );
+            await throwDriveError(
+              response,
+              'Unable to search Google Drive folders.'
+            );
 
-          const data = await response.json();
+            const data = await response.json();
 
-          return data?.files?.[0] || null;
+            return data?.files?.[0] || null;
+          } catch (err) {
+            if (
+              err instanceof DriveError &&
+              (err.status === 403 || err.status === 401)
+            ) {
+              throw err;
+            }
+            console.warn('[Drive findFolder] Search error, will attempt create:', err);
+            return null;
+          }
         },
         []
       );
@@ -877,7 +924,7 @@ export const useDriveStore = (): DriveStore => {
             body.parents = [parentId];
           }
 
-          const response = await fetch(
+          const response = await fetchWithTimeout(
             `${DRIVE_API}/files?fields=id,name,mimeType,parents`,
             {
               method: 'POST',
@@ -890,7 +937,8 @@ export const useDriveStore = (): DriveStore => {
               },
 
               body: JSON.stringify(body),
-            }
+            },
+            20000
           );
 
           await throwDriveError(
@@ -1136,14 +1184,15 @@ export const useDriveStore = (): DriveStore => {
           }
 
           return withToken(async (token) => {
-            const response = await fetch(
+            const response = await fetchWithTimeout(
               `${DRIVE_API}/files/${encodeURIComponent(
                 fileId
               )}` +
                 `?fields=id,name,mimeType,size,parents,trashed`,
               {
                 headers: getAuthHeader(token),
-              }
+              },
+              15000
             );
 
             await throwDriveError(
@@ -1335,7 +1384,7 @@ export const useDriveStore = (): DriveStore => {
           }
 
           return withToken(async (token) => {
-            const response = await fetch(
+            const response = await fetchWithTimeout(
               `${DRIVE_API}/files/${encodeURIComponent(
                 fileId
               )}`,
@@ -1343,7 +1392,8 @@ export const useDriveStore = (): DriveStore => {
                 method: 'DELETE',
 
                 headers: getAuthHeader(token),
-              }
+              },
+              15000
             );
 
             if (response.status === 404) {
@@ -1376,7 +1426,7 @@ export const useDriveStore = (): DriveStore => {
           if (!fileId) return false;
           try {
             return await withToken(async (token) => {
-              const res = await fetch(
+              const res = await fetchWithTimeout(
                 `${DRIVE_API}/files/${encodeURIComponent(fileId.trim())}/permissions`,
                 {
                   method: 'POST',
@@ -1388,7 +1438,8 @@ export const useDriveStore = (): DriveStore => {
                     role: 'reader',
                     type: 'anyone',
                   }),
-                }
+                },
+                15000
               );
               return res.ok;
             });
@@ -1407,18 +1458,19 @@ export const useDriveStore = (): DriveStore => {
           try {
             const folder = await getShinziSubfolder(token, folderType);
             const query = encodeURIComponent(`'${folder.id}' in parents and trashed = false`);
-            const res = await fetch(
+            const res = await fetchWithTimeout(
               `${DRIVE_API}/files?q=${query}&fields=files(id,name)`,
-              { headers: getAuthHeader(token) }
+              { headers: getAuthHeader(token) },
+              15000
             );
             if (res.ok) {
               const data = await res.json();
               for (const f of data.files || []) {
                 if (f.id && f.id !== keepFileId) {
-                  await fetch(`${DRIVE_API}/files/${encodeURIComponent(f.id)}`, {
+                  await fetchWithTimeout(`${DRIVE_API}/files/${encodeURIComponent(f.id)}`, {
                     method: 'DELETE',
                     headers: getAuthHeader(token),
-                  }).catch(() => {});
+                  }, 15000).catch(() => {});
                   deletedCount++;
                 }
               }
@@ -1430,19 +1482,20 @@ export const useDriveStore = (): DriveStore => {
           // Clean up any old ast_*.gif files accidentally created in root My Drive
           try {
             const rootQuery = encodeURIComponent(`'root' in parents and trashed = false`);
-            const rootRes = await fetch(
+            const rootRes = await fetchWithTimeout(
               `${DRIVE_API}/files?q=${rootQuery}&fields=files(id,name)`,
-              { headers: getAuthHeader(token) }
+              { headers: getAuthHeader(token) },
+              15000
             );
             if (rootRes.ok) {
               const rootData = await rootRes.json();
               for (const f of rootData.files || []) {
                 if (f.name && f.name.startsWith('ast_') && (f.name.endsWith('.gif') || f.name.endsWith('.mp4') || f.name.endsWith('.png') || f.name.endsWith('.webp') || f.name.endsWith('.jpg') || f.name.endsWith('.jpeg'))) {
                   if (f.id !== keepFileId) {
-                    await fetch(`${DRIVE_API}/files/${encodeURIComponent(f.id)}`, {
+                    await fetchWithTimeout(`${DRIVE_API}/files/${encodeURIComponent(f.id)}`, {
                       method: 'DELETE',
                       headers: getAuthHeader(token),
-                    }).catch(() => {});
+                    }, 15000).catch(() => {});
                     deletedCount++;
                   }
                 }

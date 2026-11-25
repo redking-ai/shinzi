@@ -53,7 +53,7 @@ export default {
       googleUrl.searchParams.set("response_type", "code");
       googleUrl.searchParams.set(
         "scope",
-        "openid email https://www.googleapis.com/auth/drive.file"
+        "openid email profile https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/drive.file"
       );
       googleUrl.searchParams.set("access_type", "offline");
       googleUrl.searchParams.set("include_granted_scopes", "true");
