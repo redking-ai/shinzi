@@ -672,17 +672,24 @@ export default function Servers({
     }
   };
 
-  const handleBack = () => {
-    if (viewingProfileUid) {
-      handleCloseProfile();
-    } else if (selectedChannel) {
-      setSelectedChannel(null);
-    } else if (activeServer) {
-      setActiveServer(null);
-    } else if (onBack) {
-      onBack();
-    }
+  const handleExitServer = () => {
+    setActiveServer(null);
+    setSelectedChannel(null);
   };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      if (viewingProfileUid) {
+        handleCloseProfile();
+      } else if (activeServer) {
+        handleExitServer();
+      } else if (onBack) {
+        onBack();
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [viewingProfileUid, activeServer, onBack]);
 
   // On desktop mode, auto-select first channel when entering a server if none selected
   useEffect(() => {
@@ -696,6 +703,36 @@ export default function Servers({
       }
     }
   }, [isDesktop, activeServer, selectedChannel]);
+
+  // Clean local server cache on startup: move miscategorized servers from created to joined
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+    try {
+      const rawCreated = localStorage.getItem('shinzi_created_servers');
+      if (rawCreated) {
+        const parsed: ServerData[] = JSON.parse(rawCreated);
+        if (Array.isArray(parsed)) {
+          const reallyCreated = parsed.filter((s) => !s.ownerId || s.ownerId === currentUser.uid);
+          const miscategorized = parsed.filter((s) => s.ownerId && s.ownerId !== currentUser.uid);
+          if (miscategorized.length > 0) {
+            localStorage.setItem('shinzi_created_servers', JSON.stringify(reallyCreated));
+            setCreatedServers(reallyCreated);
+
+            const rawJoined = localStorage.getItem('shinzi_joined_servers');
+            const currentJoined: ServerData[] = rawJoined ? JSON.parse(rawJoined) : [];
+            const mergedJoined = [...currentJoined];
+            miscategorized.forEach((m) => {
+              if (!mergedJoined.some((j) => j.id === m.id)) {
+                mergedJoined.push({ ...m, isCreatedByMe: false });
+              }
+            });
+            localStorage.setItem('shinzi_joined_servers', JSON.stringify(mergedJoined));
+            setJoinedServers(mergedJoined);
+          }
+        }
+      }
+    } catch {}
+  }, [currentUser?.uid]);
 
   const addRecentSearch = (term: string) => {
     if (!term.trim()) return;
@@ -765,26 +802,22 @@ export default function Servers({
         } catch {}
 
         const createdList = allUserServers
-          .filter((s) => s.ownerId === currentUser.uid || s.isCreatedByMe)
+          .filter((s) => Boolean(s.ownerId && s.ownerId === currentUser.uid))
           .map((s) => ({ ...s, isCreatedByMe: true }));
 
-        const joinedList = allUserServers.filter(
-          (s) => s.ownerId !== currentUser.uid && !s.isCreatedByMe
-        );
+        const joinedList = allUserServers
+          .filter((s) => !s.ownerId || s.ownerId !== currentUser.uid)
+          .map((s) => ({ ...s, isCreatedByMe: false }));
 
-        if (createdList.length > 0) {
-          setCreatedServers(createdList);
-          try {
-            localStorage.setItem('shinzi_created_servers', JSON.stringify(createdList));
-          } catch {}
-        }
+        setCreatedServers(createdList);
+        try {
+          localStorage.setItem('shinzi_created_servers', JSON.stringify(createdList));
+        } catch {}
 
-        if (joinedList.length > 0) {
-          setJoinedServers(joinedList);
-          try {
-            localStorage.setItem('shinzi_joined_servers', JSON.stringify(joinedList));
-          } catch {}
-        }
+        setJoinedServers(joinedList);
+        try {
+          localStorage.setItem('shinzi_joined_servers', JSON.stringify(joinedList));
+        } catch {}
       } catch (err) {
         console.warn('Could not load user servers from Firestore:', err);
       }
@@ -1535,8 +1568,11 @@ export default function Servers({
       ],
     };
 
+    const docToWrite = { ...newServer };
+    delete (docToWrite as any).isCreatedByMe;
+
     try {
-      await setDoc(doc(db, 'servers', newServerId), newServer);
+      await setDoc(doc(db, 'servers', newServerId), docToWrite);
       console.log('Server successfully created in Firestore:', newServerId);
     } catch (err) {
       console.warn('Firestore server write fallback:', err);
@@ -1803,9 +1839,27 @@ export default function Servers({
         memberIds: arrayUnion(currentUser.uid),
       });
 
+      const joinedServerData: ServerData = {
+        ...srv,
+        isCreatedByMe: false,
+        memberIds: Array.from(new Set([...(srv.memberIds || []), currentUser.uid])),
+      };
+
       setJoinedServers((prev) => {
-        if (prev.some((s) => s.id === srv.id)) return prev;
-        return [...prev, { ...srv, isCreatedByMe: false }];
+        const filtered = prev.filter((s) => s.id !== srv.id);
+        const updated = [...filtered, joinedServerData];
+        try {
+          localStorage.setItem('shinzi_joined_servers', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+
+      setCreatedServers((prev) => {
+        const updated = prev.filter((s) => s.id !== srv.id);
+        try {
+          localStorage.setItem('shinzi_created_servers', JSON.stringify(updated));
+        } catch {}
+        return updated;
       });
 
       if (window.history.replaceState) {
@@ -1813,7 +1867,7 @@ export default function Servers({
       }
 
       setInviteModalServer(null);
-      setActiveServer(srv);
+      setActiveServer(joinedServerData);
       setSelectedChannel(null);
     } catch (err) {
       console.error('Accept invite error:', err);
@@ -2976,22 +3030,8 @@ export default function Servers({
   // RENDER: SERVER VIEW (IMG-20261109-WA0007, IMG-20261110-WA0022, VID-20261110-WA0023)
   // ==========================================================
   if (activeServer) {
-    if (!isDesktop && selectedChannel && selectedChannel.type === 'text') {
-      return (
-        <>
-          {renderChannelChat(false)}
-          {renderInviteModal()}
-          {renderCropModal()}
-        </>
-      );
-    }
-
-    const serverChannelsContent = (
-      <div
-        className="sh-server-scroll-container"
-        onTouchStart={handleServerViewTouchStart}
-        onTouchEnd={handleServerViewTouchEnd}
-      >
+    const serverBannerAndHeader = (
+      <>
         {/* Banner at top if server has a banner; matches video_1.mp4 */}
         {activeServer.bannerUrl && (
           <div className="sh-server-banner">
@@ -3003,7 +3043,7 @@ export default function Servers({
             <button
               type="button"
               className="sh-server-banner-back-btn"
-              onClick={handleBack}
+              onClick={handleExitServer}
               aria-label="Back to Servers"
             >
               <ArrowLeft size={20} />
@@ -3027,7 +3067,7 @@ export default function Servers({
                 style={{ position: 'static', marginRight: 10 }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleBack();
+                  handleExitServer();
                 }}
                 aria-label="Back to Servers"
               >
@@ -3092,9 +3132,11 @@ export default function Servers({
             </button>
           </div>
         </div>
+      </>
+    );
 
-        {/* Channels & Categories List with Long-press support */}
-        <div className="sh-server-channels-content">
+    const channelsContentOnly = (
+      <div className="sh-server-channels-content">
           {activeServer.categories.map((cat) => {
             const isCollapsed = collapsedCategories[cat.id];
             return (
@@ -3186,8 +3228,11 @@ export default function Servers({
             );
           })}
         </div>
+      );
 
-        {/* Invite Bottom Sheet */}
+      const modalsAndSheets = (
+        <>
+          {/* Invite Bottom Sheet */}
         {showInviteSheet && (
           <div
             className="sh-invite-sheet-overlay"
@@ -3828,40 +3873,61 @@ export default function Servers({
             }}
           />
         )}
-      </div>
+      </>
     );
 
     if (isDesktop) {
       return (
-        <div className="sh-server-desktop-split">
-          <div className="sh-server-desktop-channels-col">
-            {serverChannelsContent}
-          </div>
-          <div className="sh-server-desktop-chat-col">
-            {selectedChannel && selectedChannel.type === 'text' ? (
-              renderChannelChat(true)
-            ) : (
-              <div className="sh-desktop-chat-empty">
-                <div className="sh-desktop-chat-empty-content">
-                  <ServerIcon size={48} color="#5865f2" />
-                  <h3>Welcome to {activeServer.name}!</h3>
-                  <p>Select a channel from the left sidebar to start chatting.</p>
+        <div className="sh-server-desktop-container">
+          {serverBannerAndHeader}
+          <div className="sh-server-desktop-body">
+            <div className="sh-server-desktop-channels-col">
+              {channelsContentOnly}
+            </div>
+            <div className="sh-server-desktop-chat-col">
+              {selectedChannel && selectedChannel.type === 'text' ? (
+                renderChannelChat(true)
+              ) : (
+                <div className="sh-desktop-chat-empty">
+                  <div className="sh-desktop-chat-empty-content">
+                    <ServerIcon size={48} color="#5865f2" />
+                    <h3>Welcome to {activeServer.name}!</h3>
+                    <p>Select a channel from the left sidebar to start chatting.</p>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
+          {modalsAndSheets}
           {renderInviteModal()}
           {renderCropModal()}
         </div>
       );
     }
 
+    if (!isDesktop && selectedChannel && selectedChannel.type === 'text') {
+      return (
+        <>
+          {renderChannelChat(false)}
+          {modalsAndSheets}
+          {renderInviteModal()}
+          {renderCropModal()}
+        </>
+      );
+    }
+
     return (
-      <>
-        {serverChannelsContent}
+      <div
+        className="sh-server-scroll-container"
+        onTouchStart={handleServerViewTouchStart}
+        onTouchEnd={handleServerViewTouchEnd}
+      >
+        {serverBannerAndHeader}
+        {channelsContentOnly}
+        {modalsAndSheets}
         {renderInviteModal()}
         {renderCropModal()}
-      </>
+      </div>
     );
   }
 

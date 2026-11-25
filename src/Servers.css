@@ -2437,10 +2437,11 @@
   }
 
   .sh-server-details-body {
-    margin: 0 !important;
+    margin: 0 auto !important;
     padding: 0 32px 60px !important;
-    max-width: 620px !important;
+    max-width: 100% !important;
     width: 100% !important;
+    box-sizing: border-box !important;
   }
 
   .sh-server-details-avatar-wrap {
@@ -2456,10 +2457,16 @@
   }
 
   .sh-server-action-cards {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    width: 100% !important;
     gap: 16px !important;
   }
 
   .sh-server-action-card {
+    flex: 1 !important;
+    max-width: 320px !important;
     min-height: 78px !important;
     padding: 18px 14px !important;
     border-radius: 14px !important;
@@ -2467,6 +2474,7 @@
   }
 
   .sh-server-menu-list {
+    width: 100% !important;
     max-width: 100% !important;
   }
 }
@@ -2706,6 +2714,24 @@
   color: #949ba4;
 }
 
+.sh-dot-members {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #80848e;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.sh-dot-online {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #23a55a;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
 .sh-invite-screen-accept-btn {
   width: 100%;
   padding: 12px 0;
@@ -2743,12 +2769,12 @@
 
 /* ==========================================================
    DESKTOP SERVER TWO-COLUMN SPLIT (CHANNELS LEFT, CHAT RIGHT)
-   (IMG-20261125-WA0007 & IMG-20261125-WA0003)
+   DOWN OF BANNER AND SERVER NAME (VID-20261126-WA0005)
    ========================================================== */
 @media (min-width: 768px) {
-  .sh-server-desktop-split {
+  .sh-server-desktop-container {
     display: flex !important;
-    flex-direction: row !important;
+    flex-direction: column !important;
     width: 100vw !important;
     height: 100vh !important;
     overflow: hidden !important;
@@ -2758,25 +2784,56 @@
     z-index: 50 !important;
   }
 
+  .sh-server-desktop-container .sh-server-banner {
+    width: 100% !important;
+    height: 180px !important;
+    flex-shrink: 0 !important;
+    border-radius: 0 !important;
+    position: relative !important;
+    overflow: hidden !important;
+  }
+
+  .sh-server-desktop-container .sh-server-banner-img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+  }
+
+  .sh-server-desktop-container .sh-server-sticky-header {
+    width: 100% !important;
+    flex-shrink: 0 !important;
+    background: #111214 !important;
+    border-bottom: 1px solid #1f2023 !important;
+    padding: 10px 24px !important;
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
+    box-sizing: border-box !important;
+  }
+
+  .sh-server-desktop-body {
+    display: flex !important;
+    flex-direction: row !important;
+    flex: 1 !important;
+    min-height: 0 !important;
+    width: 100% !important;
+    overflow: hidden !important;
+  }
+
   .sh-server-desktop-channels-col {
-    width: 320px !important;
-    min-width: 280px !important;
+    width: 300px !important;
+    min-width: 260px !important;
     max-width: 360px !important;
     height: 100% !important;
     overflow-y: auto !important;
     border-right: 1px solid #1f2023 !important;
     background: #0d0e10 !important;
-    display: flex !important;
-    flex-direction: column !important;
     flex-shrink: 0 !important;
   }
 
-  .sh-server-desktop-channels-col .sh-server-scroll-container {
-    height: 100% !important;
-    overflow-y: auto !important;
-    max-width: 100% !important;
-    width: 100% !important;
-    padding-bottom: 20px !important;
+  .sh-server-desktop-channels-col .sh-server-channels-content {
+    padding-bottom: 24px !important;
   }
 
   .sh-server-desktop-chat-col {
