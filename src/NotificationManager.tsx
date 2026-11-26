@@ -11,12 +11,14 @@ import { subscribeToWebPush } from './pushService';
 
 interface InAppToast {
   id: string;
-  convId: string;
+  convId?: string;
   senderUid: string;
   senderName: string;
   senderAvatar: string;
   text: string;
-  messageId: string;
+  messageId?: string;
+  kind?: 'dm' | 'friend_request';
+  targetUrl?: string;
 }
 
 interface NotificationManagerProps {
@@ -24,6 +26,13 @@ interface NotificationManagerProps {
 }
 
 // Rock-solid notification dispatcher for mobile Chrome & desktop
+function playNotificationSound() {
+  try {
+    const audio = new Audio('/sounds/notification.mp3');
+    audio.play().catch(() => {});
+  } catch {}
+}
+
 async function dispatchOSNotification(title: string, options: Record<string, any>) {
   try {
     if (typeof window === 'undefined' || !('Notification' in window)) return;
@@ -223,6 +232,7 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
             // 1. Show Root-style In-App Floating Toast when user is NOT inside this active chat
             // Enabled for both Web and Native APK so the 5-second toast with tap-to-chat always works inside the app
             if (!isUserInsideThisChat && document.visibilityState === 'visible') {
+              playNotificationSound();
               triggerToast({
                 id: `${convId}-${messageId}-${Date.now()}`,
                 convId,
@@ -231,6 +241,7 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
                 senderAvatar,
                 text: previewText,
                 messageId,
+                kind: 'dm',
               });
             }
 
@@ -246,13 +257,6 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
                   url: `/chat?user=${encodeURIComponent(lastSenderId)}&msg=${encodeURIComponent(messageId)}`,
                 },
               });
-            }
-
-            // Vibration feedback if supported
-            if (navigator.vibrate) {
-              try {
-                navigator.vibrate(80);
-              } catch {}
             }
           }
         });
@@ -284,6 +288,78 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
     };
   }, [currentUid]);
 
+  // Listen for incoming pending friend requests (for both desktop and android)
+  const initialFriendReqLoadedRef = useRef<boolean>(false);
+  const seenFriendReqIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!currentUid) return undefined;
+
+    initialFriendReqLoadedRef.current = false;
+    seenFriendReqIdsRef.current = new Set();
+
+    const q = query(
+      collection(db, 'friendRequests'),
+      where('toUid', '==', currentUid),
+      where('status', '==', 'pending')
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        if (!initialFriendReqLoadedRef.current) {
+          snapshot.docs.forEach((docSnap) => {
+            seenFriendReqIdsRef.current.add(docSnap.id);
+          });
+          initialFriendReqLoadedRef.current = true;
+          return;
+        }
+
+        snapshot.docChanges().forEach(async (change) => {
+          if (change.type === 'added') {
+            const reqId = change.doc.id;
+            if (seenFriendReqIdsRef.current.has(reqId)) return;
+            seenFriendReqIdsRef.current.add(reqId);
+
+            const reqData = change.doc.data();
+            const fromUid = reqData.fromUid;
+            if (!fromUid || fromUid === currentUid) return;
+
+            let senderName = reqData.fromName || reqData.fromDisplayName || 'Someone';
+            let senderAvatar = reqData.fromAvatar || reqData.fromPhotoURL || '';
+
+            if (!senderAvatar || senderName === 'Someone') {
+              try {
+                const { getDoc, doc: fDoc } = await import('firebase/firestore');
+                const userDoc = await getDoc(fDoc(db, 'users', fromUid));
+                if (userDoc.exists()) {
+                  const u = userDoc.data();
+                  senderName = u.displayName || u.username || senderName;
+                  senderAvatar = u.photoURL || senderAvatar;
+                }
+              } catch {}
+            }
+
+            playNotificationSound();
+
+            triggerToast({
+              id: `fr-${reqId}-${Date.now()}`,
+              senderUid: fromUid,
+              senderName,
+              senderAvatar,
+              text: 'sent you a friend request',
+              kind: 'friend_request',
+              targetUrl: '/chat?screen=notifications',
+            });
+          }
+        });
+      },
+      (err) => console.warn('[NotificationManager] Friend request listener notice:', err)
+    );
+
+    return () => unsubscribe();
+  }, [currentUid]);
+
   const triggerToast = (toastData: InAppToast) => {
     if (toastTimeoutRef.current) {
       clearTimeout(toastTimeoutRef.current);
@@ -307,11 +383,16 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
 
   const handleToastClick = () => {
     if (!activeToast) return;
-    const { senderUid, messageId } = activeToast;
+    const { senderUid, messageId, targetUrl, kind } = activeToast;
     if (toastTimeoutRef.current) {
       clearTimeout(toastTimeoutRef.current);
     }
     setActiveToast(null);
+
+    if (kind === 'friend_request' || targetUrl) {
+      navigateTo(targetUrl || '/chat?screen=notifications');
+      return;
+    }
 
     // Navigate to chat and highlight message
     navigateTo(`/chat?user=${encodeURIComponent(senderUid)}&msg=${encodeURIComponent(messageId || '')}`);
@@ -347,7 +428,9 @@ export default function NotificationManager({ currentUid }: NotificationManagerP
             <div style={toastStyles.textCol}>
               <div style={toastStyles.topRow}>
                 <span style={toastStyles.name}>{activeToast.senderName}</span>
-                <span style={toastStyles.subtitle}>Direct Message</span>
+                <span style={toastStyles.subtitle}>
+                  {activeToast.kind === 'friend_request' ? 'Friend Request' : 'Direct Message'}
+                </span>
               </div>
               <div style={toastStyles.previewText}>
                 {activeToast.text}

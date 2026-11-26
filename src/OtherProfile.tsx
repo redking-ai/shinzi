@@ -14,7 +14,7 @@ import {
 import { Icon } from '@iconify/react';
 import SpotifyListeningCard from './SpotifyListeningCard';
 import { subscribeUserConnections, PlatformConnection, getPlatformMeta } from './spotifyService';
-import { ArrowLeft, Ban, Clock3, Ellipsis, Info, MessageCircle, MessageSquare, Phone, UserPlus, UserRound, UserX, VolumeX } from 'lucide-react';
+import { ArrowLeft, Ban, Check, Clock3, Ellipsis, Info, MessageCircle, MessageSquare, Phone, UserPlus, UserRound, UserX, VolumeX } from 'lucide-react';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { auth, db } from './firebaseConfig';
 import { getAbsoluteApiUrl } from './apiUtils';
@@ -79,10 +79,15 @@ export default function OtherProfile({
   targetUid: targetUidProp,
   onClose,
   onOpenChat,
+  serverContext,
 }: {
   targetUid?: string;
   onClose?: () => void;
   onOpenChat?: (targetUid: string) => void;
+  serverContext?: {
+    server: any;
+    onEquipTag?: (tagId: string) => void;
+  };
 }) {
   const drive = useDriveStore();
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(
@@ -178,6 +183,7 @@ export default function OtherProfile({
     muted: false,
   });
 
+  const [showAllTags, setShowAllTags] = useState(false);
   const [showBlockModal, setShowBlockModal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -836,6 +842,27 @@ export default function OtherProfile({
               {userData.username || 'username'}
             </p>
 
+            {(userData.bubleText || userData.statusText || userData.customStatus) && (
+              <div
+                className="sh-status-pill-badge"
+                style={{
+                  marginTop: 6,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '4px 10px',
+                  borderRadius: 16,
+                  backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                  fontSize: 13,
+                  color: '#dbdee1',
+                  maxWidth: '100%',
+                  wordBreak: 'break-word',
+                }}
+              >
+                {renderStyledContent(String(userData.bubleText || userData.statusText || userData.customStatus).replace(/^\+\s*/, ''))}
+              </div>
+            )}
+
             {userData.pronouns && (
               <p className="sh-pronouns">{String(userData.pronouns)}</p>
             )}
@@ -904,6 +931,91 @@ export default function OtherProfile({
             )}
 
           <div className="sh-profile-info-card">
+            {/* Server Roles / Tags Section (IMG-20261127-WA0000) */}
+            {(() => {
+              if (!serverContext?.server || !targetUid) return null;
+              const srv = serverContext.server;
+              const userTagIds: string[] = srv.memberTags?.[targetUid] || [];
+              const allTags = srv.tags || [];
+              const tagsForUser = allTags.filter((t: any) => userTagIds.includes(t.id));
+              if (tagsForUser.length === 0) return null;
+
+              const equippedId = srv.equippedTags?.[targetUid] || tagsForUser[tagsForUser.length - 1]?.id;
+              const displayedTags = showAllTags ? tagsForUser : tagsForUser.slice(0, 8);
+              const remainingCount = tagsForUser.length - 8;
+              const isSelf = currentUser?.uid === targetUid;
+
+              return (
+                <div className="sh-info-card-section" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: 16, marginBottom: 16 }}>
+                  <h3 className="sh-info-card-label" style={{ marginBottom: 10 }}>Roles</h3>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {displayedTags.map((tag: any) => {
+                      const isEquipped = tag.id === equippedId;
+                      return (
+                        <div
+                          key={tag.id}
+                          className="sh-server-profile-role-pill"
+                          onClick={() => {
+                            if (isSelf && serverContext.onEquipTag) {
+                              serverContext.onEquipTag(tag.id);
+                            }
+                          }}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '4px 10px',
+                            borderRadius: 6,
+                            backgroundColor: 'rgba(255, 255, 255, 0.06)',
+                            border: isEquipped ? `1px solid ${tag.color}` : '1px solid rgba(255, 255, 255, 0.1)',
+                            cursor: isSelf ? 'pointer' : 'default',
+                            color: '#ffffff',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            userSelect: 'none',
+                          }}
+                          title={isSelf ? 'Tap to equip this tag' : undefined}
+                        >
+                          <span
+                            style={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: 2,
+                              backgroundColor: tag.color || '#5865F2',
+                              flexShrink: 0,
+                            }}
+                          />
+                          <span>{tag.name}</span>
+                          {isEquipped && (
+                            <Check size={12} color="#ffffff" strokeWidth={3} />
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {remainingCount > 0 && !showAllTags && (
+                      <button
+                        type="button"
+                        onClick={() => setShowAllTags(true)}
+                        style={{
+                          background: 'rgba(255, 255, 255, 0.06)',
+                          border: '1px solid rgba(255, 255, 255, 0.1)',
+                          color: '#949ba4',
+                          borderRadius: 6,
+                          padding: '4px 10px',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Show {remainingCount} more ∨
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
             {userData.bio ? (
               <div className="sh-info-card-section">
                 <h3 className="sh-info-card-label">Bio</h3>

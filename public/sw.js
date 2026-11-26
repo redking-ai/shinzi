@@ -48,6 +48,11 @@ self.addEventListener('push', (event) => {
     return;
   }
 
+  // Never notify self-messages
+  if (data.senderUid && data.recipientUid && data.senderUid === data.recipientUid) {
+    return;
+  }
+
   const title = data.title || 'Shinzi';
 
   const options = {

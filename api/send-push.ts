@@ -124,6 +124,11 @@ export default {
         return Response.json({ error: 'Missing recipientUid' }, { status: 400, headers: CORS_HEADERS });
       }
 
+      // STRICT CHECK: Never send any push or notify when a user messages themselves
+      if (senderUid && recipientUid && senderUid === recipientUid) {
+        return Response.json({ ok: true, skipped: 'self_message' }, { headers: CORS_HEADERS });
+      }
+
       // 1. Send Native Android FCM Push (Delivers even when app is killed)
       let fcmSentCount = 0;
       let pushAvatar = icon || '';

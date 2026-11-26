@@ -1060,7 +1060,7 @@
   overflow-y: auto !important;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
-  z-index: 1000;
+  z-index: 20000 !important;
   background: #09090f;
   padding: 0 0 max(40px, env(safe-area-inset-bottom, 0px)) !important;
   margin: 0;

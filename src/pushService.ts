@@ -105,6 +105,10 @@ export async function sendWebPushToUser(params: {
   callId?: string;
   callType?: string;
 }): Promise<void> {
+  // Prevent any push if user is messaging themselves
+  if (params.senderUid && params.recipientUid && params.senderUid === params.recipientUid) {
+    return;
+  }
   try {
     const apiBase = typeof window !== 'undefined' && window.location.origin.includes('localhost')
       ? 'https://shinzi.vercel.app'

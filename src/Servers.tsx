@@ -40,6 +40,9 @@ import {
   Eye,
   MoreHorizontal,
   Shield,
+  GitCommit,
+  Link2,
+  Users,
 } from 'lucide-react';
 import ColorPickerModal from './ColorPickerModal';
 import { auth, db } from './firebaseConfig';
@@ -99,6 +102,26 @@ export interface ServerTag {
   createdAt?: number;
 }
 
+export interface ServerCommit {
+  id: string; // 7-char hash code e.g. "a3b89ef"
+  authorUid: string;
+  authorName: string;
+  authorAvatar?: string;
+  createdAt: number;
+  changes: string[];
+}
+
+export interface ServerInviteItem {
+  id: string;
+  code: string;
+  creatorUid: string;
+  creatorName: string;
+  creatorAvatar?: string;
+  createdAt: number;
+  expiresAt?: string;
+  uses: number;
+}
+
 export interface ServerData {
   id: string;
   name: string;
@@ -118,6 +141,9 @@ export interface ServerData {
   categories: ServerCategory[];
   tags?: ServerTag[];
   memberTags?: Record<string, string[]>;
+  equippedTags?: Record<string, string>;
+  commits?: ServerCommit[];
+  invites?: ServerInviteItem[];
   createdAt?: number;
 }
 
@@ -472,6 +498,48 @@ export default function Servers({
   const [serverMemberProfiles, setServerMemberProfiles] = useState<
     Record<string, { displayName: string; avatarUrl?: string; isOnline?: boolean }>
   >({});
+
+  // Server Overview States (IMG-20261126-WA0026)
+  const [showServerOverview, setShowServerOverview] = useState(false);
+  const [overviewName, setOverviewName] = useState('');
+  const [overviewDescription, setOverviewDescription] = useState('');
+  const [overviewBannerUrl, setOverviewBannerUrl] = useState('');
+  const [overviewIconUrl, setOverviewIconUrl] = useState('');
+  const overviewBannerFileRef = useRef<HTMLInputElement | null>(null);
+  const overviewAvatarFileRef = useRef<HTMLInputElement | null>(null);
+
+  // Commits & Unsaved Changes States (IMG-20261126-WA0026, WA0042, WA0037)
+  const [pendingCommitChanges, setPendingCommitChanges] = useState<string[]>([]);
+  const [showServerCommits, setShowServerCommits] = useState(false);
+  const [selectedCommitDetails, setSelectedCommitDetails] = useState<ServerCommit | null>(null);
+
+  // Server Members & Actions States (IMG-20261126-WA0018, WA0038)
+  const [showServerMembers, setShowServerMembers] = useState(false);
+  const [serverMembersSearchQuery, setServerMembersSearchQuery] = useState('');
+  const [selectedMemberAction, setSelectedMemberAction] = useState<{
+    uid: string;
+    displayName: string;
+    username?: string;
+    avatarUrl?: string;
+  } | null>(null);
+
+  // Role Members Picker States (IMG-20261126-WA0040, WA0039)
+  const [showTagMembersSheet, setShowTagMembersSheet] = useState(false);
+  const [showAddMembersToRole, setShowAddMembersToRole] = useState(false);
+  const [tagMemberSearchQuery, setTagMemberSearchQuery] = useState('');
+  const [selectedUidsForRole, setSelectedUidsForRole] = useState<Set<string>>(new Set());
+
+  // Invites & Invite Friends States (IMG-20261126-WA0041, WA0032)
+  const [showServerInvites, setShowServerInvites] = useState(false);
+  const [showInviteFriendsModal, setShowInviteFriendsModal] = useState(false);
+  const [userFriendsList, setUserFriendsList] = useState<Array<{ uid: string; displayName: string; photoURL?: string; username?: string }>>([]);
+  const [selectedFriendUids, setSelectedFriendUids] = useState<Set<string>>(new Set());
+  const [friendSearchQuery, setFriendSearchQuery] = useState('');
+  const [invitingFriendsBusy, setInvitingFriendsBusy] = useState(false);
+
+  // Chat Tag Autocomplete State (IMG-20261126-WA0028)
+  const [showTagAutocomplete, setShowTagAutocomplete] = useState(false);
+  const [tagAutocompleteQuery, setTagAutocompleteQuery] = useState('');
 
   // Real Online Members Count for active server
   const [onlineMembersCount, setOnlineMembersCount] = useState<number>(1);
@@ -1220,6 +1288,20 @@ export default function Servers({
       channelInputRef.current.style.height = `${Math.min(channelInputRef.current.scrollHeight, 140)}px`;
     }
 
+    // Check for @ mention trigger
+    const lastAt = text.lastIndexOf('@');
+    if (lastAt !== -1 && lastAt >= text.length - 20) {
+      const q = text.slice(lastAt + 1);
+      if (!q.includes(' ')) {
+        setShowTagAutocomplete(true);
+        setTagAutocompleteQuery(q);
+      } else {
+        setShowTagAutocomplete(false);
+      }
+    } else {
+      setShowTagAutocomplete(false);
+    }
+
     if (!text.trim()) {
       if (channelTypingTimer.current) window.clearTimeout(channelTypingTimer.current);
       lastChannelTypingPingRef.current = 0;
@@ -1515,6 +1597,320 @@ export default function Servers({
     }
   };
 
+  // Sync overview state when active server changes
+  useEffect(() => {
+    if (activeServer) {
+      setOverviewName(activeServer.name || '');
+      setOverviewDescription(activeServer.description || '');
+      setOverviewBannerUrl(activeServer.bannerUrl || '');
+      setOverviewIconUrl(activeServer.iconUrl || '');
+      setPendingCommitChanges([]);
+    }
+  }, [activeServer?.id]);
+
+  const hasUnsavedCommits = useMemo(() => {
+    if (!activeServer) return false;
+    if (pendingCommitChanges.length > 0) return true;
+    if (overviewName !== activeServer.name) return true;
+    if (overviewDescription !== (activeServer.description || '')) return true;
+    if (overviewBannerUrl !== (activeServer.bannerUrl || '')) return true;
+    if (overviewIconUrl !== (activeServer.iconUrl || '')) return true;
+    return false;
+  }, [activeServer, pendingCommitChanges, overviewName, overviewDescription, overviewBannerUrl, overviewIconUrl]);
+
+  const handleCommitChanges = async () => {
+    if (!activeServer || !currentUser) return;
+    const changes: string[] = [...pendingCommitChanges];
+    if (overviewName !== activeServer.name) {
+      changes.push(`Updated server name to "${overviewName}"`);
+    }
+    if (overviewDescription !== (activeServer.description || '')) {
+      changes.push('Updated server description');
+    }
+    if (overviewBannerUrl !== (activeServer.bannerUrl || '')) {
+      changes.push('Updated server banner');
+    }
+    if (overviewIconUrl !== (activeServer.iconUrl || '')) {
+      changes.push('Updated server profile icon');
+    }
+    if (changes.length === 0) return;
+
+    const commitCode = Math.random().toString(36).substring(2, 9);
+    const newCommit: ServerCommit = {
+      id: commitCode,
+      authorUid: currentUser.uid,
+      authorName: currentUserProfile?.displayName || currentUser.displayName || 'Owner',
+      authorAvatar: currentUserProfile?.photoURL || currentUser.photoURL || '',
+      createdAt: Date.now(),
+      changes,
+    };
+
+    const updatedCommits = [newCommit, ...(activeServer.commits || [])];
+    const updatedServer: ServerData = {
+      ...activeServer,
+      name: overviewName,
+      description: overviewDescription,
+      bannerUrl: overviewBannerUrl,
+      iconUrl: overviewIconUrl,
+      commits: updatedCommits,
+    };
+
+    setActiveServer(updatedServer);
+    setCreatedServers((prev) => prev.map((s) => (s.id === updatedServer.id ? updatedServer : s)));
+    setDiscoverableServers((prev) => prev.map((s) => (s.id === updatedServer.id ? updatedServer : s)));
+    setPendingCommitChanges([]);
+
+    try {
+      await updateDoc(doc(db, 'servers', activeServer.id), {
+        name: overviewName,
+        description: overviewDescription,
+        bannerUrl: overviewBannerUrl,
+        iconUrl: overviewIconUrl,
+        commits: updatedCommits,
+      });
+    } catch (err) {
+      console.warn('Failed to commit server changes to Firestore:', err);
+    }
+  };
+
+  const handleDiscardCommits = () => {
+    if (!activeServer) return;
+    setOverviewName(activeServer.name || '');
+    setOverviewDescription(activeServer.description || '');
+    setOverviewBannerUrl(activeServer.bannerUrl || '');
+    setOverviewIconUrl(activeServer.iconUrl || '');
+    setPendingCommitChanges([]);
+  };
+
+  const handleOverviewBannerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const isGif = file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
+    const previewUrl = URL.createObjectURL(file);
+    setCropModalData({
+      imageSrc: previewUrl,
+      originalFile: file,
+      isGif,
+      type: 'banner',
+    });
+  };
+
+  const handleOverviewAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const isGif = file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
+    const previewUrl = URL.createObjectURL(file);
+    setCropModalData({
+      imageSrc: previewUrl,
+      originalFile: file,
+      isGif,
+      type: 'avatar',
+    });
+  };
+
+  const handleEquipTag = async (tagId: string) => {
+    if (!activeServer || !currentUser) return;
+    const updatedEquipped = { ...(activeServer.equippedTags || {}), [currentUser.uid]: tagId };
+    const updatedServer = { ...activeServer, equippedTags: updatedEquipped };
+    setActiveServer(updatedServer);
+    try {
+      await updateDoc(doc(db, 'servers', activeServer.id), {
+        [`equippedTags.${currentUser.uid}`]: tagId,
+      });
+    } catch (err) {
+      console.warn('Failed to equip tag:', err);
+    }
+  };
+
+  const handleAddMembersToRole = async () => {
+    if (!activeServer || !editingTag || selectedUidsForRole.size === 0) return;
+    const updatedMemberTags = { ...(activeServer.memberTags || {}) };
+    const updatedEquipped = { ...(activeServer.equippedTags || {}) };
+
+    selectedUidsForRole.forEach((uid) => {
+      const currentTags = updatedMemberTags[uid] || [];
+      if (!currentTags.includes(editingTag.id)) {
+        updatedMemberTags[uid] = [...currentTags, editingTag.id];
+      }
+      // Auto-equip role tag
+      updatedEquipped[uid] = editingTag.id;
+    });
+
+    const updatedServer: ServerData = {
+      ...activeServer,
+      memberTags: updatedMemberTags,
+      equippedTags: updatedEquipped,
+    };
+
+    setActiveServer(updatedServer);
+    setPendingCommitChanges((prev) => [
+      ...prev,
+      `Added ${selectedUidsForRole.size} member(s) to the ${editingTag.name} role`,
+    ]);
+    setShowAddMembersToRole(false);
+    setSelectedUidsForRole(new Set());
+
+    try {
+      await updateDoc(doc(db, 'servers', activeServer.id), {
+        memberTags: updatedMemberTags,
+        equippedTags: updatedEquipped,
+      });
+    } catch (err) {
+      console.warn('Failed to update role members in Firestore:', err);
+    }
+  };
+
+  const handleRemoveMemberFromRole = async (uid: string, tagId: string) => {
+    if (!activeServer) return;
+    const currentTags = activeServer.memberTags?.[uid] || [];
+    const updated = currentTags.filter((id) => id !== tagId);
+    const updatedMemberTags = { ...(activeServer.memberTags || {}), [uid]: updated };
+    const updatedEquipped = { ...(activeServer.equippedTags || {}) };
+    if (updatedEquipped[uid] === tagId) {
+      delete updatedEquipped[uid];
+    }
+    const updatedServer = { ...activeServer, memberTags: updatedMemberTags, equippedTags: updatedEquipped };
+    setActiveServer(updatedServer);
+    try {
+      await updateDoc(doc(db, 'servers', activeServer.id), {
+        memberTags: updatedMemberTags,
+        equippedTags: updatedEquipped,
+      });
+    } catch (err) {}
+  };
+
+  const handleKickMember = async (memberUid: string, memberName: string) => {
+    if (!activeServer || !confirm(`Are you sure you want to kick ${memberName}?`)) return;
+    const updatedMembers = (activeServer.memberIds || []).filter((id) => id !== memberUid);
+    const updatedServer = { ...activeServer, memberIds: updatedMembers };
+    setActiveServer(updatedServer);
+    setSelectedMemberAction(null);
+    setPendingCommitChanges((prev) => [...prev, `Kicked member ${memberName}`]);
+    try {
+      await updateDoc(doc(db, 'servers', activeServer.id), {
+        memberIds: updatedMembers,
+      });
+    } catch (err) {}
+  };
+
+  const handleBanMember = async (memberUid: string, memberName: string) => {
+    if (!activeServer || !confirm(`Are you sure you want to ban ${memberName}?`)) return;
+    const updatedMembers = (activeServer.memberIds || []).filter((id) => id !== memberUid);
+    const updatedServer = { ...activeServer, memberIds: updatedMembers };
+    setActiveServer(updatedServer);
+    setSelectedMemberAction(null);
+    setPendingCommitChanges((prev) => [...prev, `Banned member ${memberName}`]);
+    try {
+      await updateDoc(doc(db, 'servers', activeServer.id), {
+        memberIds: updatedMembers,
+      });
+    } catch (err) {}
+  };
+
+  const openInviteFriendsModal = async () => {
+    setShowInviteSheet(false);
+    setShowInviteFriendsModal(true);
+    if (!currentUser) return;
+    try {
+      const snap = await getDocs(collection(db, 'users', currentUser.uid, 'friends'));
+      const friends: Array<{ uid: string; displayName: string; photoURL?: string; username?: string }> = [];
+      for (const fDoc of snap.docs) {
+        const fData = fDoc.data();
+        friends.push({
+          uid: fDoc.id,
+          displayName: fData.displayName || fData.username || 'Friend',
+          photoURL: fData.photoURL || '',
+          username: fData.username,
+        });
+      }
+      setUserFriendsList(friends);
+    } catch (err) {
+      console.warn('Failed to load friends:', err);
+    }
+  };
+
+  const handleSendFriendInvites = async () => {
+    if (!activeServer || selectedFriendUids.size === 0 || !currentUser) return;
+    setInvitingFriendsBusy(true);
+    const inviteUrl = `${window.location.origin}/servers?invite=${activeServer.id}`;
+    const inviteMessage = `Join my server **${activeServer.name}** on Shinzi!\n${inviteUrl}`;
+
+    try {
+      for (const friendUid of Array.from(selectedFriendUids)) {
+        const convId = [currentUser.uid, friendUid].sort().join('_');
+        const convRef = doc(db, 'conversations', convId);
+        await setDoc(
+          convRef,
+          {
+            memberIds: [currentUser.uid, friendUid],
+            lastMessageText: inviteMessage,
+            lastMessageAt: serverTimestamp(),
+            lastSenderId: currentUser.uid,
+            lastSenderName: currentUserProfile?.displayName || currentUser.displayName || 'Friend',
+            type: 'dm',
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+
+        await addDoc(collection(db, 'conversations', convId, 'messages'), {
+          senderId: currentUser.uid,
+          senderName: currentUserProfile?.displayName || currentUser.displayName || 'Friend',
+          senderAvatar: currentUserProfile?.photoURL || currentUser.photoURL || '',
+          text: inviteMessage,
+          createdAt: serverTimestamp(),
+        });
+      }
+      alert(`Invited ${selectedFriendUids.size} friend(s) successfully!`);
+      setSelectedFriendUids(new Set());
+      setShowInviteFriendsModal(false);
+    } catch (err) {
+      console.warn('Error sending friend invites:', err);
+    } finally {
+      setInvitingFriendsBusy(false);
+    }
+  };
+
+  // Helper to render message text with styled colored role mentions (@Role)
+  const renderServerMessageText = (rawText: string, tags?: ServerTag[]) => {
+    if (!tags || tags.length === 0) return renderStyledContent(rawText);
+    const tagNames = tags.map((t) => t.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    if (tagNames.length === 0) return renderStyledContent(rawText);
+    const regex = new RegExp(`(@(?:${tagNames.join('|')}))`, 'gi');
+    const parts = rawText.split(regex);
+    return (
+      <>
+        {parts.map((part, i) => {
+          if (part.startsWith('@')) {
+            const matchedTag = tags.find((t) => t.name.toLowerCase() === part.slice(1).toLowerCase());
+            if (matchedTag) {
+              return (
+                <span
+                  key={i}
+                  className="sh-tag-mention"
+                  style={{
+                    color: matchedTag.color,
+                    backgroundColor: `${matchedTag.color}26`,
+                    padding: '2px 6px',
+                    borderRadius: 4,
+                    fontWeight: 600,
+                    display: 'inline-block',
+                    margin: '0 2px',
+                  }}
+                >
+                  {part}
+                </span>
+              );
+            }
+          }
+          return <React.Fragment key={i}>{renderStyledContent(part)}</React.Fragment>;
+        })}
+      </>
+    );
+  };
+
   // Long press timer helpers
   const clearLongPress = () => {
     if (longPressTimerRef.current) {
@@ -1578,10 +1974,18 @@ export default function Servers({
     const dataUrl = result.dataUri;
     setCropModalData(null);
 
-    if (type === 'banner') {
-      setFormBannerPreview(dataUrl);
+    if (showServerOverview) {
+      if (type === 'banner') {
+        setOverviewBannerUrl(dataUrl);
+      } else {
+        setOverviewIconUrl(dataUrl);
+      }
     } else {
-      setFormAvatarPreview(dataUrl);
+      if (type === 'banner') {
+        setFormBannerPreview(dataUrl);
+      } else {
+        setFormAvatarPreview(dataUrl);
+      }
     }
 
     try {
@@ -1596,10 +2000,18 @@ export default function Servers({
         if (res?.fileId) {
           await drive.makeFilePublic(res.fileId);
           const cdnUrl = `https://lh3.googleusercontent.com/d/${res.fileId}=s1600`;
-          if (type === 'banner') {
-            setFormBannerPreview(cdnUrl);
+          if (showServerOverview) {
+            if (type === 'banner') {
+              setOverviewBannerUrl(cdnUrl);
+            } else {
+              setOverviewIconUrl(cdnUrl);
+            }
           } else {
-            setFormAvatarPreview(cdnUrl);
+            if (type === 'banner') {
+              setFormBannerPreview(cdnUrl);
+            } else {
+              setFormAvatarPreview(cdnUrl);
+            }
           }
         }
       }
@@ -2637,18 +3049,26 @@ export default function Servers({
                     <div className="sh-channel-msg-content">
                       {isFirstInGroup && (
                         <div className="sh-channel-msg-header">
-                          <span
-                            className="sh-channel-msg-author"
-                            onClick={() => {
-                              if (msg.senderId) {
-                                setViewingProfileUid(msg.senderId);
-                              } else if (onOpenProfile) {
-                                onOpenProfile();
-                              }
-                            }}
-                          >
-                            {renderStyledDisplayName(cleanRawText(authorName), profile?.displayNameStyle)}
-                          </span>
+                          {(() => {
+                            const equippedTagId = activeServer?.equippedTags?.[msg.senderId];
+                            const equippedTag = activeServer?.tags?.find((t) => t.id === equippedTagId);
+                            const nameColor = equippedTag?.color;
+                            return (
+                              <span
+                                className="sh-channel-msg-author"
+                                style={nameColor ? { color: nameColor } : undefined}
+                                onClick={() => {
+                                  if (msg.senderId) {
+                                    setViewingProfileUid(msg.senderId);
+                                  } else if (onOpenProfile) {
+                                    onOpenProfile();
+                                  }
+                                }}
+                              >
+                                {renderStyledDisplayName(cleanRawText(authorName), profile?.displayNameStyle)}
+                              </span>
+                            );
+                          })()}
                           <span className="sh-channel-msg-time">
                             {formatDiscordTimestamp(msg.createdAt)}
                           </span>
@@ -2662,7 +3082,7 @@ export default function Servers({
                           {isEmojiOnly(msg.text) ? (
                             <span className="shc-dc-jumbo-emoji">{msg.text.trim()}</span>
                           ) : (
-                            renderStyledContent(msg.text)
+                            renderServerMessageText(msg.text, activeServer?.tags)
                           )}
                         </div>
                       )}
@@ -2811,7 +3231,78 @@ export default function Servers({
         )}
 
         {/* Full Working Chat Composer Bar (Item 6) */}
-        <div className="shc-composer-wrap">
+        <div className="shc-composer-wrap" style={{ position: 'relative' }}>
+          {showTagAutocomplete && activeServer && (
+            <div className="sh-tag-autocomplete-popover">
+              {(activeServer.tags || [])
+                .filter((t) => !tagAutocompleteQuery || t.name.toLowerCase().includes(tagAutocompleteQuery.toLowerCase()))
+                .map((tag) => {
+                  const count = Object.values(activeServer.memberTags || {}).filter((tags) => tags.includes(tag.id)).length;
+                  return (
+                    <div
+                      key={tag.id}
+                      className="sh-tag-autocomplete-item"
+                      onClick={() => {
+                        const lastAt = channelInputText.lastIndexOf('@');
+                        const newText = lastAt !== -1 ? channelInputText.slice(0, lastAt) + `@${tag.name} ` : `@${tag.name} `;
+                        setChannelInputText(newText);
+                        setShowTagAutocomplete(false);
+                        setTagAutocompleteQuery('');
+                        channelInputRef.current?.focus();
+                      }}
+                    >
+                      <div className="sh-tag-autocomplete-left">
+                        <span
+                          style={{
+                            color: tag.color,
+                            fontWeight: 700,
+                            fontSize: 14,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                          }}
+                        >
+                          <span style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: tag.color }} />
+                          @{tag.name}
+                        </span>
+                      </div>
+                      <span className="sh-tag-autocomplete-desc">
+                        Notify users with this role in this channel {count > 0 ? `(${count})` : ''}
+                      </span>
+                    </div>
+                  );
+                })}
+
+              {Array.from(new Set([...(activeServer.memberIds || []), activeServer.ownerId || '']))
+                .filter(Boolean)
+                .map((uid) => {
+                  const p = serverMemberProfiles[uid] || senderProfiles[uid];
+                  const name = p?.displayName || (uid === activeServer.ownerId ? activeServer.creatorName || 'Owner' : 'Member');
+                  if (tagAutocompleteQuery && !name.toLowerCase().includes(tagAutocompleteQuery.toLowerCase())) return null;
+                  return (
+                    <div
+                      key={uid}
+                      className="sh-tag-autocomplete-item"
+                      onClick={() => {
+                        const lastAt = channelInputText.lastIndexOf('@');
+                        const newText = lastAt !== -1 ? channelInputText.slice(0, lastAt) + `@${name} ` : `@${name} `;
+                        setChannelInputText(newText);
+                        setShowTagAutocomplete(false);
+                        setTagAutocompleteQuery('');
+                        channelInputRef.current?.focus();
+                      }}
+                    >
+                      <div className="sh-tag-autocomplete-left">
+                        <span style={{ color: '#ffffff', fontWeight: 600, fontSize: 14 }}>
+                          @{name}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+
           <div className="shc-composer">
             <div className="shc-composer-input-box">
               <button
@@ -3138,6 +3629,12 @@ export default function Servers({
               if (onOpenChat) onOpenChat();
               else navigateTo(`/chat?user=${encodeURIComponent(targetUid)}`);
             }}
+            serverContext={activeServer ? {
+              server: activeServer,
+              onEquipTag: (tagId: string) => {
+                void handleEquipTag(tagId);
+              },
+            } : undefined}
           />
         )}
       </div>
@@ -3373,7 +3870,12 @@ export default function Servers({
           <div className="sh-member-info">
             <span
               className="sh-member-name"
-              style={color ? { color } : undefined}
+              style={(() => {
+                const eqTagId = activeServer?.equippedTags?.[m.uid];
+                const eqTag = activeServer?.tags?.find((t) => t.id === eqTagId);
+                const finalColor = color || eqTag?.color || m.tag?.color;
+                return finalColor ? { color: finalColor } : undefined;
+              })()}
             >
               {m.name}
             </span>
@@ -3462,6 +3964,111 @@ export default function Servers({
             })()}
           </div>
         );
+      };
+
+      const renderServerMembersList = () => {
+        if (!activeServer) return null;
+        const allTags = activeServer.tags || [];
+        const memberUids = Array.from(
+          new Set([
+            ...(activeServer.memberIds || []),
+            activeServer.ownerId || '',
+            currentUser?.uid || '',
+          ])
+        ).filter(Boolean);
+
+        const q = serverMembersSearchQuery.trim().toLowerCase();
+
+        const filteredUids = memberUids.filter((uid) => {
+          const p = serverMemberProfiles[uid] || senderProfiles[uid];
+          const name = p?.displayName || (uid === activeServer.ownerId ? activeServer.creatorName || 'Owner' : 'Member');
+          return !q || name.toLowerCase().includes(q);
+        });
+
+        if (filteredUids.length === 0) {
+          return (
+            <div style={{ textAlign: 'center', padding: '36px 16px', color: '#949ba4' }}>
+              No members found matching &quot;{serverMembersSearchQuery}&quot;
+            </div>
+          );
+        }
+
+        return filteredUids.map((uid) => {
+          const p = serverMemberProfiles[uid] || senderProfiles[uid];
+          const name = p?.displayName || (uid === activeServer.ownerId ? activeServer.creatorName || 'Owner' : 'Member');
+          const avatar = p?.avatarUrl || '';
+          const isOnline = p?.isOnline || uid === currentUser?.uid;
+          const userTagIds = activeServer.memberTags?.[uid] || [];
+          const userTags = allTags.filter((t) => userTagIds.includes(t.id));
+          const equippedTagId = activeServer.equippedTags?.[uid] || userTags[userTags.length - 1]?.id;
+          const equippedTag = allTags.find((t) => t.id === equippedTagId);
+
+          return (
+            <div
+              key={uid}
+              className="sh-server-member-row"
+              onClick={() => {
+                setSelectedMemberAction({
+                  uid,
+                  displayName: name,
+                  username: (p as any)?.username,
+                  avatarUrl: avatar,
+                });
+              }}
+            >
+              <div className="sh-server-member-left">
+                <div className="sh-server-member-avatar-wrap">
+                  {avatar ? (
+                    <img src={avatar} alt="" className="sh-server-member-avatar" />
+                  ) : (
+                    <div
+                      className="sh-server-member-avatar"
+                      style={{
+                        background: '#5865F2',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#fff',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  {isOnline && <div className="sh-server-member-online-dot" />}
+                </div>
+
+                <div className="sh-server-member-info">
+                  <span
+                    className="sh-server-member-name"
+                    style={{ color: equippedTag?.color || '#ffffff' }}
+                  >
+                    {name}
+                  </span>
+                  {(p as any)?.username && (
+                    <span className="sh-server-member-username">@{(p as any).username}</span>
+                  )}
+
+                  {userTags.length > 0 && (
+                    <div className="sh-server-member-tags-row">
+                      {userTags.map((tag) => (
+                        <span key={tag.id} className="sh-server-member-tag-pill">
+                          <span
+                            className="sh-server-member-tag-dot"
+                            style={{ background: tag.color }}
+                          />
+                          <span>{tag.name}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <ChevronRight size={18} color="#949ba4" />
+            </div>
+          );
+        });
       };
 
       const renderMediaGrid = (messages: ServerChannelMessage[]) => {
@@ -3591,12 +4198,12 @@ export default function Servers({
                 <button
                   type="button"
                   className="sh-invite-share-item"
-                  onClick={() => alert('Select friends from chat to invite')}
+                  onClick={openInviteFriendsModal}
                 >
                   <div className="sh-invite-share-icon">
-                    <User size={22} />
+                    <Users size={22} />
                   </div>
-                  <span className="sh-invite-share-label">To user</span>
+                  <span className="sh-invite-share-label">To friends</span>
                 </button>
 
                 <button
@@ -3631,10 +4238,15 @@ export default function Servers({
                   className="sh-invite-share-item"
                   onClick={() => {
                     if (navigator.share) {
-                      void navigator.share({
+                      navigator.share({
                         title: `Join ${activeServer.name}`,
                         url: `${window.location.origin}/servers?invite=${activeServer.id}`,
-                      });
+                      }).catch((e) => console.log('Share canceled/failed:', e));
+                    } else {
+                      void navigator.clipboard?.writeText(
+                        `${window.location.origin}/servers?invite=${activeServer.id}`
+                      );
+                      alert('Server invite link copied to clipboard!');
                     }
                   }}
                 >
@@ -4263,6 +4875,12 @@ export default function Servers({
               if (onOpenChat) onOpenChat();
               else navigateTo(`/chat?user=${encodeURIComponent(targetUid)}`);
             }}
+            serverContext={activeServer ? {
+              server: activeServer,
+              onEquipTag: (tagId: string) => {
+                void handleEquipTag(tagId);
+              },
+            } : undefined}
           />
         )}
 
@@ -4733,6 +5351,843 @@ export default function Servers({
           onClose={() => setShowTagColorPicker(false)}
         />
 
+        {/* Server Overview Modal (IMG-20261126-WA0026, WA0004) */}
+        {showServerOverview && activeServer && (
+          <div className="sh-tags-page-container">
+            <div className="sh-tags-page-header">
+              <button
+                type="button"
+                className="sh-tags-back-btn"
+                onClick={() => setShowServerOverview(false)}
+                aria-label="Back"
+              >
+                <ArrowLeft size={20} />
+              </button>
+              <h2 className="sh-tags-page-title">Overview</h2>
+              <div style={{ width: 36 }} />
+            </div>
+
+            <div className="sh-tags-page-content" style={{ padding: '16px' }}>
+              {/* Server Banner & Profile Preview with Pencils */}
+              <div className="sh-overview-header-preview">
+                <div className="sh-overview-banner-wrap">
+                  {overviewBannerUrl ? (
+                    <img src={overviewBannerUrl} alt="Server Banner" className="sh-overview-banner-img" />
+                  ) : (
+                    <div className="sh-overview-banner-img" style={{ background: '#5865F2' }} />
+                  )}
+                  <button
+                    type="button"
+                    className="sh-overview-banner-pencil"
+                    onClick={() => overviewBannerFileRef.current?.click()}
+                    aria-label="Edit Server Banner"
+                  >
+                    <Pencil size={16} />
+                  </button>
+                  <input
+                    ref={overviewBannerFileRef}
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={handleOverviewBannerChange}
+                  />
+                </div>
+
+                <div className="sh-overview-avatar-wrap">
+                  {overviewIconUrl ? (
+                    <img src={overviewIconUrl} alt="Server Avatar" className="sh-overview-avatar-img" />
+                  ) : (
+                    <div
+                      className="sh-overview-avatar-img"
+                      style={{
+                        background: '#2b2d31',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#ffffff',
+                        fontWeight: 700,
+                        fontSize: 24,
+                      }}
+                    >
+                      {activeServer.name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    className="sh-overview-avatar-pencil"
+                    onClick={() => overviewAvatarFileRef.current?.click()}
+                    aria-label="Edit Server Avatar"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <input
+                    ref={overviewAvatarFileRef}
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={handleOverviewAvatarChange}
+                  />
+                </div>
+              </div>
+
+              {/* Server Name Input */}
+              <div className="sh-overview-form-group">
+                <label className="sh-overview-label">Server Name</label>
+                <input
+                  type="text"
+                  className="sh-overview-input"
+                  placeholder="Enter server name"
+                  value={overviewName}
+                  onChange={(e) => setOverviewName(e.target.value)}
+                />
+              </div>
+
+              {/* Server Description Textarea */}
+              <div className="sh-overview-form-group">
+                <label className="sh-overview-label">Server Description</label>
+                <textarea
+                  className="sh-overview-textarea"
+                  placeholder="Tell people what your server is about..."
+                  rows={4}
+                  value={overviewDescription}
+                  onChange={(e) => setOverviewDescription(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Unsaved Commits Sticky Bar (IMG-20261126-WA0026) */}
+        {hasUnsavedCommits && (
+          <div className="sh-unsaved-commits-bar">
+            <span className="sh-unsaved-commits-text">You have some unsaved commits</span>
+            <div className="sh-unsaved-commits-actions">
+              <button
+                type="button"
+                className="sh-unsaved-discard-btn"
+                onClick={handleDiscardCommits}
+              >
+                Discard
+              </button>
+              <button
+                type="button"
+                className="sh-unsaved-commit-btn"
+                onClick={handleCommitChanges}
+              >
+                Commit
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Server Members Modal (IMG-20261126-WA0018) */}
+        {showServerMembers && activeServer && (
+          <div className="sh-tags-page-container">
+            <div className="sh-tags-page-header">
+              <button
+                type="button"
+                className="sh-tags-back-btn"
+                onClick={() => setShowServerMembers(false)}
+                aria-label="Back"
+              >
+                <ArrowLeft size={20} />
+              </button>
+              <h2 className="sh-tags-page-title">Members</h2>
+              <div style={{ width: 36 }} />
+            </div>
+
+            <div className="sh-tag-search-box-wrap" style={{ padding: '12px 16px' }}>
+              <Search size={16} color="#949ba4" />
+              <input
+                type="text"
+                className="sh-tag-search-input"
+                placeholder="Search members"
+                value={serverMembersSearchQuery}
+                onChange={(e) => setServerMembersSearchQuery(e.target.value)}
+              />
+              {serverMembersSearchQuery && (
+                <button
+                  type="button"
+                  style={{ background: 'none', border: 'none', color: '#949ba4', cursor: 'pointer' }}
+                  onClick={() => setServerMembersSearchQuery('')}
+                >
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+
+            <div className="sh-tags-page-content" style={{ padding: '8px 16px' }}>
+              <div className="sh-server-members-list">
+                {renderServerMembersList()}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Member Action Sheet (IMG-20261126-WA0038) */}
+        {selectedMemberAction && (
+          <div
+            className="sh-tag-menu-overlay"
+            onClick={() => setSelectedMemberAction(null)}
+          >
+            <div
+              className="sh-tag-menu-sheet"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="sh-tag-menu-handle" />
+              <div className="sh-member-action-header">
+                {selectedMemberAction.avatarUrl ? (
+                  <img
+                    src={selectedMemberAction.avatarUrl}
+                    alt=""
+                    style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: '50%',
+                      background: '#5865F2',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#ffffff',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {selectedMemberAction.displayName.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>
+                    {selectedMemberAction.displayName}
+                  </div>
+                  {selectedMemberAction.username && (
+                    <div style={{ fontSize: 13, color: '#949ba4' }}>
+                      @{selectedMemberAction.username}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className="sh-member-action-item"
+                onClick={() => {
+                  alert(`Timed out ${selectedMemberAction.displayName} for 60 seconds.`);
+                  setSelectedMemberAction(null);
+                }}
+              >
+                Timeout
+              </button>
+
+              <button
+                type="button"
+                className="sh-member-action-item sh-member-action-danger"
+                onClick={() => handleKickMember(selectedMemberAction.uid, selectedMemberAction.displayName)}
+              >
+                Kick {selectedMemberAction.displayName}
+              </button>
+
+              <button
+                type="button"
+                className="sh-member-action-item sh-member-action-danger"
+                onClick={() => handleBanMember(selectedMemberAction.uid, selectedMemberAction.displayName)}
+              >
+                Ban {selectedMemberAction.displayName}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Role Members Sheet (IMG-20261126-WA0040) */}
+        {showTagMembersSheet && editingTag && activeServer && (
+          <div className="sh-tags-page-container">
+            <div className="sh-tags-page-header">
+              <button
+                type="button"
+                className="sh-tags-back-btn"
+                onClick={() => setShowTagMembersSheet(false)}
+                aria-label="Back"
+              >
+                <ArrowLeft size={20} />
+              </button>
+              <h2 className="sh-tags-page-title">{editingTag.name} - Members</h2>
+              <button
+                type="button"
+                className="sh-tag-create-btn"
+                onClick={() => {
+                  setSelectedUidsForRole(new Set());
+                  setShowAddMembersToRole(true);
+                }}
+              >
+                Add
+              </button>
+            </div>
+
+            <div className="sh-tags-page-content" style={{ padding: '16px' }}>
+              {(() => {
+                const membersWithTag = Object.entries(activeServer.memberTags || {})
+                  .filter(([_, tags]) => tags.includes(editingTag.id))
+                  .map(([uid]) => uid);
+
+                if (membersWithTag.length === 0) {
+                  return (
+                    <div style={{ textAlign: 'center', padding: '40px 16px', color: '#949ba4' }}>
+                      No members have been assigned this tag yet.
+                    </div>
+                  );
+                }
+
+                return membersWithTag.map((uid) => {
+                  const p = serverMemberProfiles[uid] || senderProfiles[uid];
+                  const name = p?.displayName || (uid === activeServer.ownerId ? activeServer.creatorName || 'Owner' : 'Member');
+                  const avatar = p?.avatarUrl || '';
+                  return (
+                    <div key={uid} className="sh-role-member-item">
+                      <div className="sh-server-member-left">
+                        <div className="sh-server-member-avatar-wrap">
+                          {avatar ? (
+                            <img src={avatar} alt="" className="sh-server-member-avatar" />
+                          ) : (
+                            <div
+                              className="sh-server-member-avatar"
+                              style={{
+                                background: '#5865F2',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#fff',
+                                fontWeight: 700,
+                              }}
+                            >
+                              {name.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+                        <div className="sh-server-member-info">
+                          <span className="sh-server-member-name">{name}</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        style={{ background: 'none', border: 'none', color: '#f23f43', cursor: 'pointer', padding: 6 }}
+                        onClick={() => handleRemoveMemberFromRole(uid, editingTag.id)}
+                        aria-label="Remove role from member"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* Add Members to Role Modal (IMG-20261126-WA0039) */}
+        {showAddMembersToRole && editingTag && activeServer && (
+          <div className="sh-tags-page-container">
+            <div className="sh-tags-page-header">
+              <button
+                type="button"
+                className="sh-tags-back-btn"
+                onClick={() => setShowAddMembersToRole(false)}
+                aria-label="Back"
+              >
+                <ArrowLeft size={20} />
+              </button>
+              <h2 className="sh-tags-page-title">Add members to this role</h2>
+              <button
+                type="button"
+                className="sh-tag-create-btn"
+                disabled={selectedUidsForRole.size === 0}
+                onClick={handleAddMembersToRole}
+              >
+                Add
+              </button>
+            </div>
+
+            {/* Selected chips row */}
+            {selectedUidsForRole.size > 0 && (
+              <div className="sh-selected-chips-scroll" style={{ padding: '8px 16px' }}>
+                {Array.from(selectedUidsForRole).map((uid) => {
+                  const p = serverMemberProfiles[uid] || senderProfiles[uid];
+                  const name = p?.displayName || 'Member';
+                  return (
+                    <div key={uid} className="sh-selected-chip">
+                      <span>{name}</span>
+                      <X
+                        size={14}
+                        className="sh-selected-chip-remove"
+                        onClick={() => {
+                          setSelectedUidsForRole((prev) => {
+                            const next = new Set(prev);
+                            next.delete(uid);
+                            return next;
+                          });
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Search Input */}
+            <div className="sh-tag-search-box-wrap" style={{ padding: '8px 16px' }}>
+              <Search size={16} color="#949ba4" />
+              <input
+                type="text"
+                className="sh-tag-search-input"
+                placeholder="Search members"
+                value={tagMemberSearchQuery}
+                onChange={(e) => setTagMemberSearchQuery(e.target.value)}
+              />
+              {tagMemberSearchQuery && (
+                <button
+                  type="button"
+                  style={{ background: 'none', border: 'none', color: '#949ba4', cursor: 'pointer' }}
+                  onClick={() => setTagMemberSearchQuery('')}
+                >
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+
+            {/* Members Picker List */}
+            <div className="sh-tags-page-content" style={{ padding: '8px 16px' }}>
+              {(() => {
+                const memberUids = Array.from(
+                  new Set([
+                    ...(activeServer.memberIds || []),
+                    activeServer.ownerId || '',
+                    currentUser?.uid || '',
+                  ])
+                ).filter(Boolean);
+
+                const q = tagMemberSearchQuery.trim().toLowerCase();
+                const filtered = memberUids.filter((uid) => {
+                  const p = serverMemberProfiles[uid] || senderProfiles[uid];
+                  const name = p?.displayName || (uid === activeServer.ownerId ? activeServer.creatorName || 'Owner' : 'Member');
+                  return !q || name.toLowerCase().includes(q);
+                });
+
+                return filtered.map((uid) => {
+                  const p = serverMemberProfiles[uid] || senderProfiles[uid];
+                  const name = p?.displayName || (uid === activeServer.ownerId ? activeServer.creatorName || 'Owner' : 'Member');
+                  const avatar = p?.avatarUrl || '';
+                  const isChecked = selectedUidsForRole.has(uid);
+
+                  return (
+                    <div
+                      key={uid}
+                      className="sh-role-member-item"
+                      onClick={() => {
+                        setSelectedUidsForRole((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(uid)) next.delete(uid);
+                          else next.add(uid);
+                          return next;
+                        });
+                      }}
+                    >
+                      <div className="sh-server-member-left">
+                        <div className="sh-server-member-avatar-wrap">
+                          {avatar ? (
+                            <img src={avatar} alt="" className="sh-server-member-avatar" />
+                          ) : (
+                            <div
+                              className="sh-server-member-avatar"
+                              style={{
+                                background: '#5865F2',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#fff',
+                                fontWeight: 700,
+                              }}
+                            >
+                              {name.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+                        <div className="sh-server-member-info">
+                          <span className="sh-server-member-name">{name}</span>
+                          {p && (p as any).username && (
+                            <span className="sh-server-member-username">@{(p as any).username}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className={`sh-role-checkbox ${isChecked ? 'checked' : ''}`}>
+                        {isChecked && <Check size={14} color="#ffffff" strokeWidth={3} />}
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* Server Invites Modal (IMG-20261126-WA0041) */}
+        {showServerInvites && activeServer && (
+          <div className="sh-tags-page-container">
+            <div className="sh-tags-page-header">
+              <button
+                type="button"
+                className="sh-tags-back-btn"
+                onClick={() => setShowServerInvites(false)}
+                aria-label="Back"
+              >
+                <ArrowLeft size={20} />
+              </button>
+              <h2 className="sh-tags-page-title">Invites</h2>
+              <div style={{ width: 36 }} />
+            </div>
+
+            <div className="sh-tags-page-content" style={{ padding: '16px' }}>
+              {/* Primary / Default Invite Link Card */}
+              <div className="sh-invite-link-card">
+                <div className="sh-invite-link-top">
+                  <div className="sh-invite-creator-row">
+                    <div
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: '50%',
+                        background: '#5865F2',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#fff',
+                        fontWeight: 700,
+                        fontSize: 12,
+                      }}
+                    >
+                      {activeServer.name.charAt(0).toUpperCase()}
+                    </div>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: '#ffffff' }}>Server Primary Link</span>
+                  </div>
+                  <button
+                    type="button"
+                    style={{ background: 'none', border: 'none', color: '#dbdee1', cursor: 'pointer', padding: 4 }}
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/servers?invite=${activeServer.id}`);
+                      alert('Server invite link copied to clipboard!');
+                    }}
+                    title="Copy Link"
+                  >
+                    <Copy size={18} />
+                  </button>
+                </div>
+                <div className="sh-invite-code-row">
+                  <Link2 size={16} color="#5865F2" />
+                  <span>{activeServer.id}</span>
+                </div>
+                <div className="sh-invite-meta-row">
+                  <span>Uses: {activeServer.memberIds?.length || 1}</span>
+                  <span>Expires: Never</span>
+                </div>
+              </div>
+
+              {/* Any additional custom invites */}
+              {(activeServer.invites || []).map((inv) => (
+                <div key={inv.code} className="sh-invite-link-card">
+                  <div className="sh-invite-link-top">
+                    <div className="sh-invite-creator-row">
+                      {inv.creatorAvatar ? (
+                        <img src={inv.creatorAvatar} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
+                      ) : (
+                        <div
+                          style={{
+                            width: 28,
+                            height: 28,
+                            borderRadius: '50%',
+                            background: '#5865F2',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#fff',
+                            fontWeight: 700,
+                            fontSize: 12,
+                          }}
+                        >
+                          {inv.creatorName.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <span style={{ fontSize: 14, fontWeight: 600, color: '#ffffff' }}>{inv.creatorName}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        type="button"
+                        style={{ background: 'none', border: 'none', color: '#dbdee1', cursor: 'pointer', padding: 4 }}
+                        onClick={() => {
+                          navigator.clipboard.writeText(`${window.location.origin}/servers?invite=${inv.code}`);
+                          alert('Invite link copied!');
+                        }}
+                      >
+                        <Copy size={18} />
+                      </button>
+                      <button
+                        type="button"
+                        style={{ background: 'none', border: 'none', color: '#f23f43', cursor: 'pointer', padding: 4 }}
+                        onClick={async () => {
+                          const updatedInvites = (activeServer.invites || []).filter((i) => i.code !== inv.code);
+                          const updatedServer = { ...activeServer, invites: updatedInvites };
+                          setActiveServer(updatedServer);
+                          try {
+                            await updateDoc(doc(db, 'servers', activeServer.id), { invites: updatedInvites });
+                          } catch {}
+                        }}
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="sh-invite-code-row">
+                    <Link2 size={16} color="#5865F2" />
+                    <span>{inv.code}</span>
+                  </div>
+                  <div className="sh-invite-meta-row">
+                    <span>Uses: {inv.uses}</span>
+                    <span>Expires: Never</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Invite Friends Modal (IMG-20261126-WA0032) */}
+        {showInviteFriendsModal && activeServer && (
+          <div className="sh-tags-page-container">
+            <div className="sh-tags-page-header">
+              <button
+                type="button"
+                className="sh-tags-back-btn"
+                onClick={() => setShowInviteFriendsModal(false)}
+                aria-label="Back"
+              >
+                <ArrowLeft size={20} />
+              </button>
+              <h2 className="sh-tags-page-title">Invite Friends</h2>
+              <button
+                type="button"
+                className="sh-tag-create-btn"
+                disabled={selectedFriendUids.size === 0 || invitingFriendsBusy}
+                onClick={handleSendFriendInvites}
+              >
+                {invitingFriendsBusy ? 'Sending...' : 'Invite'}
+              </button>
+            </div>
+
+            <div className="sh-tag-search-box-wrap" style={{ padding: '8px 16px' }}>
+              <Search size={16} color="#949ba4" />
+              <input
+                type="text"
+                className="sh-tag-search-input"
+                placeholder="Search friends"
+                value={friendSearchQuery}
+                onChange={(e) => setFriendSearchQuery(e.target.value)}
+              />
+              {friendSearchQuery && (
+                <button
+                  type="button"
+                  style={{ background: 'none', border: 'none', color: '#949ba4', cursor: 'pointer' }}
+                  onClick={() => setFriendSearchQuery('')}
+                >
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+
+            <div className="sh-tags-page-content" style={{ padding: '8px 16px' }}>
+              {(() => {
+                const q = friendSearchQuery.trim().toLowerCase();
+                const filteredFriends = userFriendsList.filter(
+                  (f) => !q || f.displayName.toLowerCase().includes(q) || (f.username && f.username.toLowerCase().includes(q))
+                );
+
+                if (filteredFriends.length === 0) {
+                  return (
+                    <div style={{ textAlign: 'center', padding: '40px 16px', color: '#949ba4' }}>
+                      {userFriendsList.length === 0 ? 'No friends found on your Shinzi list.' : 'No friends match your search.'}
+                    </div>
+                  );
+                }
+
+                return filteredFriends.map((friend) => {
+                  const isChecked = selectedFriendUids.has(friend.uid);
+                  return (
+                    <div
+                      key={friend.uid}
+                      className="sh-role-member-item"
+                      onClick={() => {
+                        setSelectedFriendUids((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(friend.uid)) next.delete(friend.uid);
+                          else next.add(friend.uid);
+                          return next;
+                        });
+                      }}
+                    >
+                      <div className="sh-server-member-left">
+                        <div className="sh-server-member-avatar-wrap">
+                          {friend.photoURL ? (
+                            <img src={friend.photoURL} alt="" className="sh-server-member-avatar" />
+                          ) : (
+                            <div
+                              className="sh-server-member-avatar"
+                              style={{
+                                background: '#5865F2',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#fff',
+                                fontWeight: 700,
+                              }}
+                            >
+                              {friend.displayName.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+                        <div className="sh-server-member-info">
+                          <span className="sh-server-member-name">{friend.displayName}</span>
+                          {friend.username && <span className="sh-server-member-username">@{friend.username}</span>}
+                        </div>
+                      </div>
+                      <div className={`sh-role-checkbox ${isChecked ? 'checked' : ''}`}>
+                        {isChecked && <Check size={14} color="#ffffff" strokeWidth={3} />}
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* Server Commits List Modal (IMG-20261126-WA0042) */}
+        {showServerCommits && activeServer && (
+          <div className="sh-tags-page-container">
+            <div className="sh-tags-page-header">
+              <button
+                type="button"
+                className="sh-tags-back-btn"
+                onClick={() => setShowServerCommits(false)}
+                aria-label="Back"
+              >
+                <ArrowLeft size={20} />
+              </button>
+              <h2 className="sh-tags-page-title">Commits</h2>
+              <div style={{ width: 36 }} />
+            </div>
+
+            <div className="sh-tags-page-content" style={{ padding: '16px' }}>
+              {(!activeServer.commits || activeServer.commits.length === 0) ? (
+                <div style={{ textAlign: 'center', padding: '40px 16px', color: '#949ba4' }}>
+                  No commits logged yet for this server.
+                </div>
+              ) : (
+                <div className="sh-commits-list">
+                  {activeServer.commits.map((commit) => (
+                    <div
+                      key={commit.id}
+                      className="sh-commit-card"
+                      onClick={() => setSelectedCommitDetails(commit)}
+                    >
+                      <div className="sh-commit-left">
+                        <div className="sh-commit-icon-badge">
+                          <GitCommit size={18} color="#5865F2" />
+                        </div>
+                        <div>
+                          <div className="sh-commit-title">
+                            @{commit.authorName} has made commit ({commit.id})
+                          </div>
+                          <div className="sh-commit-time">
+                            {new Date(commit.createdAt).toLocaleString(undefined, {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                      <span className="sh-commit-code-pill">{commit.id}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Commit Details Sheet (IMG-20261126-WA0037) */}
+        {selectedCommitDetails && (
+          <div
+            className="sh-tag-menu-overlay"
+            onClick={() => setSelectedCommitDetails(null)}
+          >
+            <div
+              className="sh-tag-menu-sheet"
+              style={{ maxHeight: '75vh', display: 'flex', flexDirection: 'column' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="sh-tag-menu-handle" />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  {selectedCommitDetails.authorAvatar ? (
+                    <img
+                      src={selectedCommitDetails.authorAvatar}
+                      alt=""
+                      style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: '50%',
+                        background: '#5865F2',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#fff',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {selectedCommitDetails.authorName.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>
+                      @{selectedCommitDetails.authorName}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#949ba4' }}>
+                      {new Date(selectedCommitDetails.createdAt).toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+                <span className="sh-commit-code-pill">{selectedCommitDetails.id}</span>
+              </div>
+
+              <div style={{ overflowY: 'auto', flex: 1, paddingRight: 4 }}>
+                {selectedCommitDetails.changes.map((change, idx) => (
+                  <div key={idx} className="sh-commit-detail-change-item">
+                    <span className="sh-commit-change-num">
+                      {String(idx + 1).padStart(2, '0')}
+                    </span>
+                    <span className="sh-commit-change-text">{change}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Full Image Preview Overlay */}
         {selectedMediaPreviewUrl && (
           <div
@@ -5159,25 +6614,27 @@ export default function Servers({
           {currentUserProfile?.photoURL || currentUser?.photoURL ? (
             <img
               src={currentUserProfile?.photoURL || currentUser?.photoURL || ''}
-              alt="Profile"
+              alt=""
               className="shc-avatar-img shc-avatar-nav"
-            />
-          ) : (
-            <div
-              className="shc-avatar-nav"
-              style={{
-                backgroundColor: '#5865f2',
-                color: '#fff',
-                fontSize: 13,
-                fontWeight: 700,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
+              onError={(e) => {
+                (e.currentTarget as HTMLElement).style.display = 'none';
               }}
-            >
-              {(currentUserProfile?.displayName || currentUser?.displayName || 'U').charAt(0).toUpperCase()}
-            </div>
-          )}
+            />
+          ) : null}
+          <div
+            className="shc-avatar-nav shc-avatar-nav-fallback"
+            style={{
+              backgroundColor: '#5865f2',
+              color: '#fff',
+              fontSize: 13,
+              fontWeight: 700,
+              display: (currentUserProfile?.photoURL || currentUser?.photoURL) ? 'none' : 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            {(currentUserProfile?.displayName || currentUser?.displayName || 'U').charAt(0).toUpperCase()}
+          </div>
         </button>
       </nav>
 
@@ -5190,6 +6647,12 @@ export default function Servers({
             if (onOpenChat) onOpenChat();
             else navigateTo(`/chat?user=${encodeURIComponent(targetUid)}`);
           }}
+          serverContext={activeServer ? {
+            server: activeServer,
+            onEquipTag: (tagId: string) => {
+              void handleEquipTag(tagId);
+            },
+          } : undefined}
         />
       )}
 
