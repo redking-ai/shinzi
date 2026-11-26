@@ -1,5 +1,5 @@
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   deleteDoc,
   deleteField,
@@ -148,6 +148,17 @@ export default function OtherProfile({
     incoming: false,
   });
   const [friendActionBusy, setFriendActionBusy] = useState(false);
+
+  const serverEquippedTag = useMemo(() => {
+    if (!serverContext?.server || !targetUid) return null;
+    const srv = serverContext.server;
+    const userTagIds: string[] = srv.memberTags?.[targetUid] || [];
+    const allTags = srv.tags || [];
+    const tagsForUser = allTags.filter((t: any) => userTagIds.includes(t.id));
+    if (tagsForUser.length === 0) return null;
+    const eqId = srv.equippedTags?.[targetUid] || tagsForUser[tagsForUser.length - 1]?.id;
+    return allTags.find((t: any) => t.id === eqId) || null;
+  }, [serverContext, targetUid]);
 
   useEffect(() => {
     if (!currentUser || !targetUid || currentUser.uid === targetUid) {
@@ -831,7 +842,7 @@ export default function OtherProfile({
           </div>
 
           <div className="sh-identity-copy">
-            <h2>
+            <h2 style={{ color: serverEquippedTag?.color || (userData as any).displayNameColor || (userData as any).customColor || (userData as any).nameColor || undefined }}>
               {renderStyledDisplayName(userData.displayName || 'Shinzi User', userData.displayNameStyle)}{' '}
               <span className="sh-beta-badge">
                 BETA
@@ -842,7 +853,7 @@ export default function OtherProfile({
               {userData.username || 'username'}
             </p>
 
-            {(userData.bubleText || userData.statusText || userData.customStatus) && (
+            {(userData.bubleText || userData.statusText || userData.customStatus || (userData as any).statusText || (userData as any).status) && (
               <div
                 className="sh-status-pill-badge"
                 style={{
@@ -859,7 +870,7 @@ export default function OtherProfile({
                   wordBreak: 'break-word',
                 }}
               >
-                {renderStyledContent(String(userData.bubleText || userData.statusText || userData.customStatus).replace(/^\+\s*/, ''))}
+                {renderStyledContent(String(userData.bubleText || userData.statusText || userData.customStatus || (userData as any).statusText || (userData as any).status).replace(/^\+\s*/, ''))}
               </div>
             )}
 

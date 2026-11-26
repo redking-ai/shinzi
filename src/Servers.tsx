@@ -500,6 +500,7 @@ export default function Servers({
   >({});
 
   // Server Overview States (IMG-20261126-WA0026)
+  const [bottomNavAvatarFailed, setBottomNavAvatarFailed] = useState(false);
   const [showServerOverview, setShowServerOverview] = useState(false);
   const [overviewName, setOverviewName] = useState('');
   const [overviewDescription, setOverviewDescription] = useState('');
@@ -5097,7 +5098,44 @@ export default function Servers({
               </div>
 
               <div className="sh-server-settings-body">
-                <div className="sh-server-settings-section-title">PEOPLE</div>
+                <div className="sh-server-settings-section-title">SETTINGS</div>
+                <button
+                  type="button"
+                  className="sh-server-settings-item"
+                  onClick={() => {
+                    if (activeServer) {
+                      setOverviewName(activeServer.name || '');
+                      setOverviewDescription(activeServer.description || '');
+                      setOverviewBannerUrl(activeServer.bannerUrl || '');
+                      setOverviewIconUrl(activeServer.iconUrl || '');
+                    }
+                    setShowServerSettings(false);
+                    setShowServerOverview(true);
+                  }}
+                >
+                  <div className="sh-server-settings-item-left">
+                    <Settings size={20} color="#949ba4" />
+                    <span>Overview</span>
+                  </div>
+                  <ChevronRight size={18} color="#949ba4" />
+                </button>
+
+                <button
+                  type="button"
+                  className="sh-server-settings-item"
+                  onClick={() => {
+                    setShowServerSettings(false);
+                    setShowServerCommits(true);
+                  }}
+                >
+                  <div className="sh-server-settings-item-left">
+                    <GitCommit size={20} color="#5865F2" />
+                    <span>Commits</span>
+                  </div>
+                  <ChevronRight size={18} color="#949ba4" />
+                </button>
+
+                <div className="sh-server-settings-section-title" style={{ marginTop: 16 }}>PEOPLE</div>
                 <button
                   type="button"
                   className="sh-server-settings-item"
@@ -5109,6 +5147,36 @@ export default function Servers({
                   <div className="sh-server-settings-item-left">
                     <Shield size={20} color="#949ba4" />
                     <span>Tags</span>
+                  </div>
+                  <ChevronRight size={18} color="#949ba4" />
+                </button>
+
+                <button
+                  type="button"
+                  className="sh-server-settings-item"
+                  onClick={() => {
+                    setShowServerSettings(false);
+                    setShowServerMembers(true);
+                  }}
+                >
+                  <div className="sh-server-settings-item-left">
+                    <Users size={20} color="#949ba4" />
+                    <span>Members</span>
+                  </div>
+                  <ChevronRight size={18} color="#949ba4" />
+                </button>
+
+                <button
+                  type="button"
+                  className="sh-server-settings-item"
+                  onClick={() => {
+                    setShowServerSettings(false);
+                    setShowServerInvites(true);
+                  }}
+                >
+                  <div className="sh-server-settings-item-left">
+                    <Link2 size={20} color="#949ba4" />
+                    <span>Invites</span>
                   </div>
                   <ChevronRight size={18} color="#949ba4" />
                 </button>
@@ -6611,30 +6679,29 @@ export default function Servers({
           aria-label="Profile"
           className="shc-bottom-profile-btn"
         >
-          {currentUserProfile?.photoURL || currentUser?.photoURL ? (
+          {((currentUserProfile?.photoURL || currentUser?.photoURL) && !bottomNavAvatarFailed) ? (
             <img
               src={currentUserProfile?.photoURL || currentUser?.photoURL || ''}
               alt=""
               className="shc-avatar-img shc-avatar-nav"
-              onError={(e) => {
-                (e.currentTarget as HTMLElement).style.display = 'none';
-              }}
+              onError={() => setBottomNavAvatarFailed(true)}
             />
-          ) : null}
-          <div
-            className="shc-avatar-nav shc-avatar-nav-fallback"
-            style={{
-              backgroundColor: '#5865f2',
-              color: '#fff',
-              fontSize: 13,
-              fontWeight: 700,
-              display: (currentUserProfile?.photoURL || currentUser?.photoURL) ? 'none' : 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            {(currentUserProfile?.displayName || currentUser?.displayName || 'U').charAt(0).toUpperCase()}
-          </div>
+          ) : (
+            <div
+              className="shc-avatar-nav shc-avatar-nav-fallback"
+              style={{
+                backgroundColor: '#5865f2',
+                color: '#fff',
+                fontSize: 13,
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {(currentUserProfile?.displayName || currentUser?.displayName || 'U').charAt(0).toUpperCase()}
+            </div>
+          )}
         </button>
       </nav>
 
