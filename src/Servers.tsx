@@ -37,7 +37,11 @@ import {
   Smile,
   Square,
   Camera,
+  Eye,
+  MoreHorizontal,
+  Shield,
 } from 'lucide-react';
+import ColorPickerModal from './ColorPickerModal';
 import { auth, db } from './firebaseConfig';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import {
@@ -88,6 +92,13 @@ export interface ServerCategory {
   isPrivate?: boolean;
 }
 
+export interface ServerTag {
+  id: string;
+  name: string;
+  color: string;
+  createdAt?: number;
+}
+
 export interface ServerData {
   id: string;
   name: string;
@@ -105,6 +116,8 @@ export interface ServerData {
   isPrivate?: boolean;
   onlineCount?: string;
   categories: ServerCategory[];
+  tags?: ServerTag[];
+  memberTags?: Record<string, string[]>;
   createdAt?: number;
 }
 
@@ -433,6 +446,32 @@ export default function Servers({
   // Invite Screen State (IMG-20261110-WA0009)
   const [inviteModalServer, setInviteModalServer] = useState<ServerData | null>(null);
   const [isJoiningServer, setIsJoiningServer] = useState(false);
+
+  // Channel Info / More modal state (IMG-20261126-WA0011)
+  const [activeChannelInfo, setActiveChannelInfo] = useState<ServerChannel | null>(null);
+  const [channelInfoTab, setChannelInfoTab] = useState<'members' | 'media' | 'chat'>('members');
+  const [channelInfoSearchActive, setChannelInfoSearchActive] = useState(false);
+  const [channelInfoSearchQuery, setChannelInfoSearchQuery] = useState('');
+  const [selectedMediaPreviewUrl, setSelectedMediaPreviewUrl] = useState<string | null>(null);
+
+  // Server Search modal state (IMG-20261126-WA0012)
+  const [showServerSearch, setShowServerSearch] = useState(false);
+  const [serverSearchTab, setServerSearchTab] = useState<'members' | 'media' | 'chat'>('members');
+  const [serverSearchQuery, setServerSearchQuery] = useState('');
+
+  // Server Settings & Tags Management state (IMG-20261110-WA0021, IMG-20261126-WA0016, IMG-20261126-WA0017)
+  const [showServerSettings, setShowServerSettings] = useState(false);
+  const [showTagsManagement, setShowTagsManagement] = useState(false);
+  const [showCreateTag, setShowCreateTag] = useState(false);
+  const [newTagName, setNewTagName] = useState('');
+  const [newTagColor, setNewTagColor] = useState('#5865F2');
+  const [editingTag, setEditingTag] = useState<ServerTag | null>(null);
+  const [editingTagName, setEditingTagName] = useState('');
+  const [editingTagColor, setEditingTagColor] = useState('#5865F2');
+  const [showTagColorPicker, setShowTagColorPicker] = useState(false);
+  const [serverMemberProfiles, setServerMemberProfiles] = useState<
+    Record<string, { displayName: string; avatarUrl?: string; isOnline?: boolean }>
+  >({});
 
   // Real Online Members Count for active server
   const [onlineMembersCount, setOnlineMembersCount] = useState<number>(1);
@@ -1394,6 +1433,88 @@ export default function Servers({
     }
   };
 
+  // Fetch real user profiles for all members in active server
+  useEffect(() => {
+    if (!activeServer?.id) return;
+    const uids = Array.from(
+      new Set([
+        ...(activeServer.memberIds || []),
+        activeServer.ownerId || '',
+        currentUser?.uid || '',
+      ])
+    ).filter(Boolean);
+
+    uids.forEach(async (uid) => {
+      if (serverMemberProfiles[uid]) return;
+      try {
+        const snap = await getDoc(doc(db, 'users', uid));
+        if (snap.exists()) {
+          const d = snap.data();
+          setServerMemberProfiles((prev) => ({
+            ...prev,
+            [uid]: {
+              displayName: d.displayName || d.username || 'User',
+              avatarUrl: d.photoURL || '',
+              isOnline: d.isOnline || false,
+            },
+          }));
+        }
+      } catch {}
+    });
+  }, [activeServer?.id, activeServer?.memberIds, activeServer?.ownerId, currentUser?.uid]);
+
+  const handleCreateTag = async () => {
+    if (!activeServer || !newTagName.trim()) return;
+    const newTag: ServerTag = {
+      id: 'tag_' + Date.now(),
+      name: newTagName.trim(),
+      color: newTagColor || '#5865F2',
+      createdAt: Date.now(),
+    };
+    const updatedTags = [...(activeServer.tags || []), newTag];
+    const updatedServer = { ...activeServer, tags: updatedTags };
+    setActiveServer(updatedServer);
+    setShowCreateTag(false);
+    setNewTagName('');
+    setNewTagColor('#5865F2');
+
+    try {
+      await updateDoc(doc(db, 'servers', activeServer.id), { tags: updatedTags });
+    } catch (err) {
+      console.warn('Failed to save tag to Firestore:', err);
+    }
+  };
+
+  const handleSaveTag = async () => {
+    if (!activeServer || !editingTag || !editingTagName.trim()) return;
+    const updatedTags = (activeServer.tags || []).map((t) =>
+      t.id === editingTag.id ? { ...t, name: editingTagName.trim(), color: editingTagColor } : t
+    );
+    const updatedServer = { ...activeServer, tags: updatedTags };
+    setActiveServer(updatedServer);
+    setEditingTag(null);
+
+    try {
+      await updateDoc(doc(db, 'servers', activeServer.id), { tags: updatedTags });
+    } catch (err) {
+      console.warn('Failed to update tag in Firestore:', err);
+    }
+  };
+
+  const handleDeleteTag = async (tagId: string) => {
+    if (!activeServer) return;
+    const updatedTags = (activeServer.tags || []).filter((t) => t.id !== tagId);
+    const updatedServer = { ...activeServer, tags: updatedTags };
+    setActiveServer(updatedServer);
+    setEditingTag(null);
+
+    try {
+      await updateDoc(doc(db, 'servers', activeServer.id), { tags: updatedTags });
+    } catch (err) {
+      console.warn('Failed to delete tag in Firestore:', err);
+    }
+  };
+
   // Long press timer helpers
   const clearLongPress = () => {
     if (longPressTimerRef.current) {
@@ -2315,7 +2436,10 @@ export default function Servers({
             <button
               type="button"
               className="sh-server-action-card"
-              onClick={() => alert('Server settings')}
+              onClick={() => {
+                setShowDetailsModal(false);
+                setShowServerSettings(true);
+              }}
             >
               <Settings size={20} />
               <span className="sh-server-action-card-label">Settings</span>
@@ -2421,7 +2545,7 @@ export default function Servers({
           <div
             className="sh-channel-chat-title-group"
             onClick={() => {
-              setEditingChannel({ catId: activeServer.categories[0]?.id || '', channel: selectedChannel });
+              setActiveChannelInfo(selectedChannel);
             }}
           >
             {selectedChannel.iconUrl ? (
@@ -3111,8 +3235,8 @@ export default function Servers({
             <button
               type="button"
               className="sh-servers-icon-btn"
-              title="Search"
-              onClick={() => setShowSearchModal(true)}
+              title="Search in Server"
+              onClick={() => setShowServerSearch(true)}
             >
               <Search size={18} />
             </button>
@@ -3223,6 +3347,212 @@ export default function Servers({
           })}
         </div>
       );
+
+      const renderMemberRow = (
+        m: { uid: string; name: string; avatar: string; isOnline: boolean; tag?: ServerTag },
+        color?: string
+      ) => (
+        <div
+          key={m.uid}
+          className="sh-member-item"
+          onClick={() => setViewingProfileUid(m.uid)}
+        >
+          <div className="sh-member-avatar-wrap">
+            {m.avatar ? (
+              <img src={m.avatar} alt={m.name} className="sh-member-avatar" />
+            ) : (
+              <div className="sh-member-avatar-placeholder">
+                {m.name.charAt(0).toUpperCase()}
+              </div>
+            )}
+            <span
+              className="sh-member-status-dot"
+              style={{ background: m.isOnline ? '#23a55a' : '#80848e' }}
+            />
+          </div>
+          <div className="sh-member-info">
+            <span
+              className="sh-member-name"
+              style={color ? { color } : undefined}
+            >
+              {m.name}
+            </span>
+            {m.tag && (
+              <span
+                className="sh-member-tag-badge"
+                style={{
+                  color: m.tag.color,
+                  borderColor: m.tag.color,
+                  background: m.tag.color + '22',
+                }}
+              >
+                {m.tag.name}
+              </span>
+            )}
+          </div>
+        </div>
+      );
+
+      const renderGroupedMembers = (searchFilter: string) => {
+        if (!activeServer) return null;
+        const allTags = activeServer.tags || [];
+        const memberUids = Array.from(
+          new Set([
+            ...(activeServer.memberIds || []),
+            activeServer.ownerId || '',
+            currentUser?.uid || '',
+          ])
+        ).filter(Boolean);
+
+        const filterQuery = searchFilter.trim().toLowerCase();
+
+        const membersWithData = memberUids.map((uid) => {
+          const p = serverMemberProfiles[uid] || senderProfiles[uid];
+          const name =
+            p?.displayName ||
+            (uid === activeServer.ownerId ? activeServer.creatorName || 'Owner' : 'Member');
+          const avatar = p?.avatarUrl || '';
+          const isOnline = p?.isOnline || uid === currentUser?.uid;
+          const userTagIds = activeServer.memberTags?.[uid] || [];
+          const primaryTag = allTags.find((t) => userTagIds.includes(t.id));
+          return { uid, name, avatar, isOnline, tag: primaryTag };
+        });
+
+        const filtered = filterQuery
+          ? membersWithData.filter((m) => m.name.toLowerCase().includes(filterQuery))
+          : membersWithData;
+
+        if (allTags.length === 0) {
+          return (
+            <div className="sh-member-group">
+              <div className="sh-member-group-header">
+                <span>MEMBERS — {filtered.length}</span>
+              </div>
+              {filtered.map((m) => renderMemberRow(m))}
+            </div>
+          );
+        }
+
+        return (
+          <div className="sh-member-groups-list">
+            {allTags.map((tag) => {
+              const inTag = filtered.filter((m) => m.tag?.id === tag.id);
+              if (inTag.length === 0) return null;
+              return (
+                <div key={tag.id} className="sh-member-group">
+                  <div className="sh-member-group-header" style={{ color: tag.color }}>
+                    <span>{tag.name.toUpperCase()} — {inTag.length}</span>
+                  </div>
+                  {inTag.map((m) => renderMemberRow(m, tag.color))}
+                </div>
+              );
+            })}
+
+            {(() => {
+              const untagged = filtered.filter((m) => !m.tag);
+              if (untagged.length === 0) return null;
+              return (
+                <div className="sh-member-group">
+                  <div className="sh-member-group-header">
+                    <span>MEMBERS — {untagged.length}</span>
+                  </div>
+                  {untagged.map((m) => renderMemberRow(m))}
+                </div>
+              );
+            })()}
+          </div>
+        );
+      };
+
+      const renderMediaGrid = (messages: ServerChannelMessage[]) => {
+        const mediaItems: Array<{ url: string; senderName: string; senderAvatar?: string }> = [];
+        messages.forEach((m) => {
+          const url = resolveChannelAttachmentUrl(m, assetFileMap) || m.imageUrl || (m as any).fileUrl;
+          const isImg =
+            m.imageUrl ||
+            ((m as any).fileType && (m as any).fileType.startsWith('image')) ||
+            (url && typeof url === 'string' && url.match(/\.(jpeg|jpg|gif|png|webp)/i));
+          if (url && isImg) {
+            mediaItems.push({
+              url,
+              senderName: m.senderName || 'User',
+              senderAvatar: m.senderAvatar,
+            });
+          }
+        });
+
+        if (mediaItems.length === 0) {
+          return (
+            <div className="sh-media-empty">
+              <ImageIcon size={40} color="#636b75" />
+              <p>No media shared yet</p>
+            </div>
+          );
+        }
+
+        return (
+          <div className="sh-media-grid">
+            {mediaItems.map((item, idx) => (
+              <div
+                key={idx}
+                className="sh-media-item"
+                onClick={() => setSelectedMediaPreviewUrl(item.url)}
+              >
+                <img src={item.url} alt="media" className="sh-media-thumb" loading="lazy" />
+                {item.senderAvatar && (
+                  <img
+                    src={item.senderAvatar}
+                    alt={item.senderName}
+                    className="sh-media-author-avatar"
+                    title={`Sent by ${item.senderName}`}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        );
+      };
+
+      const renderChatSearchTab = (messages: ServerChannelMessage[], query: string) => {
+        const q = query.trim().toLowerCase();
+        const filtered = q
+          ? messages.filter((m) => m.text && m.text.toLowerCase().includes(q))
+          : messages.filter((m) => m.text && m.text.includes('@'));
+
+        if (filtered.length === 0) {
+          return (
+            <div className="sh-chat-search-empty">
+              <MessageCircle size={40} color="#636b75" />
+              <p>{q ? `No messages found matching "${q}"` : 'No mentioned messages yet'}</p>
+            </div>
+          );
+        }
+
+        return (
+          <div className="sh-chat-search-list">
+            {filtered.map((m) => (
+              <div key={m.id} className="sh-chat-search-card">
+                <div className="sh-chat-search-meta">
+                  {m.senderAvatar ? (
+                    <img src={m.senderAvatar} alt="" className="sh-chat-search-avatar" />
+                  ) : (
+                    <div className="sh-chat-search-avatar-placeholder">
+                      {(m.senderName || 'U').charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <span className="sh-chat-search-author">{m.senderName || 'User'}</span>
+                  <span className="sh-chat-search-time">
+                    {m.createdAt ? new Date(millis(m.createdAt)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                  </span>
+                </div>
+                <div className="sh-chat-search-text">
+                  {renderStyledContent(m.text || '')}
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      };
 
       const modalsAndSheets = (
         <>
@@ -3372,55 +3702,91 @@ export default function Servers({
                   <X size={18} />
                 </button>
               </div>
+
+              {/* Both Owner and Member see Mark as read and More (IMG-20261110-WA0016) */}
               <button
                 type="button"
                 className="sh-context-sheet-item"
                 onClick={() => {
-                  setTargetCategoryForNewChannel(contextCategory.id);
                   setContextCategory(null);
-                  setNewChannelName('');
-                  setNewChannelDesc('');
-                  setNewChannelType('text');
-                  setNewChannelIsPrivate(false);
-                  setNewChannelIcon('');
-                  setShowCreateChannelModal(true);
+                  alert(`Category "${contextCategory.name}" marked as read.`);
                 }}
               >
-                <Plus size={18} />
-                <span>Create Channel</span>
+                <Eye size={18} />
+                <span>Mark as read</span>
               </button>
+
               <button
                 type="button"
                 className="sh-context-sheet-item"
                 onClick={() => {
-                  setEditingCategory(contextCategory);
-                  setEditCategoryName(contextCategory.name);
-                  setEditCategoryIsPrivate(!!contextCategory.isPrivate);
+                  const firstCh = contextCategory.channels[0];
                   setContextCategory(null);
+                  if (firstCh) {
+                    setActiveChannelInfo(firstCh);
+                  } else {
+                    setShowServerSearch(true);
+                  }
                 }}
               >
-                <Pencil size={18} />
-                <span>Edit Category</span>
+                <MoreHorizontal size={18} />
+                <span>More</span>
               </button>
-              <button
-                type="button"
-                className="sh-context-sheet-item"
-                onClick={() => {
-                  alert('Drag and drop to reorder categories coming soon.');
-                  setContextCategory(null);
-                }}
-              >
-                <ArrowUpDown size={18} />
-                <span>Move Category</span>
-              </button>
-              <button
-                type="button"
-                className="sh-context-sheet-item sh-context-sheet-item-danger"
-                onClick={() => void handleDeleteCategory(contextCategory.id)}
-              >
-                <Trash2 size={18} color="#ff4b4b" />
-                <span>Delete Category</span>
-              </button>
+
+              {/* Owner only options */}
+              {(activeServer?.ownerId === currentUser?.uid || activeServer?.isCreatedByMe) && (
+                <>
+                  <button
+                    type="button"
+                    className="sh-context-sheet-item"
+                    onClick={() => {
+                      setTargetCategoryForNewChannel(contextCategory.id);
+                      setContextCategory(null);
+                      setNewChannelName('');
+                      setNewChannelDesc('');
+                      setNewChannelType('text');
+                      setNewChannelIsPrivate(false);
+                      setNewChannelIcon('');
+                      setShowCreateChannelModal(true);
+                    }}
+                  >
+                    <Plus size={18} />
+                    <span>Create Channel</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="sh-context-sheet-item"
+                    onClick={() => {
+                      setEditingCategory(contextCategory);
+                      setEditCategoryName(contextCategory.name);
+                      setEditCategoryIsPrivate(!!contextCategory.isPrivate);
+                      setContextCategory(null);
+                    }}
+                  >
+                    <Pencil size={18} />
+                    <span>Edit Category</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="sh-context-sheet-item"
+                    onClick={() => {
+                      alert('Drag and drop to reorder categories coming soon.');
+                      setContextCategory(null);
+                    }}
+                  >
+                    <ArrowUpDown size={18} />
+                    <span>Move Category</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="sh-context-sheet-item sh-context-sheet-item-danger"
+                    onClick={() => void handleDeleteCategory(contextCategory.id)}
+                  >
+                    <Trash2 size={18} color="#ff4b4b" />
+                    <span>Delete Category</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -3439,41 +3805,73 @@ export default function Servers({
                   <X size={18} />
                 </button>
               </div>
+
+              {/* Both Owner and Member see Mark as read and More (IMG-20261110-WA0016) */}
+              <button
+                type="button"
+                className="sh-context-sheet-item"
+                onClick={() => {
+                  setContextChannel(null);
+                  alert(`#${contextChannel.channel.name} marked as read.`);
+                }}
+              >
+                <Eye size={18} />
+                <span>Mark as read</span>
+              </button>
+
               <button
                 type="button"
                 className="sh-context-sheet-item"
                 onClick={() => {
                   const ch = contextChannel.channel;
-                  setEditingChannel(contextChannel);
                   setContextChannel(null);
-                  setEditChannelName(ch.name);
-                  setEditChannelDesc(ch.description || '');
-                  setEditChannelIsPrivate(!!ch.isPrivate);
-                  setEditChannelIcon(ch.iconUrl || '');
+                  setActiveChannelInfo(ch);
                 }}
               >
-                <Pencil size={18} />
-                <span>Edit Channel</span>
+                <MoreHorizontal size={18} />
+                <span>More</span>
               </button>
-              <button
-                type="button"
-                className="sh-context-sheet-item"
-                onClick={() => {
-                  alert('Drag and drop to reorder channels coming soon.');
-                  setContextChannel(null);
-                }}
-              >
-                <ArrowUpDown size={18} />
-                <span>Move Channel</span>
-              </button>
-              <button
-                type="button"
-                className="sh-context-sheet-item sh-context-sheet-item-danger"
-                onClick={() => void handleDeleteChannel(contextChannel.catId, contextChannel.channel.id)}
-              >
-                <Trash2 size={18} color="#ff4b4b" />
-                <span>Delete Channel</span>
-              </button>
+
+              {/* Owner only options */}
+              {(activeServer?.ownerId === currentUser?.uid || activeServer?.isCreatedByMe) && (
+                <>
+                  <button
+                    type="button"
+                    className="sh-context-sheet-item"
+                    onClick={() => {
+                      const ch = contextChannel.channel;
+                      setEditingChannel(contextChannel);
+                      setContextChannel(null);
+                      setEditChannelName(ch.name);
+                      setEditChannelDesc(ch.description || '');
+                      setEditChannelIsPrivate(!!ch.isPrivate);
+                      setEditChannelIcon(ch.iconUrl || '');
+                    }}
+                  >
+                    <Pencil size={18} />
+                    <span>Edit Channel</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="sh-context-sheet-item"
+                    onClick={() => {
+                      alert('Drag and drop to reorder channels coming soon.');
+                      setContextChannel(null);
+                    }}
+                  >
+                    <ArrowUpDown size={18} />
+                    <span>Move Channel</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="sh-context-sheet-item sh-context-sheet-item-danger"
+                    onClick={() => void handleDeleteChannel(contextChannel.catId, contextChannel.channel.id)}
+                  >
+                    <Trash2 size={18} color="#ff4b4b" />
+                    <span>Delete Channel</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -3866,6 +4264,496 @@ export default function Servers({
               else navigateTo(`/chat?user=${encodeURIComponent(targetUid)}`);
             }}
           />
+        )}
+
+        {/* Channel Info / More Screen (IMG-20261126-WA0011, IMG-20261126-WA0012, IMG-20261126-WA0014) */}
+        {activeChannelInfo && (
+          <div className="sh-channel-info-overlay" onClick={() => setActiveChannelInfo(null)}>
+            <div className="sh-channel-info-modal" onClick={(e) => e.stopPropagation()}>
+              {/* Top bar */}
+              <div className="sh-channel-info-topbar">
+                <button
+                  type="button"
+                  className="sh-servers-icon-btn"
+                  onClick={() => {
+                    setActiveChannelInfo(null);
+                    setChannelInfoSearchActive(false);
+                    setChannelInfoSearchQuery('');
+                  }}
+                  aria-label="Back"
+                >
+                  <ArrowLeft size={20} />
+                </button>
+
+                {channelInfoSearchActive ? (
+                  <div className="sh-channel-info-search-input-wrap">
+                    <Search size={16} color="#949ba4" />
+                    <input
+                      type="text"
+                      autoFocus
+                      className="sh-channel-info-search-input"
+                      placeholder={`Search in #${activeChannelInfo.name}...`}
+                      value={channelInfoSearchQuery}
+                      onChange={(e) => setChannelInfoSearchQuery(e.target.value)}
+                    />
+                    {channelInfoSearchQuery && (
+                      <button
+                        type="button"
+                        className="sh-channel-info-search-clear"
+                        onClick={() => setChannelInfoSearchQuery('')}
+                      >
+                        <X size={16} />
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="sh-channel-info-top-title">
+                    <span>#{activeChannelInfo.name}</span>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  className="sh-servers-icon-btn"
+                  onClick={() => {
+                    setChannelInfoSearchActive((prev) => !prev);
+                    if (channelInfoSearchActive) setChannelInfoSearchQuery('');
+                  }}
+                  title={channelInfoSearchActive ? 'Close search' : 'Search'}
+                >
+                  {channelInfoSearchActive ? <X size={20} /> : <Search size={20} />}
+                </button>
+              </div>
+
+              {/* Hero matching IMG-20261126-WA0011 */}
+              {!channelInfoSearchActive && (
+                <div className="sh-channel-info-hero">
+                  <div className="sh-channel-info-hero-header">
+                    {activeChannelInfo.iconUrl ? (
+                      <img
+                        src={activeChannelInfo.iconUrl}
+                        alt={activeChannelInfo.name}
+                        className="sh-channel-info-hero-img"
+                      />
+                    ) : (
+                      <div className="sh-channel-info-hero-hash-box">
+                        <span className="sh-channel-info-hero-hash">#</span>
+                      </div>
+                    )}
+                    <div className="sh-channel-info-hero-text">
+                      <h2 className="sh-channel-info-hero-name">#{activeChannelInfo.name}</h2>
+                      <p className="sh-channel-info-hero-desc">
+                        {activeChannelInfo.description || `Text Channel in ${activeServer.name}`}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 3 Tabs Bar: Members, Media, Chat */}
+              <div className="sh-channel-info-tabs">
+                <button
+                  type="button"
+                  className={`sh-channel-info-tab-btn ${channelInfoTab === 'members' ? 'active' : ''}`}
+                  onClick={() => setChannelInfoTab('members')}
+                >
+                  Members
+                </button>
+                <button
+                  type="button"
+                  className={`sh-channel-info-tab-btn ${channelInfoTab === 'media' ? 'active' : ''}`}
+                  onClick={() => setChannelInfoTab('media')}
+                >
+                  Media
+                </button>
+                <button
+                  type="button"
+                  className={`sh-channel-info-tab-btn ${channelInfoTab === 'chat' ? 'active' : ''}`}
+                  onClick={() => setChannelInfoTab('chat')}
+                >
+                  Chat
+                </button>
+              </div>
+
+              {/* Tab Content */}
+              <div className="sh-channel-info-content">
+                {channelInfoTab === 'members' && renderGroupedMembers(channelInfoSearchQuery)}
+                {channelInfoTab === 'media' && renderMediaGrid(channelMessages)}
+                {channelInfoTab === 'chat' && renderChatSearchTab(channelMessages, channelInfoSearchQuery)}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Server Search Modal (IMG-20261126-WA0012) */}
+        {showServerSearch && (
+          <div className="sh-channel-info-overlay" onClick={() => setShowServerSearch(false)}>
+            <div className="sh-channel-info-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="sh-channel-info-topbar">
+                <button
+                  type="button"
+                  className="sh-servers-icon-btn"
+                  onClick={() => {
+                    setShowServerSearch(false);
+                    setServerSearchQuery('');
+                  }}
+                  aria-label="Back"
+                >
+                  <ArrowLeft size={20} />
+                </button>
+
+                <div className="sh-channel-info-search-input-wrap">
+                  <Search size={16} color="#949ba4" />
+                  <input
+                    type="text"
+                    autoFocus
+                    className="sh-channel-info-search-input"
+                    placeholder={`Search in ${activeServer.name}...`}
+                    value={serverSearchQuery}
+                    onChange={(e) => setServerSearchQuery(e.target.value)}
+                  />
+                  {serverSearchQuery && (
+                    <button
+                      type="button"
+                      className="sh-channel-info-search-clear"
+                      onClick={() => setServerSearchQuery('')}
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* 3 Tabs Bar: Members, Media, Chat */}
+              <div className="sh-channel-info-tabs">
+                <button
+                  type="button"
+                  className={`sh-channel-info-tab-btn ${serverSearchTab === 'members' ? 'active' : ''}`}
+                  onClick={() => setServerSearchTab('members')}
+                >
+                  Members
+                </button>
+                <button
+                  type="button"
+                  className={`sh-channel-info-tab-btn ${serverSearchTab === 'media' ? 'active' : ''}`}
+                  onClick={() => setServerSearchTab('media')}
+                >
+                  Media
+                </button>
+                <button
+                  type="button"
+                  className={`sh-channel-info-tab-btn ${serverSearchTab === 'chat' ? 'active' : ''}`}
+                  onClick={() => setServerSearchTab('chat')}
+                >
+                  Chat
+                </button>
+              </div>
+
+              {/* Tab Content */}
+              <div className="sh-channel-info-content">
+                {serverSearchTab === 'members' && renderGroupedMembers(serverSearchQuery)}
+                {serverSearchTab === 'media' && renderMediaGrid(channelMessages)}
+                {serverSearchTab === 'chat' && renderChatSearchTab(channelMessages, serverSearchQuery)}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Server Settings Page (IMG-20261110-WA0021) */}
+        {showServerSettings && (
+          <div className="sh-channel-info-overlay" onClick={() => setShowServerSettings(false)}>
+            <div className="sh-channel-info-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="sh-channel-info-topbar">
+                <button
+                  type="button"
+                  className="sh-servers-icon-btn"
+                  onClick={() => setShowServerSettings(false)}
+                  aria-label="Back"
+                >
+                  <ArrowLeft size={20} />
+                </button>
+                <div className="sh-channel-info-top-title">
+                  <span>Server Settings</span>
+                </div>
+                <div style={{ width: 40 }} />
+              </div>
+
+              <div className="sh-server-settings-body">
+                <div className="sh-server-settings-section-title">PEOPLE</div>
+                <button
+                  type="button"
+                  className="sh-server-settings-item"
+                  onClick={() => {
+                    setShowServerSettings(false);
+                    setShowTagsManagement(true);
+                  }}
+                >
+                  <div className="sh-server-settings-item-left">
+                    <Shield size={20} color="#949ba4" />
+                    <span>Tags</span>
+                  </div>
+                  <ChevronRight size={18} color="#949ba4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tags Management Page (IMG-20261126-WA0016, IMG-20261126-WA0017) */}
+        {showTagsManagement && (
+          <div className="sh-channel-info-overlay" onClick={() => setShowTagsManagement(false)}>
+            <div className="sh-channel-info-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="sh-channel-info-topbar">
+                <button
+                  type="button"
+                  className="sh-servers-icon-btn"
+                  onClick={() => {
+                    setShowTagsManagement(false);
+                    setShowServerSettings(true);
+                  }}
+                  aria-label="Back"
+                >
+                  <ArrowLeft size={20} />
+                </button>
+                <div className="sh-channel-info-top-title">
+                  <span>Tags</span>
+                </div>
+                <button
+                  type="button"
+                  className="sh-servers-icon-btn"
+                  onClick={() => {
+                    setNewTagName('');
+                    setNewTagColor('#5865F2');
+                    setShowCreateTag(true);
+                  }}
+                  title="Create Tag"
+                >
+                  <Plus size={22} />
+                </button>
+              </div>
+
+              <div className="sh-channel-info-content">
+                {(activeServer.tags || []).length === 0 ? (
+                  <div className="sh-servers-empty" style={{ padding: '40px 20px' }}>
+                    <Shield size={44} color="#5865F2" />
+                    <div className="sh-servers-empty-title" style={{ marginTop: 12 }}>No Tags Created Yet</div>
+                    <div className="sh-servers-empty-desc">
+                      Create tags with custom colors for your members to stand out in chat!
+                    </div>
+                    <button
+                      type="button"
+                      className="sh-search-btn-primary"
+                      style={{ marginTop: 16, maxWidth: 200 }}
+                      onClick={() => {
+                        setNewTagName('');
+                        setNewTagColor('#5865F2');
+                        setShowCreateTag(true);
+                      }}
+                    >
+                      + Create Tag
+                    </button>
+                  </div>
+                ) : (
+                  <div className="sh-tags-list">
+                    {(activeServer.tags || []).map((t) => (
+                      <div
+                        key={t.id}
+                        className="sh-tags-list-item"
+                        onClick={() => {
+                          setEditingTag(t);
+                          setEditingTagName(t.name);
+                          setEditingTagColor(t.color);
+                        }}
+                      >
+                        <div className="sh-tags-list-item-left">
+                          <span
+                            className="sh-tag-color-circle"
+                            style={{ background: t.color }}
+                          />
+                          <span
+                            className="sh-tag-list-name"
+                            style={{ color: t.color }}
+                          >
+                            {t.name}
+                          </span>
+                        </div>
+                        <ChevronRight size={18} color="#949ba4" />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Create Tag Modal (IMG-20261126-WA0016) */}
+        {showCreateTag && (
+          <div className="sh-fullscreen-modal" style={{ zIndex: 1400 }}>
+            <div className="sh-fullscreen-modal-header">
+              <button
+                type="button"
+                className="sh-servers-icon-btn"
+                onClick={() => setShowCreateTag(false)}
+                aria-label="Close"
+              >
+                <X size={20} />
+              </button>
+              <div style={{ width: 40 }} />
+            </div>
+
+            <div className="sh-tag-create-body">
+              <h2 className="sh-tag-create-title">Create a new tag</h2>
+              <p className="sh-tag-create-subtitle">
+                Create a tag you like for your server with color.
+              </p>
+
+              <div className="sh-tag-form-group">
+                <label className="sh-tag-form-label">Tag name *</label>
+                <input
+                  type="text"
+                  className="sh-tag-form-input"
+                  placeholder="e.g. coach, moderator, subscriber, pet club"
+                  value={newTagName}
+                  onChange={(e) => setNewTagName(e.target.value)}
+                  autoFocus
+                />
+              </div>
+
+              <div className="sh-tag-form-group">
+                <div
+                  className="sh-tag-color-selector"
+                  onClick={() => setShowTagColorPicker(true)}
+                >
+                  <span className="sh-tag-color-selector-label">Tag Color</span>
+                  <div className="sh-tag-color-selector-right">
+                    <span
+                      className="sh-tag-color-box"
+                      style={{ background: newTagColor }}
+                    />
+                    <code className="sh-tag-hex-code">{newTagColor}</code>
+                    <ChevronRight size={18} color="#949ba4" />
+                  </div>
+                </div>
+                <p className="sh-tag-color-hint">
+                  Members use the color of the highest tag they have in the tags list.
+                </p>
+              </div>
+
+              <div style={{ flex: 1 }} />
+
+              <button
+                type="button"
+                className="sh-tag-create-submit-btn"
+                disabled={!newTagName.trim()}
+                onClick={handleCreateTag}
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Tag Modal (IMG-20261126-WA0017) */}
+        {editingTag && (
+          <div className="sh-fullscreen-modal" style={{ zIndex: 1400 }}>
+            <div className="sh-fullscreen-modal-header">
+              <button
+                type="button"
+                className="sh-servers-icon-btn"
+                onClick={() => setEditingTag(null)}
+                aria-label="Back"
+              >
+                <ArrowLeft size={20} />
+              </button>
+              <h2 style={{ fontSize: 18, margin: 0, color: editingTagColor }}>{editingTag.name}</h2>
+              <div style={{ width: 40 }} />
+            </div>
+
+            <div className="sh-tag-create-body">
+              <div className="sh-tag-form-group">
+                <label className="sh-tag-form-label">Tag name</label>
+                <input
+                  type="text"
+                  className="sh-tag-form-input"
+                  value={editingTagName}
+                  onChange={(e) => setEditingTagName(e.target.value)}
+                />
+              </div>
+
+              <div className="sh-tag-form-group">
+                <div
+                  className="sh-tag-color-selector"
+                  onClick={() => setShowTagColorPicker(true)}
+                >
+                  <span className="sh-tag-color-selector-label">Tag Color</span>
+                  <div className="sh-tag-color-selector-right">
+                    <span
+                      className="sh-tag-color-box"
+                      style={{ background: editingTagColor }}
+                    />
+                    <code className="sh-tag-hex-code">{editingTagColor}</code>
+                    <ChevronRight size={18} color="#949ba4" />
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className="sh-tag-delete-btn"
+                onClick={() => handleDeleteTag(editingTag.id)}
+              >
+                Delete Tag
+              </button>
+
+              <div style={{ flex: 1 }} />
+
+              <button
+                type="button"
+                className="sh-tag-create-submit-btn"
+                disabled={!editingTagName.trim()}
+                onClick={handleSaveTag}
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Color Picker Wheel for Tags */}
+        <ColorPickerModal
+          isOpen={showTagColorPicker}
+          title="Pick Tag Color"
+          initialColor={editingTag ? editingTagColor : newTagColor}
+          onSelect={(color) => {
+            if (editingTag) setEditingTagColor(color);
+            else setNewTagColor(color);
+            setShowTagColorPicker(false);
+          }}
+          onClose={() => setShowTagColorPicker(false)}
+        />
+
+        {/* Full Image Preview Overlay */}
+        {selectedMediaPreviewUrl && (
+          <div
+            className="sh-media-preview-overlay"
+            onClick={() => setSelectedMediaPreviewUrl(null)}
+          >
+            <button
+              type="button"
+              className="sh-media-preview-close"
+              onClick={() => setSelectedMediaPreviewUrl(null)}
+              aria-label="Close"
+            >
+              <X size={24} />
+            </button>
+            <img
+              src={selectedMediaPreviewUrl}
+              alt="Media Preview"
+              className="sh-media-preview-img"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
         )}
       </>
     );
