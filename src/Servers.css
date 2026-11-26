@@ -2492,15 +2492,21 @@
   display: flex;
   flex-direction: column;
   transition: transform 0.15s ease, border-color 0.15s ease;
+  position: relative;
 }
 
 .sh-search-discovery-card:hover {
   border-color: #35373c;
 }
 
+.sh-search-discovery-banner-wrap {
+  position: relative;
+  width: 100%;
+}
+
 .sh-search-discovery-banner {
   width: 100%;
-  height: 120px;
+  height: 125px;
   position: relative;
   background: #1e1f22;
   overflow: hidden;
@@ -2510,46 +2516,54 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
 }
 
-.sh-search-discovery-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px 6px;
+.sh-search-discovery-avatar-anchor {
+  position: absolute;
+  bottom: -20px;
+  left: 16px;
+  z-index: 5;
 }
 
 .sh-search-discovery-avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
   object-fit: cover;
-  border: 2px solid #111214;
-  margin-top: -24px;
+  border: 3px solid #111214;
   background: #1e1f22;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+  display: block;
+}
+
+.sh-search-discovery-body {
+  padding: 26px 14px 14px;
+  display: flex;
+  flex-direction: column;
 }
 
 .sh-search-discovery-title-box {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex: 1;
+  margin-bottom: 6px;
 }
 
 .sh-search-discovery-name {
   color: #ffffff;
   font-size: 16px;
   font-weight: 700;
+  line-height: 1.25;
 }
 
 .sh-search-discovery-counts {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 2px 14px 8px;
   font-size: 12px;
   color: #949ba4;
+  margin-bottom: 8px;
 }
 
 .sh-search-count-item {
@@ -2573,7 +2587,6 @@
 }
 
 .sh-search-discovery-desc {
-  padding: 0 14px 12px;
   font-size: 13px;
   color: #b5bac1;
   line-height: 1.45;
@@ -2583,10 +2596,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
   word-break: break-word;
+  margin-bottom: 14px;
 }
 
 .sh-search-discovery-btn-row {
-  padding: 0 14px 14px;
+  margin-top: auto;
 }
 
 .sh-search-btn-primary {
@@ -2777,6 +2791,7 @@
     flex-direction: column !important;
     width: 100vw !important;
     height: 100vh !important;
+    height: 100dvh !important;
     overflow: hidden !important;
     background: #000000 !important;
     position: fixed !important;
@@ -2786,7 +2801,7 @@
 
   .sh-server-desktop-container .sh-server-banner {
     width: 100% !important;
-    height: 180px !important;
+    height: 120px !important;
     flex-shrink: 0 !important;
     border-radius: 0 !important;
     position: relative !important;
@@ -2815,7 +2830,7 @@
   .sh-server-desktop-body {
     display: flex !important;
     flex-direction: row !important;
-    flex: 1 !important;
+    flex: 1 1 0% !important;
     min-height: 0 !important;
     width: 100% !important;
     overflow: hidden !important;
@@ -2837,8 +2852,9 @@
   }
 
   .sh-server-desktop-chat-col {
-    flex: 1 !important;
+    flex: 1 1 0% !important;
     height: 100% !important;
+    min-height: 0 !important;
     display: flex !important;
     flex-direction: column !important;
     background: #000000 !important;
@@ -2850,10 +2866,15 @@
     width: 100% !important;
     max-width: 100% !important;
     height: 100% !important;
+    min-height: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
     border-left: none !important;
     border-right: none !important;
     position: relative !important;
     inset: auto !important;
+    animation: none !important;
   }
 
   .sh-channel-chat-desktop .sh-channel-chat-header {
@@ -2862,14 +2883,33 @@
     border-left: none !important;
     border-right: none !important;
     box-sizing: border-box !important;
+    flex-shrink: 0 !important;
   }
 
-  .sh-channel-chat-desktop .sh-channel-chat-footer {
+  .sh-channel-chat-desktop .sh-channel-chat-messages {
+    flex: 1 1 0% !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    padding: 16px 20px !important;
+  }
+
+  .sh-channel-chat-desktop .sh-channel-chat-welcome {
+    padding: 16px 8px 10px !important;
+  }
+
+  .sh-channel-chat-desktop .shc-composer-wrap {
+    flex-shrink: 0 !important;
     width: 100% !important;
-    max-width: 100% !important;
-    left: 0 !important;
-    right: 0 !important;
-    box-sizing: border-box !important;
+    background: #111214 !important;
+    border-top: 1px solid #1f2023 !important;
+    position: relative !important;
+    bottom: auto !important;
+    z-index: 10 !important;
+  }
+
+  .sh-channel-chat-desktop .shc-composer {
+    padding: 8px 16px !important;
+    background: #111214 !important;
   }
 
   .sh-desktop-chat-empty {

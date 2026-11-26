@@ -342,7 +342,7 @@ function EmojiCategoryButton({
 }
 
 export default function Servers({
-  onBack,
+  onBack: _onBack,
   onOpenChat,
   onOpenProfile,
   onOpenNotifications,
@@ -676,20 +676,6 @@ export default function Servers({
     setActiveServer(null);
     setSelectedChannel(null);
   };
-
-  useEffect(() => {
-    const handlePopState = () => {
-      if (viewingProfileUid) {
-        handleCloseProfile();
-      } else if (activeServer) {
-        handleExitServer();
-      } else if (onBack) {
-        onBack();
-      }
-    };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, [viewingProfileUid, activeServer, onBack]);
 
   // On desktop mode, auto-select first channel when entering a server if none selected
   useEffect(() => {
@@ -2015,83 +2001,87 @@ export default function Servers({
                         className="sh-search-discovery-card"
                         onClick={() => addRecentSearch(match.name)}
                       >
-                        <div className="sh-search-discovery-banner">
-                          {match.bannerUrl ? (
-                            <img
-                              src={match.bannerUrl}
-                              alt={match.name}
-                              className="sh-search-discovery-banner-img"
-                            />
-                          ) : (
-                            <div className="sh-server-card-bg-gradient" />
-                          )}
+                        <div className="sh-search-discovery-banner-wrap">
+                          <div className="sh-search-discovery-banner">
+                            {match.bannerUrl ? (
+                              <img
+                                src={match.bannerUrl}
+                                alt={match.name}
+                                className="sh-search-discovery-banner-img"
+                              />
+                            ) : (
+                              <div className="sh-server-card-bg-gradient" />
+                            )}
+                          </div>
+                          <div className="sh-search-discovery-avatar-anchor">
+                            {match.iconUrl ? (
+                              <img
+                                src={match.iconUrl}
+                                alt={match.name}
+                                className="sh-search-discovery-avatar"
+                              />
+                            ) : (
+                              <div
+                                className="sh-server-card-avatar-placeholder"
+                                style={{ width: 48, height: 48, fontSize: 18, margin: 0, borderRadius: 14, border: '3px solid #111214' }}
+                              >
+                                {match.name.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                          </div>
                         </div>
 
-                        <div className="sh-search-discovery-header">
-                          {match.iconUrl ? (
-                            <img
-                              src={match.iconUrl}
-                              alt={match.name}
-                              className="sh-search-discovery-avatar"
-                            />
-                          ) : (
-                            <div
-                              className="sh-server-card-avatar-placeholder"
-                              style={{ width: 44, height: 44, fontSize: 18, margin: 0, borderRadius: 12 }}
-                            >
-                              {match.name.charAt(0).toUpperCase()}
-                            </div>
-                          )}
+                        <div className="sh-search-discovery-body">
                           <div className="sh-search-discovery-title-box">
                             <span className="sh-search-discovery-name">{match.name}</span>
                             {match.isOfficial && <span className="sh-server-badge-official">✓</span>}
                           </div>
-                        </div>
 
-                        <div className="sh-search-discovery-counts">
-                          <span className="sh-search-count-item">
-                            <span className="sh-search-dot-grey" />
-                            {match.memberCount || '1 Members'}
-                          </span>
-                          <span className="sh-search-count-item">
-                            <span className="sh-search-dot-green" />
-                            {match.onlineCount || '1 Online'}
-                          </span>
-                        </div>
+                          <div className="sh-search-discovery-counts">
+                            <span className="sh-search-count-item">
+                              <span className="sh-search-dot-grey" />
+                              {match.memberCount || '1 Members'}
+                            </span>
+                            <span className="sh-search-count-item">
+                              <span className="sh-search-dot-green" />
+                              {match.onlineCount || '1 Online'}
+                            </span>
+                          </div>
 
-                        <div className="sh-search-discovery-desc">
-                          {match.description || 'Welcome to our community server.'}
-                        </div>
+                          <div className="sh-search-discovery-desc">
+                            {match.description || 'Welcome to our community server.'}
+                          </div>
 
-                        <div className="sh-search-discovery-btn-row">
-                          {isJoined ? (
-                            <button
-                              type="button"
-                              className="sh-search-btn-primary"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                addRecentSearch(match.name);
-                                setShowSearchModal(false);
-                                setActiveServer(match);
-                                setSelectedChannel(null);
-                              }}
-                            >
-                              Go to Server
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="sh-search-btn-primary"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                addRecentSearch(match.name);
-                                setShowSearchModal(false);
-                                setInviteModalServer(match);
-                              }}
-                            >
-                              Join
-                            </button>
-                          )}
+                          <div className="sh-search-discovery-btn-row">
+                            {isJoined ? (
+                              <button
+                                type="button"
+                                className="sh-search-btn-primary"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  addRecentSearch(match.name);
+                                  setShowSearchModal(false);
+                                  setActiveServer(match);
+                                  setSelectedChannel(null);
+                                }}
+                              >
+                                Go to Server
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="sh-search-btn-primary"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  addRecentSearch(match.name);
+                                  setShowSearchModal(false);
+                                  setInviteModalServer(match);
+                                }}
+                              >
+                                Join
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     );
@@ -2134,83 +2124,87 @@ export default function Servers({
                       addRecentSearch(srv.name);
                     }}
                   >
-                    <div className="sh-search-discovery-banner">
-                      {srv.bannerUrl ? (
-                        <img
-                          src={srv.bannerUrl}
-                          alt={srv.name}
-                          className="sh-search-discovery-banner-img"
-                        />
-                      ) : (
-                        <div className="sh-server-card-bg-gradient" />
-                      )}
+                    <div className="sh-search-discovery-banner-wrap">
+                      <div className="sh-search-discovery-banner">
+                        {srv.bannerUrl ? (
+                          <img
+                            src={srv.bannerUrl}
+                            alt={srv.name}
+                            className="sh-search-discovery-banner-img"
+                          />
+                        ) : (
+                          <div className="sh-server-card-bg-gradient" />
+                        )}
+                      </div>
+                      <div className="sh-search-discovery-avatar-anchor">
+                        {srv.iconUrl ? (
+                          <img
+                            src={srv.iconUrl}
+                            alt={srv.name}
+                            className="sh-search-discovery-avatar"
+                          />
+                        ) : (
+                          <div
+                            className="sh-server-card-avatar-placeholder"
+                            style={{ width: 48, height: 48, fontSize: 18, margin: 0, borderRadius: 14, border: '3px solid #111214' }}
+                          >
+                            {srv.name.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="sh-search-discovery-header">
-                      {srv.iconUrl ? (
-                        <img
-                          src={srv.iconUrl}
-                          alt={srv.name}
-                          className="sh-search-discovery-avatar"
-                        />
-                      ) : (
-                        <div
-                          className="sh-server-card-avatar-placeholder"
-                          style={{ width: 44, height: 44, fontSize: 18, margin: 0, borderRadius: 12 }}
-                        >
-                          {srv.name.charAt(0).toUpperCase()}
-                        </div>
-                      )}
+                    <div className="sh-search-discovery-body">
                       <div className="sh-search-discovery-title-box">
                         <span className="sh-search-discovery-name">{srv.name}</span>
                         {srv.isOfficial && <span className="sh-server-badge-official">✓</span>}
                       </div>
-                    </div>
 
-                    <div className="sh-search-discovery-counts">
-                      <span className="sh-search-count-item">
-                        <span className="sh-search-dot-grey" />
-                        {srv.memberCount || '1 Members'}
-                      </span>
-                      <span className="sh-search-count-item">
-                        <span className="sh-search-dot-green" />
-                        {srv.onlineCount || '1 Online'}
-                      </span>
-                    </div>
+                      <div className="sh-search-discovery-counts">
+                        <span className="sh-search-count-item">
+                          <span className="sh-search-dot-grey" />
+                          {srv.memberCount || '1 Members'}
+                        </span>
+                        <span className="sh-search-count-item">
+                          <span className="sh-search-dot-green" />
+                          {srv.onlineCount || '1 Online'}
+                        </span>
+                      </div>
 
-                    <div className="sh-search-discovery-desc">
-                      {srv.description || 'Welcome to our community server.'}
-                    </div>
+                      <div className="sh-search-discovery-desc">
+                        {srv.description || 'Welcome to our community server.'}
+                      </div>
 
-                    <div className="sh-search-discovery-btn-row">
-                      {isJoined ? (
-                        <button
-                          type="button"
-                          className="sh-search-btn-primary"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            addRecentSearch(srv.name);
-                            setShowSearchModal(false);
-                            setActiveServer(srv);
-                            setSelectedChannel(null);
-                          }}
-                        >
-                          Go to Server
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          className="sh-search-btn-primary"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            addRecentSearch(srv.name);
-                            setShowSearchModal(false);
-                            setInviteModalServer(srv);
-                          }}
-                        >
-                          Join
-                        </button>
-                      )}
+                      <div className="sh-search-discovery-btn-row">
+                        {isJoined ? (
+                          <button
+                            type="button"
+                            className="sh-search-btn-primary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              addRecentSearch(srv.name);
+                              setShowSearchModal(false);
+                              setActiveServer(srv);
+                              setSelectedChannel(null);
+                            }}
+                          >
+                            Go to Server
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="sh-search-btn-primary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              addRecentSearch(srv.name);
+                              setShowSearchModal(false);
+                              setInviteModalServer(srv);
+                            }}
+                          >
+                            Join
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
