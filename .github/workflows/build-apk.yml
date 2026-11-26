@@ -1,4 +1,4 @@
-name: Build Shinzi APK
+name: Build Shinzi Apps (Android APK & Windows EXE)
 
 on:
   push:
@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   build-apk:
+    name: Build Android APK
     runs-on: ubuntu-latest
 
     steps:
@@ -67,19 +68,54 @@ jobs:
           name: Shinzi-App-APK
           path: build-output/Shinzi.apk
 
-      - name: Create GitHub Release
+      - name: Create or Update GitHub Release with APK
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
           tag_name: v1.0.0-apk
-          name: Shinzi Android App v1.0.0
+          name: Shinzi v1.0.0 (Android APK & Windows Desktop)
           body: |
-            ### 🚀 Shinzi Android App (.apk)
-            
-            - **Native Android APK** with custom swirl icon.
-            - **Zero Chrome marks, zero URL bars.**
-            - **Real Android notifications with Reply action.**
-            - **Live Sync**: Automatically updates from Vercel without needing to re-install.
+            ### 🚀 Shinzi Multi-Platform Release
+
+            - **📱 Shinzi Android App (`Shinzi.apk`)**: Native Android APK with live sync, native notifications & reply actions.
+            - **💻 Shinzi Windows Desktop App (`Shinzi-Setup.exe`)**: Native Windows Electron desktop client with live sync, desktop UI, and audio notifications.
           files: build-output/Shinzi.apk
+          token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+  build-desktop:
+    name: Build Windows Desktop EXE
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install NPM Dependencies
+        run: npm install
+
+      - name: Build Web Application
+        run: npm run build
+
+      - name: Build Windows Desktop Installer (.exe)
+        run: npx electron-builder --win --x64
+
+      - name: Upload Desktop Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shinzi-Desktop-EXE
+          path: build-desktop/*.exe
+
+      - name: Add Windows Desktop EXE to GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: v1.0.0-apk
+          files: build-desktop/*.exe
           token: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
