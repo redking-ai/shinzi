@@ -12,7 +12,7 @@
     "deploy:rules": "node scripts/deploy-firestore-rules.cjs",
     "preview": "vite preview",
     "electron:start": "electron .",
-    "electron:build": "electron-builder --win --x64"
+    "electron:build": "electron-builder --win --x64 --publish never"
   },
   "dependencies": {
     "@capacitor/android": "^6.2.0",

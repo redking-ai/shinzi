@@ -103,7 +103,9 @@ jobs:
         run: npm run build
 
       - name: Build Windows Desktop Installer (.exe)
-        run: npx electron-builder --win --x64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --win --x64 --publish never
 
       - name: Upload Desktop Artifact
         uses: actions/upload-artifact@v4
