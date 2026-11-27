@@ -100,6 +100,7 @@ export interface ServerTag {
   id: string;
   name: string;
   color: string;
+  isDefault?: boolean;
   createdAt?: number;
 }
 
@@ -381,6 +382,59 @@ function EmojiCategoryButton({
   );
 }
 
+const SafeAvatar: React.FC<{
+  src?: string;
+  name: string;
+  size?: number;
+  className?: string;
+  style?: React.CSSProperties;
+}> = ({ src, name, size = 36, className = 'sh-server-member-avatar', style }) => {
+  const [hasError, setHasError] = useState(false);
+  const initial = (name || 'U').trim().charAt(0).toUpperCase() || 'U';
+
+  if (!src || hasError) {
+    return (
+      <div
+        className={className}
+        style={{
+          width: size,
+          height: size,
+          borderRadius: '50%',
+          background: '#5865F2',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#ffffff',
+          fontWeight: 700,
+          fontSize: Math.max(12, Math.floor(size * 0.42)),
+          flexShrink: 0,
+          userSelect: 'none',
+          ...style,
+        }}
+      >
+        {initial}
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={name}
+      className={className}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: '50%',
+        objectFit: 'cover',
+        flexShrink: 0,
+        ...style,
+      }}
+      onError={() => setHasError(true)}
+    />
+  );
+};
+
 export default function Servers({
   onBack: _onBack,
   onOpenChat,
@@ -437,6 +491,14 @@ export default function Servers({
       sessionStorage.removeItem('shinzi_active_server');
     }
   }, [activeServer]);
+
+  const committedServerBaselineRef = useRef<ServerData | null>(null);
+
+  useEffect(() => {
+    if (activeServer && (!committedServerBaselineRef.current || committedServerBaselineRef.current.id !== activeServer.id)) {
+      committedServerBaselineRef.current = JSON.parse(JSON.stringify(activeServer));
+    }
+  }, [activeServer?.id]);
 
   useEffect(() => {
     if (selectedChannel) {
@@ -1547,14 +1609,20 @@ export default function Servers({
         const snap = await getDoc(doc(db, 'users', uid));
         if (snap.exists()) {
           const d = snap.data();
-          const avatarUrl =
-            d.photoURL ||
-            (d.profileAssetId
-              ? `https://lh3.googleusercontent.com/d/${d.profileAssetId}=s400`
-              : '') ||
-            d.avatarUrl ||
-            d.avatar ||
-            '';
+          const cachedAvatar = typeof window !== 'undefined' ? localStorage.getItem('shinzi_avatar_' + uid) : null;
+          let avatarUrl = cachedAvatar || d.photoURL || '';
+          if (!avatarUrl && d.profileAssetId) {
+            avatarUrl = `/api/avatar?assetId=${encodeURIComponent(d.profileAssetId)}`;
+          }
+          if (!avatarUrl && d.avatarUrl) {
+            avatarUrl = d.avatarUrl;
+          }
+          if (!avatarUrl && d.avatar) {
+            avatarUrl = d.avatar;
+          }
+          if (!avatarUrl) {
+            avatarUrl = `/api/avatar?uid=${encodeURIComponent(uid)}`;
+          }
           setServerMemberProfiles((prev) => ({
             ...prev,
             [uid]: {
@@ -1723,11 +1791,18 @@ export default function Servers({
     if (changes.length === 0) return;
 
     const commitCode = Math.random().toString(36).substring(2, 9);
+    const resolvedAuthorAvatar =
+      currentUserProfile?.photoURL ||
+      ((currentUserProfile as any)?.profileAssetId
+        ? `/api/avatar?assetId=${encodeURIComponent((currentUserProfile as any).profileAssetId)}`
+        : '') ||
+      currentUser.photoURL ||
+      '';
     const newCommit: ServerCommit = {
       id: commitCode,
       authorUid: currentUser.uid,
       authorName: currentUserProfile?.displayName || currentUser.displayName || 'Owner',
-      authorAvatar: currentUserProfile?.photoURL || ((currentUserProfile as any)?.profileAssetId ? `https://lh3.googleusercontent.com/d/${(currentUserProfile as any).profileAssetId}=s400` : '') || currentUser.photoURL || '',
+      authorAvatar: resolvedAuthorAvatar,
       createdAt: Date.now(),
       changes,
     };
@@ -1742,6 +1817,7 @@ export default function Servers({
       commits: updatedCommits,
     };
 
+    committedServerBaselineRef.current = JSON.parse(JSON.stringify(updatedServer));
     setActiveServer(updatedServer);
     setCreatedServers((prev) => prev.map((s) => (s.id === updatedServer.id ? updatedServer : s)));
     setDiscoverableServers((prev) => prev.map((s) => (s.id === updatedServer.id ? updatedServer : s)));
@@ -1766,10 +1842,14 @@ export default function Servers({
 
   const handleDiscardCommits = async () => {
     if (!activeServer) return;
-    setOverviewName(activeServer.name || '');
-    setOverviewDescription(activeServer.description || '');
-    setOverviewBannerUrl(activeServer.bannerUrl || '');
-    setOverviewIconUrl(activeServer.iconUrl || '');
+    const baseline = committedServerBaselineRef.current;
+    if (baseline && baseline.id === activeServer.id) {
+      setActiveServer(JSON.parse(JSON.stringify(baseline)));
+      setOverviewName(baseline.name || '');
+      setOverviewDescription(baseline.description || '');
+      setOverviewBannerUrl(baseline.bannerUrl || '');
+      setOverviewIconUrl(baseline.iconUrl || '');
+    }
     setPendingCommitChanges([]);
     setEditingCategory(null);
     setEditingChannel(null);
@@ -1777,6 +1857,7 @@ export default function Servers({
       const snap = await getDoc(doc(db, 'servers', activeServer.id));
       if (snap.exists()) {
         const sData = { id: snap.id, ...(snap.data() as any) } as ServerData;
+        committedServerBaselineRef.current = JSON.parse(JSON.stringify(sData));
         setActiveServer(sData);
         setOverviewName(sData.name || '');
         setOverviewDescription(sData.description || '');
@@ -1927,7 +2008,13 @@ export default function Servers({
         code: inviteCode,
         creatorUid: currentUser.uid,
         creatorName: currentUserProfile?.displayName || currentUser.displayName || 'You',
-        creatorAvatar: currentUserProfile?.photoURL || ((currentUserProfile as any)?.profileAssetId ? `https://lh3.googleusercontent.com/d/${(currentUserProfile as any).profileAssetId}=s400` : '') || currentUser.photoURL || '',
+        creatorAvatar:
+          currentUserProfile?.photoURL ||
+          ((currentUserProfile as any)?.profileAssetId
+            ? `/api/avatar?assetId=${encodeURIComponent((currentUserProfile as any).profileAssetId)}`
+            : '') ||
+          currentUser.photoURL ||
+          '',
         createdAt: Date.now(),
         uses: 1,
       };
@@ -1950,6 +2037,7 @@ export default function Servers({
       const snap = await getDocs(collection(db, 'users', currentUser.uid, 'friends'));
       const friends: Array<{ uid: string; displayName: string; photoURL?: string; username?: string }> = [];
       for (const fDoc of snap.docs) {
+        if (fDoc.id === 'presence') continue;
         const friendUid = fDoc.id;
         const fData = fDoc.data();
         let realDisplayName = fData.displayName || fData.username || 'Friend';
@@ -1960,7 +2048,21 @@ export default function Servers({
           if (userDoc.exists()) {
             const uData = userDoc.data();
             realDisplayName = uData.displayName || realDisplayName;
-            realPhotoURL = uData.photoURL || (uData.profileAssetId ? `https://lh3.googleusercontent.com/d/${uData.profileAssetId}=s400` : '') || uData.avatarUrl || uData.avatar || realPhotoURL;
+            const cachedAvatar = typeof window !== 'undefined' ? localStorage.getItem('shinzi_avatar_' + friendUid) : null;
+            let resolvedPhoto = cachedAvatar || uData.photoURL || '';
+            if (!resolvedPhoto && uData.profileAssetId) {
+              resolvedPhoto = `/api/avatar?assetId=${encodeURIComponent(uData.profileAssetId)}`;
+            }
+            if (!resolvedPhoto && uData.avatarUrl) {
+              resolvedPhoto = uData.avatarUrl;
+            }
+            if (!resolvedPhoto && uData.avatar) {
+              resolvedPhoto = uData.avatar;
+            }
+            if (!resolvedPhoto) {
+              resolvedPhoto = `/api/avatar?uid=${encodeURIComponent(friendUid)}`;
+            }
+            realPhotoURL = resolvedPhoto;
             realUsername = uData.username || realUsername;
           }
         } catch {}
@@ -3149,11 +3251,12 @@ export default function Servers({
                           }
                         }}
                       >
-                        {avatar ? (
-                          <img src={avatar} alt={authorName} />
-                        ) : (
-                          authorName.charAt(0).toUpperCase()
-                        )}
+                        <SafeAvatar
+                          src={avatar}
+                          name={authorName}
+                          size={40}
+                          className="sh-channel-msg-avatar"
+                        />
                       </div>
                     ) : (
                       <div className="sh-channel-msg-gutter" aria-hidden="true" />
@@ -3162,13 +3265,23 @@ export default function Servers({
                       {isFirstInGroup && (
                         <div className="sh-channel-msg-header">
                           {(() => {
-                            const equippedTagId = activeServer?.equippedTags?.[msg.senderId];
+                            const senderTags = activeServer?.memberTags?.[msg.senderId] || [];
+                            const equippedTagId =
+                              activeServer?.equippedTags?.[msg.senderId] ||
+                              (senderTags.length > 0 ? senderTags[senderTags.length - 1] : undefined) ||
+                              (msg.senderId === activeServer?.ownerId
+                                ? activeServer?.tags?.find((t) => t.name.toLowerCase() === 'owner' || t.isDefault)?.id
+                                : undefined);
                             const equippedTag = activeServer?.tags?.find((t) => t.id === equippedTagId);
                             const nameColor = equippedTag?.color;
                             return (
                               <span
                                 className="sh-channel-msg-author"
-                                style={nameColor ? { color: nameColor } : undefined}
+                                style={
+                                  nameColor
+                                    ? { color: nameColor, WebkitTextFillColor: nameColor }
+                                    : undefined
+                                }
                                 onClick={() => {
                                   if (msg.senderId) {
                                     setViewingProfileUid(msg.senderId);
@@ -3177,7 +3290,12 @@ export default function Servers({
                                   }
                                 }}
                               >
-                                {renderStyledDisplayName(cleanRawText(authorName), profile?.displayNameStyle)}
+                                {renderStyledDisplayName(
+                                  cleanRawText(authorName),
+                                  nameColor
+                                    ? { ...(profile?.displayNameStyle || {}), gradientCss: undefined }
+                                    : profile?.displayNameStyle
+                                )}
                               </span>
                             );
                           })()}
@@ -4013,13 +4131,7 @@ export default function Servers({
           onClick={() => setViewingProfileUid(m.uid)}
         >
           <div className="sh-member-avatar-wrap">
-            {m.avatar ? (
-              <img src={m.avatar} alt={m.name} className="sh-member-avatar" />
-            ) : (
-              <div className="sh-member-avatar-placeholder">
-                {m.name.charAt(0).toUpperCase()}
-              </div>
-            )}
+            <SafeAvatar src={m.avatar} name={m.name} size={32} className="sh-member-avatar" />
             <span
               className="sh-member-status-dot"
               style={{ background: m.isOnline ? '#23a55a' : '#80848e' }}
@@ -4176,23 +4288,7 @@ export default function Servers({
             >
               <div className="sh-server-member-left">
                 <div className="sh-server-member-avatar-wrap">
-                  {avatar ? (
-                    <img src={avatar} alt="" className="sh-server-member-avatar" />
-                  ) : (
-                    <div
-                      className="sh-server-member-avatar"
-                      style={{
-                        background: '#5865F2',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#fff',
-                        fontWeight: 700,
-                      }}
-                    >
-                      {name.charAt(0).toUpperCase()}
-                    </div>
-                  )}
+                  <SafeAvatar src={avatar} name={name} size={36} className="sh-server-member-avatar" />
                   {isOnline && <div className="sh-server-member-online-dot" />}
                 </div>
 
@@ -4298,13 +4394,12 @@ export default function Servers({
             {filtered.map((m) => (
               <div key={m.id} className="sh-chat-search-card">
                 <div className="sh-chat-search-meta">
-                  {m.senderAvatar ? (
-                    <img src={m.senderAvatar} alt="" className="sh-chat-search-avatar" />
-                  ) : (
-                    <div className="sh-chat-search-avatar-placeholder">
-                      {(m.senderName || 'U').charAt(0).toUpperCase()}
-                    </div>
-                  )}
+                  <SafeAvatar
+                    src={m.senderAvatar}
+                    name={m.senderName}
+                    size={28}
+                    className="sh-chat-search-avatar"
+                  />
                   <span className="sh-chat-search-author">{m.senderName || 'User'}</span>
                   <span className="sh-chat-search-time">
                     {m.createdAt ? new Date(millis(m.createdAt)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
@@ -5780,7 +5875,10 @@ export default function Servers({
               <button
                 type="button"
                 className="sh-tags-back-btn"
-                onClick={() => setShowServerOverview(false)}
+                onClick={() => {
+                  setShowServerOverview(false);
+                  setShowServerSettings(true);
+                }}
                 aria-label="Back"
               >
                 <ArrowLeft size={20} />
@@ -5840,7 +5938,7 @@ export default function Servers({
                     onClick={() => overviewAvatarFileRef.current?.click()}
                     aria-label="Edit Server Avatar"
                   >
-                    <Pencil size={14} />
+                    <Pencil size={14} color="#000000" />
                   </button>
                   <input
                     ref={overviewAvatarFileRef}
@@ -5886,7 +5984,10 @@ export default function Servers({
               <button
                 type="button"
                 className="sh-tags-back-btn"
-                onClick={() => setShowServerMembers(false)}
+                onClick={() => {
+                  setShowServerMembers(false);
+                  setShowServerSettings(true);
+                }}
                 aria-label="Back"
               >
                 <ArrowLeft size={20} />
@@ -5935,29 +6036,11 @@ export default function Servers({
             >
               <div className="sh-tag-menu-handle" />
               <div className="sh-member-action-header">
-                {selectedMemberAction.avatarUrl ? (
-                  <img
-                    src={selectedMemberAction.avatarUrl}
-                    alt=""
-                    style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      width: 44,
-                      height: 44,
-                      borderRadius: '50%',
-                      background: '#5865F2',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#ffffff',
-                      fontWeight: 700,
-                    }}
-                  >
-                    {selectedMemberAction.displayName.charAt(0).toUpperCase()}
-                  </div>
-                )}
+                <SafeAvatar
+                  src={selectedMemberAction.avatarUrl}
+                  name={selectedMemberAction.displayName}
+                  size={44}
+                />
                 <div>
                   <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>
                     {selectedMemberAction.displayName}
@@ -6015,13 +6098,14 @@ export default function Servers({
               <h2 className="sh-tags-page-title">{editingTag.name} - Members</h2>
               <button
                 type="button"
-                className="sh-tag-create-btn"
+                className="sh-tags-icon-btn"
                 onClick={() => {
                   setSelectedUidsForRole(new Set());
                   setShowAddMembersToRole(true);
                 }}
+                aria-label="Add Member"
               >
-                Add
+                <UserPlus size={20} color="#ffffff" />
               </button>
             </div>
 
@@ -6047,23 +6131,7 @@ export default function Servers({
                     <div key={uid} className="sh-role-member-item">
                       <div className="sh-server-member-left">
                         <div className="sh-server-member-avatar-wrap">
-                          {avatar ? (
-                            <img src={avatar} alt="" className="sh-server-member-avatar" />
-                          ) : (
-                            <div
-                              className="sh-server-member-avatar"
-                              style={{
-                                background: '#5865F2',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: '#fff',
-                                fontWeight: 700,
-                              }}
-                            >
-                              {name.charAt(0).toUpperCase()}
-                            </div>
-                          )}
+                          <SafeAvatar src={avatar} name={name} size={36} className="sh-server-member-avatar" />
                         </div>
                         <div className="sh-server-member-info">
                           <span className="sh-server-member-name">{name}</span>
@@ -6107,32 +6175,6 @@ export default function Servers({
                 Add
               </button>
             </div>
-
-            {/* Selected chips row */}
-            {selectedUidsForRole.size > 0 && (
-              <div className="sh-selected-chips-scroll" style={{ padding: '8px 16px' }}>
-                {Array.from(selectedUidsForRole).map((uid) => {
-                  const p = serverMemberProfiles[uid] || senderProfiles[uid];
-                  const name = p?.displayName || 'Member';
-                  return (
-                    <div key={uid} className="sh-selected-chip">
-                      <span>{name}</span>
-                      <X
-                        size={14}
-                        className="sh-selected-chip-remove"
-                        onClick={() => {
-                          setSelectedUidsForRole((prev) => {
-                            const next = new Set(prev);
-                            next.delete(uid);
-                            return next;
-                          });
-                        }}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            )}
 
             {/* Search Input */}
             <div className="sh-tag-search-box-wrap" style={{ padding: '8px 16px' }}>
@@ -6194,23 +6236,7 @@ export default function Servers({
                     >
                       <div className="sh-server-member-left">
                         <div className="sh-server-member-avatar-wrap">
-                          {avatar ? (
-                            <img src={avatar} alt="" className="sh-server-member-avatar" />
-                          ) : (
-                            <div
-                              className="sh-server-member-avatar"
-                              style={{
-                                background: '#5865F2',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: '#fff',
-                                fontWeight: 700,
-                              }}
-                            >
-                              {name.charAt(0).toUpperCase()}
-                            </div>
-                          )}
+                          <SafeAvatar src={avatar} name={name} size={36} className="sh-server-member-avatar" />
                         </div>
                         <div className="sh-server-member-info">
                           <span className="sh-server-member-name">{name}</span>
@@ -6237,7 +6263,10 @@ export default function Servers({
               <button
                 type="button"
                 className="sh-tags-back-btn"
-                onClick={() => setShowServerInvites(false)}
+                onClick={() => {
+                  setShowServerInvites(false);
+                  setShowServerSettings(true);
+                }}
                 aria-label="Back"
               >
                 <ArrowLeft size={20} />
@@ -6251,22 +6280,10 @@ export default function Servers({
               <div className="sh-invite-link-card">
                 <div className="sh-invite-link-top">
                   <div className="sh-invite-creator-row">
-                    <div
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: '50%',
-                        background: '#5865F2',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#fff',
-                        fontWeight: 700,
-                        fontSize: 12,
-                      }}
-                    >
-                      {activeServer.name.charAt(0).toUpperCase()}
-                    </div>
+                    <SafeAvatar
+                      name={activeServer.name}
+                      size={28}
+                    />
                     <span style={{ fontSize: 14, fontWeight: 600, color: '#ffffff' }}>Server Primary Link</span>
                   </div>
                   <button
@@ -6296,26 +6313,11 @@ export default function Servers({
                 <div key={inv.code} className="sh-invite-link-card">
                   <div className="sh-invite-link-top">
                     <div className="sh-invite-creator-row">
-                      {inv.creatorAvatar ? (
-                        <img src={inv.creatorAvatar} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
-                      ) : (
-                        <div
-                          style={{
-                            width: 28,
-                            height: 28,
-                            borderRadius: '50%',
-                            background: '#5865F2',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: '#fff',
-                            fontWeight: 700,
-                            fontSize: 12,
-                          }}
-                        >
-                          {inv.creatorName.charAt(0).toUpperCase()}
-                        </div>
-                      )}
+                      <SafeAvatar
+                        src={inv.creatorAvatar}
+                        name={inv.creatorName}
+                        size={28}
+                      />
                       <span style={{ fontSize: 14, fontWeight: 600, color: '#ffffff' }}>{inv.creatorName}</span>
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
@@ -6434,23 +6436,7 @@ export default function Servers({
                     >
                       <div className="sh-server-member-left">
                         <div className="sh-server-member-avatar-wrap">
-                          {friend.photoURL ? (
-                            <img src={friend.photoURL} alt="" className="sh-server-member-avatar" />
-                          ) : (
-                            <div
-                              className="sh-server-member-avatar"
-                              style={{
-                                background: '#5865F2',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: '#fff',
-                                fontWeight: 700,
-                              }}
-                            >
-                              {friend.displayName.charAt(0).toUpperCase()}
-                            </div>
-                          )}
+                          <SafeAvatar src={friend.photoURL} name={friend.displayName} size={36} className="sh-server-member-avatar" />
                         </div>
                         <div className="sh-server-member-info">
                           <span className="sh-server-member-name">{friend.displayName}</span>
@@ -6475,7 +6461,10 @@ export default function Servers({
               <button
                 type="button"
                 className="sh-tags-back-btn"
-                onClick={() => setShowServerCommits(false)}
+                onClick={() => {
+                  setShowServerCommits(false);
+                  setShowServerSettings(true);
+                }}
                 aria-label="Back"
               >
                 <ArrowLeft size={20} />
@@ -6538,29 +6527,11 @@ export default function Servers({
               <div className="sh-tag-menu-handle" />
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  {selectedCommitDetails.authorAvatar ? (
-                    <img
-                      src={selectedCommitDetails.authorAvatar}
-                      alt=""
-                      style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }}
-                    />
-                  ) : (
-                    <div
-                      style={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: '50%',
-                        background: '#5865F2',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#fff',
-                        fontWeight: 700,
-                      }}
-                    >
-                      {selectedCommitDetails.authorName.charAt(0).toUpperCase()}
-                    </div>
-                  )}
+                  <SafeAvatar
+                    src={selectedCommitDetails.authorAvatar}
+                    name={selectedCommitDetails.authorName}
+                    size={36}
+                  />
                   <div>
                     <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>
                       @{selectedCommitDetails.authorName}

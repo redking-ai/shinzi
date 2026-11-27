@@ -3695,8 +3695,8 @@
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: #5865F2;
-  color: #ffffff;
+  background: #ffffff;
+  color: #000000;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4263,6 +4263,104 @@
   font-weight: 600;
   margin: 0 2px;
 }
+
+/* ==========================================================
+   ROLE / MEMBER / COMMIT BOTTOM SHEETS & SEARCH (WA0025-WA0033)
+   ========================================================== */
+.sh-tag-menu-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  z-index: 10005;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.sh-tag-menu-sheet {
+  background: #1e1f22;
+  border-radius: 16px 16px 0 0;
+  width: 100%;
+  max-width: 540px;
+  padding: 16px 20px 24px;
+  box-sizing: border-box;
+  animation: slideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.sh-tag-menu-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.2);
+  margin: 0 auto 16px;
+}
+
+.sh-tag-search-box-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #111214;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 8px 12px;
+  box-sizing: border-box;
+}
+
+.sh-tag-search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #ffffff;
+  font-size: 14px;
+}
+
+.sh-tag-search-input::placeholder {
+  color: #949ba4;
+}
+
+.sh-tag-create-btn {
+  background: #ffffff;
+  color: #000000;
+  border: none;
+  border-radius: 20px;
+  padding: 6px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+}
+
+.sh-tag-create-btn:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.sh-tag-create-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.sh-tags-icon-btn {
+  background: none;
+  border: none;
+  color: #ffffff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 50%;
+  transition: background 0.15s ease;
+}
+
+.sh-tags-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 
 
 
