@@ -36,7 +36,6 @@ import {
   FileText,
   Smile,
   Square,
-  Camera,
   Eye,
   MoreHorizontal,
   Shield,
@@ -57,6 +56,8 @@ import {
   query,
   where,
   addDoc,
+  orderBy,
+  limit,
   onSnapshot,
   serverTimestamp,
   updateDoc,
@@ -484,6 +485,7 @@ export default function Servers({
   const [showServerSearch, setShowServerSearch] = useState(false);
   const [serverSearchTab, setServerSearchTab] = useState<'members' | 'media' | 'chat'>('members');
   const [serverSearchQuery, setServerSearchQuery] = useState('');
+  const [serverWideMessages, setServerWideMessages] = useState<ServerChannelMessage[]>([]);
 
   // Server Settings & Tags Management state (IMG-20261110-WA0021, IMG-20261126-WA0016, IMG-20261126-WA0017)
   const [showServerSettings, setShowServerSettings] = useState(false);
@@ -1025,13 +1027,25 @@ export default function Servers({
 
             setChannelMessages((prev) => {
               const map = new Map<string, ServerChannelMessage>();
-              // Keep prior local messages so old chats never vanish
-              prev.forEach((m) => {
-                if (m.id) map.set(m.id, m);
-              });
-              // Firestore messages override or add to map
+              // Firestore messages are authoritative
               msgs.forEach((m) => {
                 if (m.id) map.set(m.id, m);
+              });
+              // Only keep local messages if they have NOT yet arrived in msgs
+              const now = Date.now();
+              prev.forEach((m) => {
+                if (m.id && m.id.startsWith('local-')) {
+                  const mTime = typeof m.createdAt === 'number' ? m.createdAt : 0;
+                  // Drop local message if older than 20 seconds
+                  if (now - mTime > 20000) return;
+                  // Drop local message if incoming message with same sender and text/image already exists
+                  const alreadySynced = msgs.some(
+                    (sm) => sm.senderId === m.senderId && (sm.text === m.text || (sm.imageUrl && sm.imageUrl === m.imageUrl))
+                  );
+                  if (!alreadySynced) {
+                    map.set(m.id, m);
+                  }
+                }
               });
               const merged = Array.from(map.values());
               merged.sort((a, b) => {
@@ -1533,11 +1547,19 @@ export default function Servers({
         const snap = await getDoc(doc(db, 'users', uid));
         if (snap.exists()) {
           const d = snap.data();
+          const avatarUrl =
+            d.photoURL ||
+            (d.profileAssetId
+              ? `https://lh3.googleusercontent.com/d/${d.profileAssetId}=s400`
+              : '') ||
+            d.avatarUrl ||
+            d.avatar ||
+            '';
           setServerMemberProfiles((prev) => ({
             ...prev,
             [uid]: {
               displayName: d.displayName || d.username || 'User',
-              avatarUrl: d.photoURL || '',
+              avatarUrl,
               isOnline: d.isOnline || false,
             },
           }));
@@ -1545,6 +1567,58 @@ export default function Servers({
       } catch {}
     });
   }, [activeServer?.id, activeServer?.memberIds, activeServer?.ownerId, currentUser?.uid]);
+
+  // Fetch messages across all channels for server-wide search (Media & Chat)
+  useEffect(() => {
+    if (!activeServer || !showServerSearch) return;
+    const allChannels = (activeServer.categories || []).flatMap((c) => c.channels || []).filter((ch) => ch.type === 'text');
+    if (allChannels.length === 0) return;
+
+    const localMsgs: ServerChannelMessage[] = [];
+    allChannels.forEach((ch) => {
+      try {
+        const cached = localStorage.getItem(`shinzi_channel_msgs_${activeServer.id}_${ch.id}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) localMsgs.push(...parsed);
+        }
+      } catch {}
+    });
+    setServerWideMessages(localMsgs);
+
+    let isCancelled = false;
+    Promise.all(
+      allChannels.map(async (ch) => {
+        try {
+          const q = query(
+            collection(db, 'servers', activeServer.id, 'channels', ch.id, 'messages'),
+            orderBy('createdAt', 'desc'),
+            limit(40)
+          );
+          const snap = await getDocs(q);
+          return snap.docs.map((d) => ({ id: d.id, channelId: ch.id, ...(d.data() as any) }));
+        } catch {
+          return [];
+        }
+      })
+    ).then((results) => {
+      if (isCancelled) return;
+      const combined = results.flat();
+      const map = new Map<string, ServerChannelMessage>();
+      localMsgs.forEach((m) => { if (m.id) map.set(m.id, m); });
+      combined.forEach((m) => { if (m.id) map.set(m.id, m); });
+      const sorted = Array.from(map.values()).sort((a, b) => {
+        const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt || 0);
+        const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt || 0);
+        return timeA - timeB;
+      });
+      setServerWideMessages(sorted);
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeServer?.id, showServerSearch]);
 
   const handleCreateTag = async () => {
     if (!activeServer || !newTagName.trim()) return;
@@ -1557,6 +1631,7 @@ export default function Servers({
     const updatedTags = [...(activeServer.tags || []), newTag];
     const updatedServer = { ...activeServer, tags: updatedTags };
     setActiveServer(updatedServer);
+    setPendingCommitChanges((prev) => [...prev, `Created "${newTagName.trim()}" tag`]);
     setShowCreateTag(false);
     setNewTagName('');
     setNewTagColor('#5865F2');
@@ -1570,8 +1645,15 @@ export default function Servers({
 
   const handleSaveTag = async () => {
     if (!activeServer || !editingTag || !editingTagName.trim()) return;
+    const tagNameTrimmed = editingTagName.trim();
+    if (editingTag.name !== tagNameTrimmed) {
+      setPendingCommitChanges((prev) => [...prev, `Updated "${editingTag.name}" tag name to "${tagNameTrimmed}"`]);
+    }
+    if (editingTag.color !== editingTagColor) {
+      setPendingCommitChanges((prev) => [...prev, `Changed "${editingTag.name}" tag color from ${editingTag.color} to ${editingTagColor}`]);
+    }
     const updatedTags = (activeServer.tags || []).map((t) =>
-      t.id === editingTag.id ? { ...t, name: editingTagName.trim(), color: editingTagColor } : t
+      t.id === editingTag.id ? { ...t, name: tagNameTrimmed, color: editingTagColor } : t
     );
     const updatedServer = { ...activeServer, tags: updatedTags };
     setActiveServer(updatedServer);
@@ -1586,6 +1668,10 @@ export default function Servers({
 
   const handleDeleteTag = async (tagId: string) => {
     if (!activeServer) return;
+    const deletedTag = activeServer.tags?.find((t) => t.id === tagId);
+    if (deletedTag) {
+      setPendingCommitChanges((prev) => [...prev, `Deleted "${deletedTag.name}" tag`]);
+    }
     const updatedTags = (activeServer.tags || []).filter((t) => t.id !== tagId);
     const updatedServer = { ...activeServer, tags: updatedTags };
     setActiveServer(updatedServer);
@@ -1641,7 +1727,7 @@ export default function Servers({
       id: commitCode,
       authorUid: currentUser.uid,
       authorName: currentUserProfile?.displayName || currentUser.displayName || 'Owner',
-      authorAvatar: currentUserProfile?.photoURL || currentUser.photoURL || '',
+      authorAvatar: currentUserProfile?.photoURL || ((currentUserProfile as any)?.profileAssetId ? `https://lh3.googleusercontent.com/d/${(currentUserProfile as any).profileAssetId}=s400` : '') || currentUser.photoURL || '',
       createdAt: Date.now(),
       changes,
     };
@@ -1660,6 +1746,8 @@ export default function Servers({
     setCreatedServers((prev) => prev.map((s) => (s.id === updatedServer.id ? updatedServer : s)));
     setDiscoverableServers((prev) => prev.map((s) => (s.id === updatedServer.id ? updatedServer : s)));
     setPendingCommitChanges([]);
+    setEditingCategory(null);
+    setEditingChannel(null);
 
     try {
       await updateDoc(doc(db, 'servers', activeServer.id), {
@@ -1667,6 +1755,8 @@ export default function Servers({
         description: overviewDescription,
         bannerUrl: overviewBannerUrl,
         iconUrl: overviewIconUrl,
+        categories: updatedServer.categories,
+        tags: updatedServer.tags || [],
         commits: updatedCommits,
       });
     } catch (err) {
@@ -1674,13 +1764,26 @@ export default function Servers({
     }
   };
 
-  const handleDiscardCommits = () => {
+  const handleDiscardCommits = async () => {
     if (!activeServer) return;
     setOverviewName(activeServer.name || '');
     setOverviewDescription(activeServer.description || '');
     setOverviewBannerUrl(activeServer.bannerUrl || '');
     setOverviewIconUrl(activeServer.iconUrl || '');
     setPendingCommitChanges([]);
+    setEditingCategory(null);
+    setEditingChannel(null);
+    try {
+      const snap = await getDoc(doc(db, 'servers', activeServer.id));
+      if (snap.exists()) {
+        const sData = { id: snap.id, ...(snap.data() as any) } as ServerData;
+        setActiveServer(sData);
+        setOverviewName(sData.name || '');
+        setOverviewDescription(sData.description || '');
+        setOverviewBannerUrl(sData.bannerUrl || '');
+        setOverviewIconUrl(sData.iconUrl || '');
+      }
+    } catch {}
   };
 
   const handleOverviewBannerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1810,6 +1913,35 @@ export default function Servers({
     } catch (err) {}
   };
 
+  const recordServerInvite = async (inviteCode: string) => {
+    if (!activeServer || !currentUser) return;
+    const existing = (activeServer.invites || []).find((i) => i.code === inviteCode);
+    let updatedInvites: ServerInviteItem[];
+    if (existing) {
+      updatedInvites = (activeServer.invites || []).map((i) =>
+        i.code === inviteCode ? { ...i, uses: (i.uses || 0) + 1 } : i
+      );
+    } else {
+      const newInv: ServerInviteItem = {
+        id: 'inv_' + Date.now(),
+        code: inviteCode,
+        creatorUid: currentUser.uid,
+        creatorName: currentUserProfile?.displayName || currentUser.displayName || 'You',
+        creatorAvatar: currentUserProfile?.photoURL || ((currentUserProfile as any)?.profileAssetId ? `https://lh3.googleusercontent.com/d/${(currentUserProfile as any).profileAssetId}=s400` : '') || currentUser.photoURL || '',
+        createdAt: Date.now(),
+        uses: 1,
+      };
+      updatedInvites = [newInv, ...(activeServer.invites || [])];
+    }
+    const updatedServer = { ...activeServer, invites: updatedInvites };
+    setActiveServer(updatedServer);
+    try {
+      await updateDoc(doc(db, 'servers', activeServer.id), { invites: updatedInvites });
+    } catch (err) {
+      console.warn('Failed to update invites:', err);
+    }
+  };
+
   const openInviteFriendsModal = async () => {
     setShowInviteSheet(false);
     setShowInviteFriendsModal(true);
@@ -1818,12 +1950,25 @@ export default function Servers({
       const snap = await getDocs(collection(db, 'users', currentUser.uid, 'friends'));
       const friends: Array<{ uid: string; displayName: string; photoURL?: string; username?: string }> = [];
       for (const fDoc of snap.docs) {
+        const friendUid = fDoc.id;
         const fData = fDoc.data();
+        let realDisplayName = fData.displayName || fData.username || 'Friend';
+        let realPhotoURL = fData.photoURL || '';
+        let realUsername = fData.username || '';
+        try {
+          const userDoc = await getDoc(doc(db, 'users', friendUid));
+          if (userDoc.exists()) {
+            const uData = userDoc.data();
+            realDisplayName = uData.displayName || realDisplayName;
+            realPhotoURL = uData.photoURL || (uData.profileAssetId ? `https://lh3.googleusercontent.com/d/${uData.profileAssetId}=s400` : '') || uData.avatarUrl || uData.avatar || realPhotoURL;
+            realUsername = uData.username || realUsername;
+          }
+        } catch {}
         friends.push({
-          uid: fDoc.id,
-          displayName: fData.displayName || fData.username || 'Friend',
-          photoURL: fData.photoURL || '',
-          username: fData.username,
+          uid: friendUid,
+          displayName: realDisplayName,
+          photoURL: realPhotoURL,
+          username: realUsername,
         });
       }
       setUserFriendsList(friends);
@@ -1840,30 +1985,53 @@ export default function Servers({
 
     try {
       for (const friendUid of Array.from(selectedFriendUids)) {
-        const convId = [currentUser.uid, friendUid].sort().join('_');
+        const friendObj = userFriendsList.find((f) => f.uid === friendUid);
+        const convId = `dm_${[currentUser.uid, friendUid].sort().join('_')}`;
         const convRef = doc(db, 'conversations', convId);
         await setDoc(
           convRef,
           {
+            type: 'direct',
             memberIds: [currentUser.uid, friendUid],
+            memberProfiles: {
+              [currentUser.uid]: {
+                displayName: currentUserProfile?.displayName || currentUser.displayName || 'User',
+                username: (currentUserProfile as any)?.username || '',
+                photoURL: currentUserProfile?.photoURL || '',
+                profileAssetId: (currentUserProfile as any)?.profileAssetId || '',
+              },
+              [friendUid]: {
+                displayName: friendObj?.displayName || 'Friend',
+                username: friendObj?.username || '',
+                photoURL: friendObj?.photoURL || '',
+                profileAssetId: '',
+              },
+            },
+            favoriteBy: { [currentUser.uid]: false, [friendUid]: false },
+            urgentFor: { [currentUser.uid]: false, [friendUid]: false },
             lastMessageText: inviteMessage,
             lastMessageAt: serverTimestamp(),
             lastSenderId: currentUser.uid,
-            lastSenderName: currentUserProfile?.displayName || currentUser.displayName || 'Friend',
-            type: 'dm',
+            lastSenderName: currentUserProfile?.displayName || currentUser.displayName || 'You',
             updatedAt: serverTimestamp(),
+            createdAt: serverTimestamp(),
           },
           { merge: true }
         );
 
         await addDoc(collection(db, 'conversations', convId, 'messages'), {
+          type: 'text',
           senderId: currentUser.uid,
-          senderName: currentUserProfile?.displayName || currentUser.displayName || 'Friend',
-          senderAvatar: currentUserProfile?.photoURL || currentUser.photoURL || '',
+          senderName: currentUserProfile?.displayName || currentUser.displayName || 'You',
+          senderUsername: (currentUserProfile as any)?.username || '',
+          senderPhotoURL: currentUserProfile?.photoURL || currentUser.photoURL || '',
           text: inviteMessage,
           createdAt: serverTimestamp(),
+          deleted: false,
+          editedAt: null,
         });
       }
+      await recordServerInvite(activeServer.id);
       alert(`Invited ${selectedFriendUids.size} friend(s) successfully!`);
       setSelectedFriendUids(new Set());
       setShowInviteFriendsModal(false);
@@ -1874,39 +2042,46 @@ export default function Servers({
     }
   };
 
-  // Helper to render message text with styled colored role mentions (@Role)
+  // Helper to render message text with styled colored role mentions (@Role) and user mentions (@User, @everyone)
   const renderServerMessageText = (rawText: string, tags?: ServerTag[]) => {
-    if (!tags || tags.length === 0) return renderStyledContent(rawText);
-    const tagNames = tags.map((t) => t.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-    if (tagNames.length === 0) return renderStyledContent(rawText);
-    const regex = new RegExp(`(@(?:${tagNames.join('|')}))`, 'gi');
-    const parts = rawText.split(regex);
+    const tagNames = (tags || []).map((t) => t.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const tagPattern = tagNames.length > 0 ? `|@(?:${tagNames.join('|')})` : '';
+    const mentionRegex = new RegExp(`(@everyone|@here${tagPattern}|@[a-zA-Z0-9_.-]+)`, 'gi');
+    const parts = rawText.split(mentionRegex);
     return (
       <>
         {parts.map((part, i) => {
-          if (part.startsWith('@')) {
-            const matchedTag = tags.find((t) => t.name.toLowerCase() === part.slice(1).toLowerCase());
-            if (matchedTag) {
-              return (
-                <span
-                  key={i}
-                  className="sh-tag-mention"
-                  style={{
-                    color: matchedTag.color,
-                    backgroundColor: `${matchedTag.color}26`,
-                    padding: '2px 6px',
-                    borderRadius: 4,
-                    fontWeight: 600,
-                    display: 'inline-block',
-                    margin: '0 2px',
-                  }}
-                >
-                  {part}
-                </span>
-              );
-            }
+          if (!part.startsWith('@')) {
+            return <React.Fragment key={i}>{renderStyledContent(part)}</React.Fragment>;
           }
-          return <React.Fragment key={i}>{renderStyledContent(part)}</React.Fragment>;
+          const matchedTag = (tags || []).find((t) => t.name.toLowerCase() === part.slice(1).toLowerCase());
+          if (matchedTag) {
+            return (
+              <span
+                key={i}
+                className="sh-tag-mention"
+                style={{
+                  color: matchedTag.color,
+                  backgroundColor: `${matchedTag.color}26`,
+                  padding: '2px 6px',
+                  borderRadius: 4,
+                  fontWeight: 600,
+                  display: 'inline-block',
+                  margin: '0 2px',
+                }}
+              >
+                {part}
+              </span>
+            );
+          }
+          return (
+            <span
+              key={i}
+              className="sh-user-mention-pill"
+            >
+              {part}
+            </span>
+          );
         })}
       </>
     );
@@ -2148,70 +2323,6 @@ export default function Servers({
 
     await updateServerInStateAndStorage(updatedServer);
     setShowCreateChannelModal(false);
-  };
-
-  // Save Edited Channel Action
-  const handleSaveEditedChannel = async () => {
-    if (!activeServer || !editingChannel || !editChannelName.trim()) return;
-
-    const updatedCategories = activeServer.categories.map((cat) => {
-      if (cat.id === editingChannel.catId) {
-        return {
-          ...cat,
-          channels: cat.channels.map((ch) => {
-            if (ch.id === editingChannel.channel.id) {
-              return {
-                ...ch,
-                name: editChannelName.trim().toLowerCase().replace(/\s+/g, '-'),
-                description: editChannelDesc.trim(),
-                isPrivate: editChannelIsPrivate,
-                iconUrl: editChannelIcon || undefined,
-              };
-            }
-            return ch;
-          }),
-        };
-      }
-      return cat;
-    });
-
-    const updatedServer: ServerData = {
-      ...activeServer,
-      categories: updatedCategories,
-    };
-
-    await updateServerInStateAndStorage(updatedServer);
-    setEditingChannel(null);
-  };
-
-  // Save Edited Category Action
-  const handleSaveEditedCategory = async () => {
-    if (!activeServer || !editingCategory || !editCategoryName.trim()) return;
-    const isNowPrivate = editCategoryIsPrivate;
-
-    const updatedCategories = activeServer.categories.map((cat) => {
-      if (cat.id === editingCategory.id) {
-        // If category is private, all channels inside it become auto private
-        const updatedChannels = isNowPrivate
-          ? cat.channels.map((ch) => ({ ...ch, isPrivate: true }))
-          : cat.channels;
-        return {
-          ...cat,
-          name: editCategoryName.trim(),
-          isPrivate: isNowPrivate,
-          channels: updatedChannels,
-        };
-      }
-      return cat;
-    });
-
-    const updatedServer: ServerData = {
-      ...activeServer,
-      categories: updatedCategories,
-    };
-
-    await updateServerInStateAndStorage(updatedServer);
-    setEditingCategory(null);
   };
 
   // Delete Category Action
@@ -3235,6 +3346,52 @@ export default function Servers({
         <div className="shc-composer-wrap" style={{ position: 'relative' }}>
           {showTagAutocomplete && activeServer && (
             <div className="sh-tag-autocomplete-popover">
+              {/* @everyone */}
+              {(!tagAutocompleteQuery || 'everyone'.includes(tagAutocompleteQuery.toLowerCase())) && (
+                <div
+                  className="sh-tag-autocomplete-item"
+                  onClick={() => {
+                    const lastAt = channelInputText.lastIndexOf('@');
+                    const newText = lastAt !== -1 ? channelInputText.slice(0, lastAt) + '@everyone ' : '@everyone ';
+                    setChannelInputText(newText);
+                    setShowTagAutocomplete(false);
+                    setTagAutocompleteQuery('');
+                    channelInputRef.current?.focus();
+                  }}
+                >
+                  <div className="sh-tag-autocomplete-left">
+                    <span style={{ color: '#5865F2', fontWeight: 700, fontSize: 14 }}>
+                      @everyone
+                    </span>
+                  </div>
+                  <span className="sh-tag-autocomplete-desc">
+                    Notify everyone in this server
+                  </span>
+                </div>
+              )}
+              {/* @here */}
+              {(!tagAutocompleteQuery || 'here'.includes(tagAutocompleteQuery.toLowerCase())) && (
+                <div
+                  className="sh-tag-autocomplete-item"
+                  onClick={() => {
+                    const lastAt = channelInputText.lastIndexOf('@');
+                    const newText = lastAt !== -1 ? channelInputText.slice(0, lastAt) + '@here ' : '@here ';
+                    setChannelInputText(newText);
+                    setShowTagAutocomplete(false);
+                    setTagAutocompleteQuery('');
+                    channelInputRef.current?.focus();
+                  }}
+                >
+                  <div className="sh-tag-autocomplete-left">
+                    <span style={{ color: '#23a55a', fontWeight: 700, fontSize: 14 }}>
+                      @here
+                    </span>
+                  </div>
+                  <span className="sh-tag-autocomplete-desc">
+                    Notify online members in this server
+                  </span>
+                </div>
+              )}
               {(activeServer.tags || [])
                 .filter((t) => !tagAutocompleteQuery || t.name.toLowerCase().includes(tagAutocompleteQuery.toLowerCase()))
                 .map((tag) => {
@@ -4181,15 +4338,15 @@ export default function Servers({
                   type="button"
                   className="sh-invite-share-item"
                   onClick={() => {
-                    void navigator.clipboard?.writeText(
-                      window.location.origin + `/servers?invite=${activeServer.id}`
-                    );
+                    const inviteUrl = `${window.location.origin}/servers?invite=${activeServer.id}`;
+                    void navigator.clipboard?.writeText(inviteUrl);
+                    void recordServerInvite(activeServer.id);
                     setInviteCopied(true);
                     setTimeout(() => setInviteCopied(false), 2000);
                   }}
                 >
                   <div className="sh-invite-share-icon">
-                    {inviteCopied ? <Check size={22} color="#5865F2" /> : <Copy size={22} />}
+                    {inviteCopied ? <Check size={22} color="#ffffff" /> : <Copy size={22} />}
                   </div>
                   <span className="sh-invite-share-label">
                     {inviteCopied ? 'Copied!' : 'Copy Link'}
@@ -4211,8 +4368,10 @@ export default function Servers({
                   type="button"
                   className="sh-invite-share-item"
                   onClick={() => {
+                    const inviteUrl = `${window.location.origin}/servers?invite=${activeServer.id}`;
+                    void recordServerInvite(activeServer.id);
                     const text = encodeURIComponent(
-                      `Join my server ${activeServer.name} on Shinzi: ${window.location.origin}/servers?invite=${activeServer.id}`
+                      `Join my server ${activeServer.name} on Shinzi: ${inviteUrl}`
                     );
                     window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
                   }}
@@ -4226,29 +4385,23 @@ export default function Servers({
                 <button
                   type="button"
                   className="sh-invite-share-item"
-                  onClick={() => alert('Instagram Direct share')}
-                >
-                  <div className="sh-invite-share-icon">
-                    <Camera size={24} color="#ffffff" />
-                  </div>
-                  <span className="sh-invite-share-label">Instagram</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="sh-invite-share-item"
-                  onClick={() => {
+                  onClick={async () => {
+                    const inviteUrl = `${window.location.origin}/servers?invite=${activeServer.id}`;
+                    void recordServerInvite(activeServer.id);
                     if (navigator.share) {
-                      navigator.share({
-                        title: `Join ${activeServer.name}`,
-                        url: `${window.location.origin}/servers?invite=${activeServer.id}`,
-                      }).catch((e) => console.log('Share canceled/failed:', e));
-                    } else {
-                      void navigator.clipboard?.writeText(
-                        `${window.location.origin}/servers?invite=${activeServer.id}`
-                      );
-                      alert('Server invite link copied to clipboard!');
+                      try {
+                        await navigator.share({
+                          title: `Join ${activeServer.name}`,
+                          text: `Join ${activeServer.name} on Shinzi!`,
+                          url: inviteUrl,
+                        });
+                        return;
+                      } catch (e: any) {
+                        if (e?.name === 'AbortError') return;
+                      }
                     }
+                    void navigator.clipboard?.writeText(inviteUrl);
+                    alert('Server invite link copied to clipboard!');
                   }}
                 >
                   <div className="sh-invite-share-icon">
@@ -4677,7 +4830,7 @@ export default function Servers({
           </div>
         )}
 
-        {/* Edit Channel Modal (20261110_184443) */}
+        {/* Edit Channel Modal (IMG-20261127-WA0019) */}
         {editingChannel && (
           <div className="sh-fullscreen-modal">
             <div className="sh-fullscreen-modal-header">
@@ -4707,6 +4860,23 @@ export default function Servers({
                       if (!file) return;
                       const dataUrl = await processServerImage(file, false);
                       setEditChannelIcon(dataUrl);
+                      setActiveServer((prev) => {
+                        if (!prev) return prev;
+                        return {
+                          ...prev,
+                          categories: prev.categories.map((cat) => {
+                            if (cat.id === editingChannel.catId) {
+                              return {
+                                ...cat,
+                                channels: cat.channels.map((ch) =>
+                                  ch.id === editingChannel.channel.id ? { ...ch, iconUrl: dataUrl } : ch
+                                ),
+                              };
+                            }
+                            return cat;
+                          }),
+                        };
+                      });
                     }}
                   />
                   <div className="sh-channel-icon-wrap">
@@ -4729,6 +4899,23 @@ export default function Servers({
                         onClick={(e) => {
                           e.stopPropagation();
                           setEditChannelIcon('');
+                          setActiveServer((prev) => {
+                            if (!prev) return prev;
+                            return {
+                              ...prev,
+                              categories: prev.categories.map((cat) => {
+                                if (cat.id === editingChannel.catId) {
+                                  return {
+                                    ...cat,
+                                    channels: cat.channels.map((ch) =>
+                                      ch.id === editingChannel.channel.id ? { ...ch, iconUrl: undefined } : ch
+                                    ),
+                                  };
+                                }
+                                return cat;
+                              }),
+                            };
+                          });
                         }}
                         title="Remove Icon"
                         aria-label="Remove Icon"
@@ -4741,7 +4928,35 @@ export default function Servers({
                     type="text"
                     placeholder="suggestions"
                     value={editChannelName}
-                    onChange={(e) => setEditChannelName(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setEditChannelName(val);
+                      const formatted = val.trim().toLowerCase().replace(/\s+/g, '-');
+                      const origName = editingChannel.channel.name;
+                      if (formatted && formatted !== origName) {
+                        setPendingCommitChanges((prev) => {
+                          const withoutThis = prev.filter((msg) => !msg.startsWith(`Changed channel #${origName}`));
+                          return [...withoutThis, `Changed channel #${origName} to #${formatted}`];
+                        });
+                        setActiveServer((prev) => {
+                          if (!prev) return prev;
+                          return {
+                            ...prev,
+                            categories: prev.categories.map((cat) => {
+                              if (cat.id === editingChannel.catId) {
+                                return {
+                                  ...cat,
+                                  channels: cat.channels.map((ch) =>
+                                    ch.id === editingChannel.channel.id ? { ...ch, name: formatted } : ch
+                                  ),
+                                };
+                              }
+                              return cat;
+                            }),
+                          };
+                        });
+                      }
+                    }}
                   />
                 </div>
               </div>
@@ -4754,7 +4969,32 @@ export default function Servers({
                   placeholder="Channel topic or description"
                   rows={3}
                   value={editChannelDesc}
-                  onChange={(e) => setEditChannelDesc(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setEditChannelDesc(val);
+                    const chName = editChannelName.trim().toLowerCase().replace(/\s+/g, '-') || editingChannel.channel.name;
+                    setPendingCommitChanges((prev) => {
+                      const withoutThis = prev.filter((msg) => !msg.startsWith(`Updated channel #${chName} topic`));
+                      return [...withoutThis, `Updated channel #${chName} topic`];
+                    });
+                    setActiveServer((prev) => {
+                      if (!prev) return prev;
+                      return {
+                        ...prev,
+                        categories: prev.categories.map((cat) => {
+                          if (cat.id === editingChannel.catId) {
+                            return {
+                              ...cat,
+                              channels: cat.channels.map((ch) =>
+                                ch.id === editingChannel.channel.id ? { ...ch, description: val.trim() } : ch
+                              ),
+                            };
+                          }
+                          return cat;
+                        }),
+                      };
+                    });
+                  }}
                 />
               </div>
 
@@ -4765,14 +5005,62 @@ export default function Servers({
                   <button
                     type="button"
                     className={`sh-segmented-btn ${!editChannelIsPrivate ? 'sh-segmented-btn-active' : ''}`}
-                    onClick={() => setEditChannelIsPrivate(false)}
+                    onClick={() => {
+                      setEditChannelIsPrivate(false);
+                      const chName = editChannelName.trim().toLowerCase().replace(/\s+/g, '-') || editingChannel.channel.name;
+                      setPendingCommitChanges((prev) => {
+                        const withoutThis = prev.filter((msg) => !msg.startsWith(`Made channel #${chName}`));
+                        return [...withoutThis, `Made channel #${chName} public`];
+                      });
+                      setActiveServer((prev) => {
+                        if (!prev) return prev;
+                        return {
+                          ...prev,
+                          categories: prev.categories.map((cat) => {
+                            if (cat.id === editingChannel.catId) {
+                              return {
+                                ...cat,
+                                channels: cat.channels.map((ch) =>
+                                  ch.id === editingChannel.channel.id ? { ...ch, isPrivate: false } : ch
+                                ),
+                              };
+                            }
+                            return cat;
+                          }),
+                        };
+                      });
+                    }}
                   >
                     Public
                   </button>
                   <button
                     type="button"
                     className={`sh-segmented-btn ${editChannelIsPrivate ? 'sh-segmented-btn-active' : ''}`}
-                    onClick={() => setEditChannelIsPrivate(true)}
+                    onClick={() => {
+                      setEditChannelIsPrivate(true);
+                      const chName = editChannelName.trim().toLowerCase().replace(/\s+/g, '-') || editingChannel.channel.name;
+                      setPendingCommitChanges((prev) => {
+                        const withoutThis = prev.filter((msg) => !msg.startsWith(`Made channel #${chName}`));
+                        return [...withoutThis, `Made channel #${chName} private`];
+                      });
+                      setActiveServer((prev) => {
+                        if (!prev) return prev;
+                        return {
+                          ...prev,
+                          categories: prev.categories.map((cat) => {
+                            if (cat.id === editingChannel.catId) {
+                              return {
+                                ...cat,
+                                channels: cat.channels.map((ch) =>
+                                  ch.id === editingChannel.channel.id ? { ...ch, isPrivate: true } : ch
+                                ),
+                              };
+                            }
+                            return cat;
+                          }),
+                        };
+                      });
+                    }}
                   >
                     Private
                   </button>
@@ -4788,22 +5076,11 @@ export default function Servers({
                   </div>
                 </div>
               )}
-
-              {/* Done Button at bottom */}
-              <button
-                type="button"
-                className="sh-create-submit-btn"
-                style={{ marginTop: 24 }}
-                disabled={!editChannelName.trim()}
-                onClick={handleSaveEditedChannel}
-              >
-                Done
-              </button>
             </div>
           </div>
         )}
 
-        {/* Edit Category Modal */}
+        {/* Edit Category Modal (IMG-20261127-WA0018) */}
         {editingCategory && (
           <div className="sh-fullscreen-modal">
             <div className="sh-fullscreen-modal-header">
@@ -4827,7 +5104,26 @@ export default function Servers({
                     type="text"
                     placeholder="Category Name"
                     value={editCategoryName}
-                    onChange={(e) => setEditCategoryName(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setEditCategoryName(val);
+                      const origName = editingCategory.name;
+                      if (val.trim() && val.trim() !== origName) {
+                        setPendingCommitChanges((prev) => {
+                          const withoutThis = prev.filter((msg) => !msg.startsWith(`Changed category "${origName}"`));
+                          return [...withoutThis, `Changed category "${origName}" to "${val.trim()}"`];
+                        });
+                        setActiveServer((prev) => {
+                          if (!prev) return prev;
+                          return {
+                            ...prev,
+                            categories: prev.categories.map((cat) =>
+                              cat.id === editingCategory.id ? { ...cat, name: val.trim() } : cat
+                            ),
+                          };
+                        });
+                      }
+                    }}
                   />
                 </div>
               </div>
@@ -4839,30 +5135,58 @@ export default function Servers({
                   <button
                     type="button"
                     className={`sh-segmented-btn ${!editCategoryIsPrivate ? 'sh-segmented-btn-active' : ''}`}
-                    onClick={() => setEditCategoryIsPrivate(false)}
+                    onClick={() => {
+                      setEditCategoryIsPrivate(false);
+                      const catName = editCategoryName.trim() || editingCategory.name;
+                      setPendingCommitChanges((prev) => {
+                        const withoutThis = prev.filter((msg) => !msg.startsWith(`Made category "${catName}"`));
+                        return [...withoutThis, `Made category "${catName}" public`];
+                      });
+                      setActiveServer((prev) => {
+                        if (!prev) return prev;
+                        return {
+                          ...prev,
+                          categories: prev.categories.map((cat) =>
+                            cat.id === editingCategory.id ? { ...cat, isPrivate: false } : cat
+                          ),
+                        };
+                      });
+                    }}
                   >
                     Public
                   </button>
                   <button
                     type="button"
                     className={`sh-segmented-btn ${editCategoryIsPrivate ? 'sh-segmented-btn-active' : ''}`}
-                    onClick={() => setEditCategoryIsPrivate(true)}
+                    onClick={() => {
+                      setEditCategoryIsPrivate(true);
+                      const catName = editCategoryName.trim() || editingCategory.name;
+                      setPendingCommitChanges((prev) => {
+                        const withoutThis = prev.filter((msg) => !msg.startsWith(`Made category "${catName}"`));
+                        return [...withoutThis, `Made category "${catName}" private`];
+                      });
+                      setActiveServer((prev) => {
+                        if (!prev) return prev;
+                        return {
+                          ...prev,
+                          categories: prev.categories.map((cat) => {
+                            if (cat.id === editingCategory.id) {
+                              return {
+                                ...cat,
+                                isPrivate: true,
+                                channels: cat.channels.map((ch) => ({ ...ch, isPrivate: true })),
+                              };
+                            }
+                            return cat;
+                          }),
+                        };
+                      });
+                    }}
                   >
                     Private
                   </button>
                 </div>
               </div>
-
-              {/* Done Button at bottom */}
-              <button
-                type="button"
-                className="sh-create-submit-btn"
-                style={{ marginTop: 24 }}
-                disabled={!editCategoryName.trim()}
-                onClick={handleSaveEditedCategory}
-              >
-                Done
-              </button>
             </div>
           </div>
         )}
@@ -5071,8 +5395,8 @@ export default function Servers({
               {/* Tab Content */}
               <div className="sh-channel-info-content">
                 {serverSearchTab === 'members' && renderGroupedMembers(serverSearchQuery)}
-                {serverSearchTab === 'media' && renderMediaGrid(channelMessages)}
-                {serverSearchTab === 'chat' && renderChatSearchTab(channelMessages, serverSearchQuery)}
+                {serverSearchTab === 'media' && renderMediaGrid(serverWideMessages.length ? serverWideMessages : channelMessages)}
+                {serverSearchTab === 'chat' && renderChatSearchTab(serverWideMessages.length ? serverWideMessages : channelMessages, serverSearchQuery)}
               </div>
             </div>
           </div>
@@ -5384,6 +5708,36 @@ export default function Servers({
                 </div>
               </div>
 
+              {/* Members Option above Delete Tag (IMG-20261126-WA0040) */}
+              <button
+                type="button"
+                className="sh-server-settings-item"
+                style={{
+                  background: '#2b2d31',
+                  borderRadius: 10,
+                  padding: '12px 14px',
+                  marginBottom: 12,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  width: '100%',
+                  cursor: 'pointer',
+                  border: 'none',
+                }}
+                onClick={() => setShowTagMembersSheet(true)}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#ffffff', fontSize: 15, fontWeight: 600 }}>
+                  <Users size={18} color="#949ba4" />
+                  <span>Members</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 13, color: '#949ba4' }}>
+                    {Object.values(activeServer.memberTags || {}).filter((tags) => tags.includes(editingTag.id)).length}
+                  </span>
+                  <ChevronRight size={18} color="#949ba4" />
+                </div>
+              </button>
+
               <button
                 type="button"
                 className="sh-tag-delete-btn"
@@ -5521,29 +5875,6 @@ export default function Servers({
                   onChange={(e) => setOverviewDescription(e.target.value)}
                 />
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Unsaved Commits Sticky Bar (IMG-20261126-WA0026) */}
-        {hasUnsavedCommits && (
-          <div className="sh-unsaved-commits-bar">
-            <span className="sh-unsaved-commits-text">You have some unsaved commits</span>
-            <div className="sh-unsaved-commits-actions">
-              <button
-                type="button"
-                className="sh-unsaved-discard-btn"
-                onClick={handleDiscardCommits}
-              >
-                Discard
-              </button>
-              <button
-                type="button"
-                className="sh-unsaved-commit-btn"
-                onClick={handleCommitChanges}
-              >
-                Commit
-              </button>
             </div>
           </div>
         )}
@@ -6276,6 +6607,29 @@ export default function Servers({
               className="sh-media-preview-img"
               onClick={(e) => e.stopPropagation()}
             />
+          </div>
+        )}
+
+        {/* Global Sticky Commits Bar (Always visible when there are unsaved commits) */}
+        {hasUnsavedCommits && (
+          <div className="sh-unsaved-commits-bar">
+            <span className="sh-unsaved-commits-text">You have some unsaved commits</span>
+            <div className="sh-unsaved-commits-actions">
+              <button
+                type="button"
+                className="sh-unsaved-discard-btn"
+                onClick={handleDiscardCommits}
+              >
+                Discard
+              </button>
+              <button
+                type="button"
+                className="sh-unsaved-commit-btn"
+                onClick={handleCommitChanges}
+              >
+                Commit
+              </button>
+            </div>
           </div>
         )}
       </>
